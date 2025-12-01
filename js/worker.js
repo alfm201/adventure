@@ -1,4 +1,4 @@
-importScripts('https://alfm201.github.io/adventure/js/Board.js');
+importScripts('https://alfm201.github.io/adventure/js/board.js');
 
 let idx, stage, cardInfo;
 
@@ -66,4 +66,5 @@ function simulation(iteration = 10000, state, route) {
   }
 
 }
+
 
