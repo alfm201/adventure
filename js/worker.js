@@ -1,4 +1,4 @@
-importScripts('./Board.js');
+importScripts('/adventure/js/Board.js');
 
 let idx, stage, cardInfo;
 
@@ -64,4 +64,5 @@ function simulation(iteration = 10000, state, route) {
     console.error(err);
     return [-1];
   }
+
 }
