@@ -1390,7 +1390,7 @@ function initUsageOverlay() {
       title: '동작 모드 (수동 / 자동)',
       lines: [
         '수동 모드: 칸 수, 주사위 사용 횟수, 카드 획득 등을 직접 수동으로 설정하여 테스트가 가능한 모드입니다. (기본값)',
-        '자동 모드: 모든 게임 프로세스가 자동으로 진행되어 실제 인게임과 거의 동일한 환경으로 시뮬레이션이 가능합니다. 이 모드에서는 카드 정보 수정 및 강제 획득이 불가능합니다.'
+        '자동 모드: 모든 게임 프로세스가 자동으로 진행되어 실제 인게임과 거의 동일한 환경으로 시뮬레이션이 가능합니다. <span style="font-weight:600;color:#b91c1c;">이 모드에서는 카드 정보 수정 및 강제 획득이 불가능합니다.</span>'
       ],
       region: REGION_BTN_CHANGEMODE
     }
@@ -1758,17 +1758,15 @@ function createUsageOverlayWithSteps(steps) {
       if (colonIndex > 0) {
         var key = line.slice(0, colonIndex);
         var rest = line.slice(colonIndex + 1);
-
-        var strongSpan = document.createElement('span');
-        strongSpan.style.color = '#1d4ed8';
-        strongSpan.style.fontWeight = '600';
-        strongSpan.textContent = key + ':';
-
-        li.appendChild(strongSpan);
-        li.appendChild(document.createTextNode(rest));
+        
+        li.innerHTML = '<span style="color:#1d4ed8; font-weight:600;">' +
+          key +
+          ':</span>' +
+          rest; // rest 부분은 HTML이 포함될 수 있음
       } else {
-        li.textContent = line;
+        li.innerHTML = line; // 이 경우 전체 문자열을 HTML로 해석
       }
+
       bodyEl.appendChild(li);
     });
 
