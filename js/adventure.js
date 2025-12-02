@@ -176,6 +176,7 @@ function drawStatusBar() {
   ctx.shadowBlur = 0;
   drawBtn(btnText = '재시작', x = 690, y = 642, width = 90, height = 38, radius = 12, opacity = 1, lineColor = 'rgb(53, 79, 108)', fillColor = 'rgb(45, 137, 195)');
   drawBtn(btnText = '모드변경', x = 788, y = 642, width = 90, height = 38, radius = 12, opacity = 1, lineColor = 'rgb(53, 79, 108)', fillColor = 'rgb(45, 137, 195)');
+  drawBtn(btnText = '도움말', x = 886, y = 642, width = 90, height = 38, radius = 12, opacity = 1, lineColor = 'rgb(53, 79, 108)', fillColor = 'rgb(45, 137, 195)');
 }
 
 function drawBtn(btnText = '', x, y, width, height, radius, opacity, lineColor, fillColor, textColor = 'white', fontSize = 12) {
@@ -427,11 +428,12 @@ function eventSetup() {
 const REGION_SCORE = { x1: 57, x2: 152, y1: 44, y2: 68 };
 const REGION_DICEUSE = { x1: 10, x2: 200, y1: 660, y2: 686 };
 const REGION_STEP = { x1: 9, x2: 201, y1: 525, y2: 623 };
-const REGION_CARDS = { x1: 423, x2: 635, y1: 643, y2: 679 };
+const REGION_CARDS = { x1: 423, x2: 634, y1: 643, y2: 677 };
 const REGION_CARDINFO = { x1: 229, x2: 479, y1: 15, y2: 615 };
-const REGION_BTN_CARDINFO = { x1: 635, x2: 677, y1: 643, y2: 679 };
+const REGION_BTN_CARDINFO = { x1: 640, x2: 679, y1: 643, y2: 677 };
 const REGION_BTN_RESETBOARD = { x1: 690, x2: 780, y1: 642, y2: 680 };
 const REGION_BTN_CHANGEMODE = { x1: 788, x2: 878, y1: 642, y2: 680 };
+const REGION_BTN_HELP = { x1: 886, x2: 976, y1: 642, y2: 680 };
 const REGION_BTN_ACCURACY = { x1: 11, x2: 199, y1: 288, y2: 313 };
 const REGION_BTN_EXSCORE = { x1: 9, x2: 201, y1: 313, y2: 433 };
 const REGION_CHARACTER = { x1: 59, x2: 149, y1: 82, y2: 202 };
@@ -639,6 +641,9 @@ function eventCanvasClick(e) {
       calcEx();
       // updateBoard();
     }
+  } else if (isInsideRegion(x, y, REGION_BTN_HELP)) {
+    closeCardInfoPanelGlobal();
+    initUsageOverlay();
   } else if (showCardInfoYN) {
     showCardInfoYN = false;
     updateBoard();
@@ -1274,3 +1279,634 @@ function getBoardInfo() {
   env = new Board();
   imagesPreload();
 }
+
+
+
+
+
+
+
+
+// =======================
+// 공용: 카드 정보 창 닫기
+// =======================
+function closeCardInfoPanelGlobal() {
+  try {
+    if (typeof showCardInfoYN !== 'undefined' && showCardInfoYN) {
+      showCardInfoYN = false;
+      if (typeof updateBoard === 'function') {
+        updateBoard();
+      }
+    }
+  } catch (e) {
+    // 실패해도 무시
+  }
+}
+
+// =======================
+// 사용법 안내 가이드
+// =======================
+function initUsageOverlay() {
+  if (!canvas) return;
+  // 이미 떠 있으면 중복 생성 방지
+  if (document.getElementById('adventure-usage-root')) return;
+
+  var steps = [
+    {
+      id: 'position',
+      title: '현재 위치(칸 수) 이동',
+      lines: [
+        'Ctrl + Q: 현재 위치(칸 수)를 직접 입력해서 이동할 수 있습니다.',
+        '칸 표시 영역을 클릭해서 마우스로도 위치를 조정할 수 있습니다.'
+      ],
+      region: REGION_SCORE
+    },
+    {
+      id: 'diceUse',
+      title: '주사위 사용 횟수 설정',
+      lines: [
+        'Ctrl + E: 지금까지 사용한 주사위 횟수를 직접 입력해서 수정할 수 있습니다.',
+        '"주사위 사용" 영역을 클릭해도 같은 기능을 사용할 수 있습니다.'
+      ],
+      region: REGION_DICEUSE
+    },
+    {
+      id: 'cardsUse',
+      title: '행운 카드 사용',
+      lines: [
+        'Ctrl + 1 ~ 5: 해당 번호의 행운 카드를 바로 사용합니다.',
+        '아래 카드 슬롯(1~5번)을 직접 클릭해도 카드를 사용할 수 있습니다.'
+      ],
+      region: REGION_CARDS
+    },
+    {
+      id: 'cardInfoButton',
+      title: '카드 획득 정보 보기',
+      lines: [
+        '카드 정보 아이콘: 오른쪽 아래 아이콘을 클릭하면 카드 획득 정보를 볼 수 있습니다.',
+        '지금 아이콘을 직접 클릭해서 카드 정보 창을 열어보세요.'
+      ],
+      region: REGION_BTN_CARDINFO,
+      waitForCardInfoClick: true,
+      pulseHighlight: true
+    },
+    {
+      id: 'cardInfoPanel',
+      title: '카드 정보 창 사용법',
+      lines: [
+        '왼쪽 클릭: 해당 카드의 획득 여부를 토글합니다 (체크/해제).',
+        '오른쪽 클릭: 해당 카드를 바로 획득 처리합니다.',
+        '스크롤/드래그: 목록을 위아래로 움직여 모든 카드를 확인할 수 있습니다.'
+      ],
+      region: REGION_CARDINFO
+    },
+    {
+      id: 'cardGetByName',
+      title: '카드 이름으로 바로 획득',
+      lines: [
+        'Ctrl + G: 행운 카드 이름의 일부를 입력해서, 그 이름을 포함하는 카드를 바로 획득할 수 있습니다.',
+        '예: "주사위"를 입력하면 이름에 "주사위"가 포함된 카드 중 아직 획득하지 않은 첫 카드를 찾습니다.',
+        '정확한 전체 이름이 아니라, 키워드 위주로 입력해도 됩니다.'
+      ],
+      region: REGION_CARDINFO
+    },
+    {
+      id: 'exScore',
+      title: '예상 점수와 통계 활용',
+      lines: [
+        '예상 점수(하늘색 영역): 클릭하면 시뮬레이션 정확도(시행 횟수)를 수정할 수 있습니다.',
+        '예상 점수 영역에 마우스를 올려두면 최소·최대·중앙값·표준편차·변동계수 등 상세 통계를 볼 수 있습니다.',
+        '"자세히" 버튼을 눌러 각 통계의 의미와 해석 방법에 대한 간단한 가이드를 확인할 수 있습니다.'
+      ],
+      region: {
+        x1: REGION_BTN_ACCURACY.x1,
+        x2: REGION_BTN_EXSCORE.x2,
+        y1: REGION_BTN_ACCURACY.y1,
+        y2: REGION_BTN_EXSCORE.y2
+      }
+    },
+    {
+      id: 'mode',
+      title: '동작 모드 (수동 / 자동)',
+      lines: [
+        '수동 모드: 칸 수, 주사위 사용 횟수, 카드 획득 등을 직접 수동으로 설정하여 테스트가 가능한 모드입니다. (기본값)',
+        '자동 모드: 모든 게임 프로세스가 자동으로 진행되어 실제 인게임과 거의 동일한 환경으로 시뮬레이션이 가능합니다.'
+      ],
+      region: REGION_BTN_CHANGEMODE
+    }
+  ];
+
+  createUsageOverlayWithSteps(steps);
+}
+
+function createUsageOverlayWithSteps(steps) {
+  var currentStepIndex = 0;
+  var isActive = true;
+
+  var canvasWidth = canvas.width || 1024;
+  var canvasHeight = canvas.height || 694;
+
+  var root = document.createElement('div');
+  root.id = 'adventure-usage-root';
+  root.style.position = 'fixed';
+  root.style.left = '0';
+  root.style.top = '0';
+  root.style.width = '100%';
+  root.style.height = '100%';
+  root.style.zIndex = '9999';
+  root.style.pointerEvents = 'none';
+
+  var dimTop = document.createElement('div');
+  var dimLeft = document.createElement('div');
+  var dimRight = document.createElement('div');
+  var dimBottom = document.createElement('div');
+  [dimTop, dimLeft, dimRight, dimBottom].forEach(function (el) {
+    el.style.position = 'fixed';
+    el.style.background = 'rgba(15, 23, 42, 0.72)';
+    el.style.pointerEvents = 'none';
+  });
+
+  var highlightBox = document.createElement('div');
+  highlightBox.id = 'adventure-usage-highlight';
+  highlightBox.style.position = 'fixed';
+  highlightBox.style.border = '2px solid #38bdf8';
+  highlightBox.style.borderRadius = '12px';
+  highlightBox.style.boxShadow = '0 0 0 4px rgba(56, 189, 248, 0.35)';
+  highlightBox.style.pointerEvents = 'none';
+  highlightBox.style.transition = 'box-shadow 0.6s ease';
+
+  var pulseTimer = null;
+  function startPulse() {
+    stopPulse();
+    var strong = '0 0 0 4px rgba(56, 189, 248, 0.6), 0 0 16px rgba(56, 189, 248, 0.95)';
+    var weak = '0 0 0 4px rgba(56, 189, 248, 0.35)';
+    var on = false;
+    highlightBox.style.boxShadow = weak;
+    pulseTimer = setInterval(function () {
+      highlightBox.style.boxShadow = on ? weak : strong;
+      on = !on;
+    }, 650);
+  }
+  function stopPulse() {
+    if (pulseTimer) {
+      clearInterval(pulseTimer);
+      pulseTimer = null;
+    }
+    highlightBox.style.boxShadow = '0 0 0 4px rgba(56, 189, 248, 0.35)';
+  }
+
+  var bubble = document.createElement('div');
+  bubble.id = 'adventure-usage-bubble';
+  bubble.style.position = 'fixed';
+  bubble.style.maxWidth = '320px';
+  bubble.style.background = 'white';
+  bubble.style.borderRadius = '14px';
+  bubble.style.padding = '14px 16px 12px 16px';
+  bubble.style.boxShadow = '0 18px 40px rgba(15, 23, 42, 0.35)';
+  bubble.style.fontFamily = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  bubble.style.color = '#0f172a';
+  bubble.style.fontSize = '13px';
+  bubble.style.pointerEvents = 'auto';
+
+  var bubbleArrow = document.createElement('div');
+  bubbleArrow.style.position = 'absolute';
+  bubbleArrow.style.width = '0';
+  bubbleArrow.style.height = '0';
+  bubbleArrow.style.borderTop = '8px solid transparent';
+  bubbleArrow.style.borderBottom = '8px solid transparent';
+  bubbleArrow.style.borderRight = '10px solid white';
+  bubbleArrow.style.left = '-10px';
+  bubbleArrow.style.top = '18px';
+
+  var titleEl = document.createElement('div');
+  titleEl.style.fontWeight = '700';
+  titleEl.style.fontSize = '14px';
+  titleEl.style.marginBottom = '4px';
+  titleEl.style.color = '#111827';
+
+  var bodyEl = document.createElement('ul');
+  bodyEl.style.margin = '4px 0 8px 14px';
+  bodyEl.style.padding = '0';
+  bodyEl.style.listStyle = 'disc';
+  bodyEl.style.lineHeight = '1.5';
+
+  var footer = document.createElement('div');
+  footer.style.display = 'flex';
+  footer.style.alignItems = 'center';
+  footer.style.justifyContent = 'space-between';
+  footer.style.marginTop = '4px';
+
+  var leftFooter = document.createElement('div');
+  leftFooter.style.display = 'flex';
+  leftFooter.style.alignItems = 'center';
+  leftFooter.style.gap = '6px';
+
+  var stepIndicator = document.createElement('div');
+  stepIndicator.style.fontSize = '12px';
+  stepIndicator.style.color = '#475569';
+
+  var skipBtn = document.createElement('button');
+  skipBtn.textContent = '건너뛰기';
+  skipBtn.style.border = '1px solid #f97316';
+  skipBtn.style.borderRadius = '999px';
+  skipBtn.style.background = 'white';
+  skipBtn.style.color = '#c2410c';
+  skipBtn.style.fontSize = '11px';
+  skipBtn.style.padding = '4px 10px';
+  skipBtn.style.cursor = 'pointer';
+
+  var detailBtn = document.createElement('button');
+  detailBtn.textContent = '자세히';
+  detailBtn.style.border = 'none';
+  detailBtn.style.borderRadius = '999px';
+  detailBtn.style.background = '#e0f2fe';
+  detailBtn.style.color = '#0369a1';
+  detailBtn.style.fontSize = '11px';
+  detailBtn.style.padding = '4px 10px';
+  detailBtn.style.cursor = 'pointer';
+  detailBtn.style.display = 'none';
+
+  leftFooter.appendChild(stepIndicator);
+  leftFooter.appendChild(skipBtn);
+  leftFooter.appendChild(detailBtn);
+
+  var btnGroup = document.createElement('div');
+
+  var prevBtn = document.createElement('button');
+  prevBtn.textContent = '이전';
+  prevBtn.style.marginRight = '8px';
+  styleUsagePrimaryBtn(prevBtn, true);
+
+  var nextBtn = document.createElement('button');
+  nextBtn.textContent = '다음';
+  styleUsagePrimaryBtn(nextBtn, false);
+
+  btnGroup.appendChild(prevBtn);
+  btnGroup.appendChild(nextBtn);
+
+  footer.appendChild(leftFooter);
+  footer.appendChild(btnGroup);
+
+  var detailPanel = document.createElement('div');
+  detailPanel.style.display = 'none';
+  detailPanel.style.marginTop = '6px';
+  detailPanel.style.paddingTop = '6px';
+  detailPanel.style.borderTop = '1px solid #e2e8f0';
+  detailPanel.style.fontSize = '12px';
+  detailPanel.style.color = '#4b5563';
+
+  // 건너뛰기 확인 박스
+  var skipConfirm = document.createElement('div');
+  skipConfirm.style.position = 'fixed';
+  skipConfirm.style.left = `${canvas.width / 2}px`
+  skipConfirm.style.top = `${canvas.height / 2}px`
+  skipConfirm.style.transform = 'translateX(-50%)';
+  skipConfirm.style.background = 'white';
+  skipConfirm.style.borderRadius = '14px';
+  skipConfirm.style.padding = '12px 16px';
+  skipConfirm.style.boxShadow = '0 18px 40px rgba(15,23,42,0.45)';
+  skipConfirm.style.fontSize = '12px';
+  skipConfirm.style.color = '#111827';
+  skipConfirm.style.display = 'none';
+  skipConfirm.style.zIndex = '10000';
+  skipConfirm.style.pointerEvents = 'auto';
+  skipConfirm.style.minWidth = '260px';
+  skipConfirm.style.maxWidth = '320px';
+
+  var skipText = document.createElement('div');
+  skipText.innerHTML = '도움말을 종료할까요?<br><span style="color:#6b7280;">나중에 다시 보려면 <strong>도움말</strong> 버튼을 누르세요.</span>';
+  skipText.style.marginBottom = '8px';
+
+  var skipBtnRow = document.createElement('div');
+  skipBtnRow.style.display = 'flex';
+  skipBtnRow.style.justifyContent = 'flex-end';
+  skipBtnRow.style.gap = '6px';
+
+  var skipCancel = document.createElement('button');
+  skipCancel.textContent = '계속 보기';
+  skipCancel.style.border = 'none';
+  skipCancel.style.borderRadius = '999px';
+  skipCancel.style.background = '#e5e7eb';
+  skipCancel.style.color = '#374151';
+  skipCancel.style.fontSize = '11px';
+  skipCancel.style.padding = '4px 10px';
+  skipCancel.style.cursor = 'pointer';
+
+  var skipOk = document.createElement('button');
+  skipOk.textContent = '종료';
+  skipOk.style.border = 'none';
+  skipOk.style.borderRadius = '999px';
+  skipOk.style.background = '#ef4444';
+  skipOk.style.color = '#f9fafb';
+  skipOk.style.fontSize = '11px';
+  skipOk.style.padding = '4px 10px';
+  skipOk.style.cursor = 'pointer';
+
+  skipBtnRow.appendChild(skipCancel);
+  skipBtnRow.appendChild(skipOk);
+  skipConfirm.appendChild(skipText);
+  skipConfirm.appendChild(skipBtnRow);
+
+  bubble.appendChild(titleEl);
+  bubble.appendChild(bodyEl);
+  bubble.appendChild(footer);
+  bubble.appendChild(detailPanel);
+  bubble.appendChild(bubbleArrow);
+
+  root.appendChild(dimTop);
+  root.appendChild(dimLeft);
+  root.appendChild(dimRight);
+  root.appendChild(dimBottom);
+  root.appendChild(highlightBox);
+  root.appendChild(bubble);
+  root.appendChild(skipConfirm);
+
+  document.body.appendChild(root);
+
+  function cleanup() {
+    isActive = false;
+    stopPulse();
+    if (root && root.parentNode) root.parentNode.removeChild(root);
+    canvas.removeEventListener('click', canvasClickListener, true);
+    window.removeEventListener('resize', renderStep);
+    document.removeEventListener('keydown', escHandler);
+    showHelpButton();
+  }
+
+  function escHandler(e) {
+    if (e.key === 'Escape') {
+      cleanup();
+    }
+  }
+  document.addEventListener('keydown', escHandler);
+
+  function goToStep(index) {
+    if (index < 0 || index >= steps.length) return;
+
+    var prevStep = steps[currentStepIndex];
+    var nextStep = steps[index];
+
+    // 5 → 4로 되돌아갈 때
+    if (prevStep && nextStep && prevStep.id === 'cardInfoPanel' && nextStep.id === 'cardInfoButton') {
+      closeCardInfoPanelGlobal();
+    }
+    // 6 → 7로 넘어갈 때
+    if (prevStep && nextStep && prevStep.id === 'cardGetByName' && nextStep.id === 'exScore') {
+      closeCardInfoPanelGlobal();
+    }
+
+    currentStepIndex = index;
+    renderStep();
+  }
+
+  function canvasClickListener(e) {
+    if (!isActive) return;
+
+    var step = steps[currentStepIndex];
+    if (!step) return;
+
+    var canvasRect = canvas.getBoundingClientRect();
+    var scaleX = canvasRect.width / canvasWidth;
+    var scaleY = canvasRect.height / canvasHeight;
+    var x = e.clientX - canvasRect.left;
+    var y = e.clientY - canvasRect.top;
+    var localX = x / scaleX;
+    var localY = y / scaleY;
+
+    // 5번, 6번 스텝에서는 실수로 카드 정보창이 닫히지 않도록 시도
+    if (step.id === 'cardInfoPanel' || step.id === 'cardGetByName') {
+      if (!isInsideRegion(localX, localY, REGION_CARDINFO)) {
+        e.stopPropagation();
+        e.preventDefault();
+        return;
+      }
+      // 영역 안 클릭은 그대로 통과
+      return;
+    }
+
+    // 4번 스텝: 카드 정보 아이콘 클릭 유도
+    if (step.waitForCardInfoClick && isInsideRegion(localX, localY, REGION_BTN_CARDINFO)) {
+      setTimeout(function () {
+        goToStep(currentStepIndex + 1);
+      }, 120);
+      // 게임 로직으로 이벤트는 그대로 보내서 실제 창이 열리게 함
+    }
+  }
+
+  canvas.addEventListener('click', canvasClickListener, true);
+
+  function renderStep() {
+    var step = steps[currentStepIndex];
+    if (!step) return;
+
+    var canvasRect = canvas.getBoundingClientRect();
+    var scaleX = canvasRect.width / canvasWidth;
+    var scaleY = canvasRect.height / canvasHeight;
+
+    var r = step.region;
+    var left = canvasRect.left + r.x1 * scaleX;
+    var top = canvasRect.top + r.y1 * scaleY;
+    var width = (r.x2 - r.x1) * scaleX;
+    var height = (r.y2 - r.y1) * scaleX;
+
+    // 강조 영역
+    var pad = 6;
+    left -= pad;
+    top -= pad;
+    width += pad * 2;
+    height += pad * 2;
+
+    var vw = window.innerWidth;
+    var vh = window.innerHeight;
+
+    dimTop.style.left = '0px';
+    dimTop.style.top = '0px';
+    dimTop.style.width = vw + 'px';
+    dimTop.style.height = Math.max(0, top) + 'px';
+
+    dimLeft.style.left = '0px';
+    dimLeft.style.top = Math.max(0, top) + 'px';
+    dimLeft.style.width = Math.max(0, left) + 'px';
+    dimLeft.style.height = Math.max(0, height) + 'px';
+
+    dimRight.style.left = (left + width) + 'px';
+    dimRight.style.top = Math.max(0, top) + 'px';
+    dimRight.style.width = Math.max(0, vw - (left + width)) + 'px';
+    dimRight.style.height = Math.max(0, height) + 'px';
+
+    dimBottom.style.left = '0px';
+    dimBottom.style.top = (top + height) + 'px';
+    dimBottom.style.width = vw + 'px';
+    dimBottom.style.height = Math.max(0, vh - (top + height)) + 'px';
+
+    highlightBox.style.left = left + 'px';
+    highlightBox.style.top = top + 'px';
+    highlightBox.style.width = width + 'px';
+    highlightBox.style.height = height + 'px';
+
+    if (step.pulseHighlight) {
+      startPulse();
+    } else {
+      stopPulse();
+    }
+
+    titleEl.textContent = step.title;
+    bodyEl.innerHTML = '';
+
+    step.lines.forEach(function (line) {
+      var li = document.createElement('li');
+      var colonIndex = line.indexOf(':');
+      if (colonIndex > 0) {
+        var key = line.slice(0, colonIndex);
+        var rest = line.slice(colonIndex + 1);
+
+        var strongSpan = document.createElement('span');
+        strongSpan.style.color = '#1d4ed8';
+        strongSpan.style.fontWeight = '600';
+        strongSpan.textContent = key + ':';
+
+        li.appendChild(strongSpan);
+        li.appendChild(document.createTextNode(rest));
+      } else {
+        li.textContent = line;
+      }
+      bodyEl.appendChild(li);
+    });
+
+    stepIndicator.textContent = (currentStepIndex + 1) + ' / ' + steps.length;
+
+    if (currentStepIndex === 0) {
+      prevBtn.disabled = true;
+      prevBtn.style.opacity = '0.4';
+      prevBtn.style.cursor = 'default';
+    } else {
+      prevBtn.disabled = false;
+      prevBtn.style.opacity = '1';
+      prevBtn.style.cursor = 'pointer';
+    }
+
+    if (step.waitForCardInfoClick) {
+      nextBtn.textContent = '다음';
+      nextBtn.disabled = true;
+      nextBtn.style.opacity = '0.4';
+      nextBtn.style.cursor = 'default';
+    } else if (currentStepIndex === steps.length - 1) {
+      nextBtn.textContent = '완료';
+      nextBtn.disabled = false;
+      nextBtn.style.opacity = '1';
+      nextBtn.style.cursor = 'pointer';
+    } else {
+      nextBtn.textContent = '다음';
+      nextBtn.disabled = false;
+      nextBtn.style.opacity = '1';
+      nextBtn.style.cursor = 'pointer';
+    }
+
+    if (step.id === 'exScore') {
+      detailBtn.style.display = 'inline-block';
+      detailBtn.textContent = '자세히';
+      detailPanel.style.display = 'none';
+    } else {
+      detailBtn.style.display = 'none';
+      detailPanel.style.display = 'none';
+    }
+
+    var bubbleWidth = 320;
+    var margin = 18;
+    var bubbleLeft = left + width + margin;
+    var bubbleTop = top;
+
+    if (bubbleLeft + bubbleWidth > vw - 16) {
+      bubbleLeft = Math.min(Math.max(16, left + width / 2 - bubbleWidth / 2), vw - bubbleWidth - 16);
+      bubbleTop = top + height + margin;
+      bubbleArrow.style.borderRight = '10px solid transparent';
+      bubbleArrow.style.borderTop = '8px solid white';
+      bubbleArrow.style.borderBottom = 'none';
+      bubbleArrow.style.left = '24px';
+      bubbleArrow.style.top = '-8px';
+    } else {
+      bubbleArrow.style.borderTop = '8px solid transparent';
+      bubbleArrow.style.borderBottom = '8px solid transparent';
+      bubbleArrow.style.borderRight = '10px solid white';
+      bubbleArrow.style.left = '-10px';
+      bubbleArrow.style.top = '18px';
+    }
+
+    bubble.style.left = bubbleLeft + 'px';
+    bubble.style.top = bubbleTop + 'px';
+  }
+
+  prevBtn.addEventListener('click', function () {
+    if (currentStepIndex > 0) {
+      goToStep(currentStepIndex - 1);
+    }
+  });
+
+  nextBtn.addEventListener('click', function () {
+    if (nextBtn.disabled) return;
+    if (currentStepIndex < steps.length - 1) {
+      goToStep(currentStepIndex + 1);
+    } else {
+      cleanup();
+    }
+  });
+
+  skipBtn.addEventListener('click', function () {
+    skipConfirm.style.display = 'block';
+  });
+
+  skipCancel.addEventListener('click', function () {
+    skipConfirm.style.display = 'none';
+  });
+
+  skipOk.addEventListener('click', function () {
+    cleanup();
+  });
+
+  detailBtn.addEventListener('click', function () {
+    if (detailPanel.style.display === 'none') {
+      detailPanel.style.display = 'block';
+      detailBtn.textContent = '간단히';
+      detailPanel.innerHTML =
+        '<div style="margin-bottom:4px;"><strong style="color:#0f172a;">통계값 의미</strong></div>' +
+        '<ul style="margin:0 0 4px 0; padding-left:16px; list-style:disc;">' +
+        '<li><span style="font-weight:600;color:#1d4ed8;">최소/최대</span>: 가장 낮은 결과와 가장 높은 결과입니다.</li>' +
+        '<li><span style="font-weight:600;color:#1d4ed8;">중앙값</span>: 결과들을 정렬했을 때 정확히 가운데에 오는 값입니다.</li>' +
+        '<li><span style="font-weight:600;color:#1d4ed8;">표준편차</span>: 결과들이 평균에서 얼마나 퍼져 있는지를 나타냅니다.</li>' +
+        '<li><span style="font-weight:600;color:#1d4ed8;">변동계수</span>: 표준편차를 평균으로 나눈 값으로, 상대적인 변동성을 보여줍니다.</li>' +
+        '</ul>' +
+        '<div style="margin-top:2px;">' +
+        '예를 들어, <span style="font-weight:600;color:#16a34a;">평균은 높은데 표준편차와 변동계수가 크면</span> 운에 따라 결과 편차가 크다는 뜻이고,' +
+        ' <span style="font-weight:600;color:#b91c1c;">평균이 비슷한 두 선택지에서 변동계수가 더 작은 쪽</span>은 보다 안정적인 선택이라고 볼 수 있습니다.' +
+        '</div>';
+    } else {
+      detailPanel.style.display = 'none';
+      detailBtn.textContent = '자세히';
+    }
+  });
+
+  window.addEventListener('resize', renderStep);
+
+  renderStep();
+}
+
+function styleUsagePrimaryBtn(btn, disabled) {
+  btn.style.border = 'none';
+  btn.style.borderRadius = '999px';
+  btn.style.padding = '6px 14px';
+  btn.style.fontSize = '12px';
+  btn.style.fontWeight = '600';
+  btn.style.background = '#2563eb';
+  btn.style.color = '#f9fafb';
+  btn.style.cursor = disabled ? 'default' : 'pointer';
+  btn.style.opacity = disabled ? '0.4' : '1';
+}
+
+// DOM 로드 시 초기화
+(function () {
+  if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    setTimeout(initUsageOverlay, 0);
+  } else {
+    document.addEventListener('DOMContentLoaded', initUsageOverlay);
+  }
+})();
