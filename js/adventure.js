@@ -1390,7 +1390,7 @@ function initUsageOverlay() {
       title: '동작 모드 (수동 / 자동)',
       lines: [
         '수동 모드: 칸 수, 주사위 사용 횟수, 카드 획득 등을 직접 수동으로 설정하여 테스트가 가능한 모드입니다. (기본값)',
-        '자동 모드: 모든 게임 프로세스가 자동으로 진행되어 실제 인게임과 거의 동일한 환경으로 시뮬레이션이 가능합니다.'
+        '자동 모드: 모든 게임 프로세스가 자동으로 진행되어 실제 인게임과 거의 동일한 환경으로 시뮬레이션이 가능합니다. 이 모드에서는 카드 정보 수정 및 강제 획득이 불가능합니다.'
       ],
       region: REGION_BTN_CHANGEMODE
     }
@@ -1630,7 +1630,6 @@ function createUsageOverlayWithSteps(steps) {
     canvas.removeEventListener('click', canvasClickListener, true);
     window.removeEventListener('resize', renderStep);
     document.removeEventListener('keydown', escHandler);
-    showHelpButton();
   }
 
   function escHandler(e) {
