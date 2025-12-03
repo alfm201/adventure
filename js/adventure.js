@@ -1589,7 +1589,7 @@ function initUsageOverlay() {
       region: regionCurrentCharacter,
       dynamicRegion: function() {
         if (
-          !window.regionCurrentCharacter ||
+          typeof regionCurrentCharacter === 'undefined' ||
           (
             regionCurrentCharacter.x1 === 0 &&
             regionCurrentCharacter.x2 === 0 &&
