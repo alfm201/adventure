@@ -1586,7 +1586,25 @@ function initUsageOverlay() {
         '수동 모드에서 테스트 경로를 빠르게 바꾸고 싶을 때 유용합니다.',
         '키보드 좌/우 방향키를 이용하여 스테이지 단위로 이동합니다.'
       ],
-      region: regionCurrentCharacter
+      dynamicRegion: function() {
+        if (
+          !window.regionCurrentCharacter ||
+          (
+            regionCurrentCharacter.x1 === 0 &&
+            regionCurrentCharacter.x2 === 0 &&
+            regionCurrentCharacter.y1 === 0 &&
+            regionCurrentCharacter.y2 === 0
+          )
+        ) {
+          return null;
+        }
+        return {
+          x1: regionCurrentCharacter.x1,
+          x2: regionCurrentCharacter.x2,
+          y1: regionCurrentCharacter.y1,
+          y2: regionCurrentCharacter.y2
+        };
+      }
     },
     {
       id: 'cardsUse',
@@ -1931,7 +1949,25 @@ function createUsageOverlayWithSteps(steps) {
     var scaleX = canvasRect.width / canvasWidth;
     var scaleY = canvasRect.height / canvasHeight;
 
-    var r = step.region;
+    // 🔹 1) dynamicRegion이 있으면 우선 사용
+    var r = null;
+    if (typeof step.dynamicRegion === 'function') {
+      r = step.dynamicRegion();
+    }
+    // 🔹 2) 없거나 null이면 기존 region 사용
+    if (!r && step.region) {
+      r = step.region;
+    }
+    // 🔹 3) 그래도 없으면(또는 0,0,0,0이면) 이 스텝은 하이라이트만 생략
+    if (
+      !r ||
+      (r.x1 === r.x2 && r.y1 === r.y2)
+    ) {
+      highlightBox.style.width = '0';
+      highlightBox.style.height = '0';
+      return;
+    }
+    
     var left = canvasRect.left + r.x1 * scaleX;
     var top = canvasRect.top + r.y1 * scaleY;
     var width = (r.x2 - r.x1) * scaleX;
