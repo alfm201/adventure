@@ -138,6 +138,18 @@ class Board {
         break;
     }
   }
+  
+  moveStage(v) {
+    let value = Math.max(1, Math.min(75, stage[this.score - 1][1] + v));
+    let score = this.score;
+    for (let i = 0, len = stage.length - 1; i < len; i++) {
+      if (stage[i][1] === value && stage[i][2] === 1) {
+        score = i - this.score + 1;
+        break;
+      }
+    }
+    this.updateScore(score, false);
+  }
 
   resetBoard() {
     this.score = 1;
