@@ -977,7 +977,7 @@ function getScoreFromMousePosition(x, y) {
 
   const currentStageId = stage[env.score - 1][1];
   const currentScore = Math.max(0, env.score - 60);
-  const len = Math.min(2898, env.score + 120);
+  const len = Math.min(2897, env.score + 120);
 
   for (let i = currentScore; i < len; i++) {
     if (stage[i][1] === currentStageId && stage[i][6] === localPos) {
