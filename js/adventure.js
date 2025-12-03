@@ -2,6 +2,12 @@ const canvas = document.querySelector('#game_screen');
 const _canvas = document.querySelector('#temp_canvas');
 const ctx = canvas.getContext('2d');
 const _ctx = _canvas.getContext('2d');
+const DICE_OVERLAY_CONFIG = {
+  btnWidth: 46,
+  btnHeight: 24,
+  gap: 4,
+  margin: 8,
+}
 
 let backgroundImages = [];
 let scores = [];
@@ -14,6 +20,9 @@ let showCardPos = -1;
 let keyDownCtrl = false;
 let tooltipIndex = -1;
 let tooltipInfo = { x: 0, y: 0, w: 0, h: 0, text: '' };
+let showDiceOverlay = false;
+let diceOverlayHoverIndex = -1;
+let regionCurrentCharacter = { x1: 0, y1: 0, x2: 0, y2: 0 };
 
 setup();
 
@@ -56,6 +65,7 @@ function drawMainScreen() {
   if (tooltipIndex >= 0 && tooltipIndex <= 6) {
     drawTooltip(tooltipInfo.x, tooltipInfo.y, tooltipInfo.text);
   }
+  drawDiceOverlay();
   showCardPos = -1;
 }
 
@@ -179,6 +189,72 @@ function drawStatusBar() {
   drawBtn(btnText = '도움말', x = 886, y = 642, width = 90, height = 38, radius = 12, opacity = 1, lineColor = 'rgb(53, 79, 108)', fillColor = 'rgb(45, 137, 195)');
 }
 
+function drawDiceOverlay() {
+  if (!showDiceOverlay) return;
+  if (env.autoProcess) return;
+
+  const rect = getDiceOverlayRect();
+  if (!rect) return;
+
+  const cfg = DICE_OVERLAY_CONFIG;
+  const baseY = rect[0].y1;
+
+  for (let i = 0; i < 11; i++) {
+    const value = i + 2;
+    const x = rect[0].x1 + (i % 6) * (cfg.btnWidth + cfg.gap);
+    const y = baseY + Math.floor(i / 6) * (cfg.btnHeight + cfg.gap);
+
+    const isHover = (diceOverlayHoverIndex === i);
+
+    const lineColor = isHover ? 'rgb(255, 210, 140)' : 'rgb(60, 86, 120)';
+    const fillColor = isHover ? 'rgb(255, 170, 80)'  : 'rgb(70, 160, 220)';
+    const textColor = 'white';
+
+    drawBtn(`+${value}`, x, y, cfg.btnWidth, cfg.btnHeight, 10, 1, lineColor, fillColor, textColor, 11);
+  }
+}
+
+function getDiceOverlayRect() {
+  if (!REGION_STEP) return null;
+  const cfg = DICE_OVERLAY_CONFIG;
+
+  const x1 = REGION_STEP.x1;
+  const y1 = REGION_STEP.y1 - cfg.margin - cfg.gap - cfg.btnHeight * 2;
+  const w1  = 6 * cfg.btnWidth + 5 * cfg.gap;
+  const h1 = cfg.btnHeight;
+  
+  const x2 = REGION_STEP.x1;
+  const y2 = REGION_STEP.y1 - cfg.margin - cfg.gap - cfg.btnHeight;
+  const w2  = 5 * cfg.btnWidth + 4 * cfg.gap;
+  const h2 = cfg.btnHeight + cfg.gap + cfg.margin;
+  
+  return [
+    { x1: x1, x2: x1 + w1, y1: y1, y2: y1 + h1 },
+    { x1: x2, x2: x2 + w2, y1: y2, y2: y2 + h2 },
+    REGION_STEP
+  ];
+}
+
+function getDiceOverlayButtonIndex(x, y) {
+  const r = getDiceOverlayRect();
+  if (!r) return -1;
+
+  if (r.every(rect => (x < rect.x1 || x > rect.x2 || y < rect.y1 || y > rect.y2) === false)) return -1;
+
+  const cfg = DICE_OVERLAY_CONFIG;
+  const localX = x - r[0].x1;
+  const localY = y - r[0].y1;
+
+  const cell = 6 * Math.floor(localY / (cfg.btnHeight + cfg.gap)) + Math.floor(localX / (cfg.btnWidth + cfg.gap));
+  
+  if (cell < 0 || cell > 10) return -1;
+
+  const btnX = cell * (cfg.btnWidth + cfg.gap);
+  if (localX > btnX + cfg.btnWidth) return -1;
+  
+  return cell;
+}
+
 function drawBtn(btnText = '', x, y, width, height, radius, opacity, lineColor, fillColor, textColor = 'white', fontSize = 12) {
   drawRadiusRect(x, y, width, height, radius, opacity, lineColor);
   drawRadiusRect(x + 2, y + 2, width - 4, height - 4, radius - 2, opacity, fillColor);
@@ -295,7 +371,11 @@ function drawCanvas(i, sx, sy, dx, dy, w, h) {
 
 function drawUsers() {
   let userPos = stage[env.score - 1][6]
-  drawCanvas(77, (userIndex - 1) * 90, 0, ((userPos - 1) % 10 + 1) * 96 - 96 + 244, parseInt((userPos - 1) / 10) * 96 + 15, 90, 120);
+  let userX = ((userPos - 1) % 10 + 1) * 96 - 96 + 244;
+  let userY = parseInt((userPos - 1) / 10) * 96 + 15;
+  
+  drawCanvas(77, (userIndex - 1) * 90, 0, userX, userY, 90, 120);
+  regionCurrentCharacter = { x1: userX, y1: userY, x2: userX + 90, y2: userY + 120}
 }
 
 function drawEvents(n) {
@@ -347,7 +427,9 @@ let isDragging = false;
 let preventClick = false;
 let dragStartY = 0;
 let initialScrollOffset = 0;
-
+let isDraggingCharacter = false;
+let characterDragTargetScore = null;
+let characterDragStartScore = null;
 
 // 이벤트 처리용 함수
 function measureMultilineText(ctx, text, lineHeight) {
@@ -441,6 +523,22 @@ const REGION_EXSCORES = { x1: 9, x2: 201, y1: 321, y2: 425 };
 
 function eventCanvasMouseup(e) {
   isDragging = false;
+
+  if (isDraggingCharacter) {
+    isDraggingCharacter = false;
+
+    if (characterDragTargetScore !== null && characterDragTargetScore !== env.score) {
+      env.score = characterDragTargetScore;
+      env.checkEvent();
+      calcEx();
+    } else {
+      updateBoard();
+    }
+
+    characterDragTargetScore = null;
+    characterDragStartScore = null;
+  }
+  
   setTimeout(function () {
     preventClick = false;
   }, 0);
@@ -448,10 +546,12 @@ function eventCanvasMouseup(e) {
 
 function eventCanvasMouseleave(e) {
   isDragging = false;
+  isDraggingCharacter = false;
 }
 
 function eventWindowBlur(e) {
   isDragging = false;
+  isDraggingCharacter = false;
   tooltipIndex = -1;
   updateBoard();
 }
@@ -466,12 +566,64 @@ function eventCanvasMousedown(e) {
     preventClick = true;
     dragStartY = y;
     initialScrollOffset = env.cardInfoScrollOffset;
+  } else if (!showCardInfoYN && isInsideRegion(x, y, regionCurrentCharacter)) {
+    isDraggingCharacter = true;
+    preventClick = true;
+    characterDragStartScore = env.score;
+    characterDragTargetScore = null;
   }
 }
 
 function eventCanvasMousemove(e) {
   let x = e.offsetX;
   let y = e.offsetY;
+
+  if (isDraggingCharacter) {
+    const targetScore = getScoreFromMousePosition(x, y);
+    characterDragTargetScore = targetScore;
+
+    updateBoard();
+    if (targetScore !== null && targetScore !== env.score) {
+      const moveValue = targetScore - env.score;
+      drawCardPos(moveValue);
+    }
+
+    return;
+  }
+
+  const inStep = isInsideRegion(x, y, REGION_STEP);
+  const r = getDiceOverlayRect();
+  const inOverlay = r ? r.some(rect => (x >= rect.x1 && x <= rect.x2 && y >= rect.y1 && y <= rect.y2)) : false;
+
+  if (inStep || inOverlay) {
+    if (!showDiceOverlay) {
+      showDiceOverlay = true;
+      diceOverlayHoverIndex = -1;
+      updateBoard();
+    }
+
+    const idx = getDiceOverlayButtonIndex(x, y);
+    if (diceOverlayHoverIndex !== idx) {
+      diceOverlayHoverIndex = idx;
+      updateBoard();
+
+      if (idx >= 0) {
+        const value = idx + 2;
+        const destScore = getStopDestinationScore(env.score, value);
+
+        if (stage[env.score - 1][1] === stage[destScore - 1][1]) {
+          const moveValue = destScore - env.score;
+          drawCardPos(moveValue);
+        }
+      }
+    }
+  } else {
+    if (showDiceOverlay) {
+      showDiceOverlay = false;
+      diceOverlayHoverIndex = -1;
+      updateBoard();
+    }
+  }
 
   if (isInsideRegion(x, y, REGION_EXSCORES)) {
     tooltipIndex = Math.trunc((y - 321) / (104 / 6));
@@ -556,11 +708,21 @@ function eventCanvasClick(e) {
     return;
   }
 
+  if (showDiceOverlay) {
+    const idx = getDiceOverlayButtonIndex(x, y);
+    if (idx >= 0) {
+      const value = idx + 2;
+
+      env.updateScore(value, true);
+      calcEx();
+      return;
+    }
+  }
+
   if (isInsideRegion(x, y, REGION_STEP)) {
     if (env.autoProcess) {
       done = env.step(0);
       calcEx();
-      // updateBoard();
     } else {
       env.isDouble = !env.isDouble;
       calcEx();
@@ -724,6 +886,12 @@ function eventKeydown(e) {
       calcEx();
       // updateBoard();
     }
+  } else if (e.key === 'ArrowLeft') {
+    env.moveStage(-1);
+    calcEx();
+  } else if (e.key === 'ArrowRight') {
+    env.moveStage(1);
+    calcEx();
   }
 }
 
@@ -795,7 +963,48 @@ function eventKeyup(e) {
   }
 }
 
+function getScoreFromMousePosition(x, y) {
+  const boardX = x - 244;
+  const boardY = y - 60;
 
+  if (boardX < 0 || boardY < 0) return null;
+
+  const col = Math.floor(boardX / 96);
+  const row = Math.floor(boardY / 96);
+  if (col < 0 || col > 9 || row < 0) return null;
+
+  const localPos = row * 10 + col + 1;
+
+  const currentStageId = stage[env.score - 1][1];
+  const currentScore = Math.max(0, env.score - 60);
+  const len = Math.min(2898, env.score + 120);
+
+  for (let i = currentScore; i < len; i++) {
+    if (stage[i][1] === currentStageId && stage[i][6] === localPos) {
+      return i + 1;
+    }
+  }
+
+  return null;
+}
+
+function getStopDestinationScore(startScore, value) {
+  if (value <= 0) return startScore;
+
+  let targetScore = startScore + value;
+
+  let startIndex = startScore;
+  let endIndex = Math.min(2897, startScore + value - 1);
+
+  for (let i = startIndex; i < endIndex; i++) {
+    if (stage[i][5] === 6 || stage[i][5] === 9) {
+      targetScore = i + 1;
+      break;
+    }
+  }
+
+  return Math.min(2898, targetScore);
+}
 
 
 
@@ -1317,9 +1526,47 @@ function initUsageOverlay() {
       title: '현재 위치(칸 수) 이동',
       lines: [
         'Ctrl + Q: 현재 위치(칸 수)를 직접 입력해서 이동할 수 있습니다.',
-        '칸 표시 영역을 클릭해서 마우스로도 위치를 조정할 수 있습니다.'
+        '칸 표시 영역을 클릭해도 같은 기능을 사용할 수 있습니다.'
       ],
       region: REGION_SCORE
+    },
+    {
+      id: 'exScore',
+      title: '예상 점수와 통계 활용',
+      lines: [
+        '예상 점수(하늘색 영역): 클릭하면 시뮬레이션 정확도(시행 횟수)를 수정할 수 있습니다.',
+        'Ctrl + R: 예상 점수를 재계산할 수 있습니다. 점수 출력 영역을 클릭해도 같은 기능을 사용할 수 있습니다.',
+        '점수 출력 영역에 마우스를 올려두면 최소·최대·중앙값·표준편차·변동계수 등 상세 통계를 볼 수 있습니다.',
+        '"자세히" 버튼을 눌러 각 통계의 의미와 해석 방법에 대한 간단한 가이드를 확인할 수 있습니다.'
+      ],
+      region: {
+        x1: REGION_BTN_ACCURACY.x1,
+        x2: REGION_BTN_EXSCORE.x2,
+        y1: REGION_BTN_ACCURACY.y1,
+        y2: REGION_BTN_EXSCORE.y2
+      },
+      detailHtml:
+        '<div style="margin-bottom:4px;"><strong style="color:#0f172a;">통계값 의미</strong></div>' +
+        '<ul style="margin:0 0 4px 0; padding-left:16px; list-style:disc;">' +
+        '<li><span style="font-weight:600;color:#1d4ed8;">최소/최대</span>: 가장 낮은 결과와 가장 높은 결과입니다.</li>' +
+        '<li><span style="font-weight:600;color:#1d4ed8;">중앙값</span>: 결과들을 정렬했을 때 정확히 가운데에 오는 값입니다.</li>' +
+        '<li><span style="font-weight:600;color:#1d4ed8;">표준편차</span>: 결과들이 평균에서 얼마나 퍼져 있는지를 나타냅니다.</li>' +
+        '<li><span style="font-weight:600;color:#1d4ed8;">변동계수</span>: 표준편차를 평균으로 나눈 값으로, 상대적인 변동성을 보여줍니다.</li>' +
+        '</ul>' +
+        '<div style="margin-top:2px;">' +
+        '예를 들어, 평균은 높은데 표준편차와 변동계수가 크면<br><span style="font-weight:600;color:#b91c1c;">운에 따라 결과 편차가 크다</span>는 뜻이고,<br>' +
+        '평균이 비슷한 두 선택지에서 변동계수가 더 작은 쪽은<br><span style="font-weight:600;color:#16a34a;">보다 안정적인 선택</span>이라고 볼 수 있습니다.' +
+        '</div>'
+    },
+    {
+      id: 'stepButton',
+      title: '주사위 버튼과 더블 설정',
+      lines: [
+        '수동 모드: 주사위 버튼을 클릭하면 다음 주사위 굴림을 더블로 처리할지 여부를 토글할 수 있습니다.',
+        '수동 모드에서는 주사위 버튼 위에 마우스를 올려두면 +2부터 +12까지 버튼이 나타나며, 원하는 값을 골라 앞으로 즉시 이동할 수 있습니다.',
+        '자동 모드: 주사위 버튼을 클릭하면 실제로 주사위를 굴리며, 필요하다면 자동으로 더블 상태가 적용됩니다.'
+      ],
+      region: REGION_STEP
     },
     {
       id: 'diceUse',
@@ -1329,6 +1576,17 @@ function initUsageOverlay() {
         '"주사위 사용" 영역을 클릭해도 같은 기능을 사용할 수 있습니다.'
       ],
       region: REGION_DICEUSE
+    },
+    {
+      id: 'characterDrag',
+      title: '보드 위 캐릭터 드래그 이동',
+      lines: [
+        '보드판 위 캐릭터: 마우스로 드래그하여 원하는 칸으로 옮기면, 해당 위치의 칸으로 바로 이동합니다.',
+        '드래그를 놓았을 때 도착한 칸 기준으로 이벤트가 다시 적용되며, 이후 예상 점수도 자동으로 다시 계산됩니다.',
+        '수동 모드에서 테스트 경로를 빠르게 바꾸고 싶을 때 유용합니다.',
+        '키보드 좌/우 방향키를 이용하여 스테이지 단위로 이동합니다.'
+      ],
+      region: regionCurrentCharacter
     },
     {
       id: 'cardsUse',
@@ -1343,12 +1601,9 @@ function initUsageOverlay() {
       id: 'cardInfoButton',
       title: '카드 획득 정보 보기',
       lines: [
-        '카드 정보 아이콘: 오른쪽 아래 아이콘을 클릭하면 카드 획득 정보를 볼 수 있습니다.',
-        '지금 아이콘을 직접 클릭해서 카드 정보 창을 열어보세요.'
+        '카드 정보 아이콘: 오른쪽 아래 아이콘을 클릭하면 카드 획득 정보를 볼 수 있습니다.'
       ],
-      region: REGION_BTN_CARDINFO,
-      waitForCardInfoClick: true,
-      pulseHighlight: true
+      region: REGION_BTN_CARDINFO
     },
     {
       id: 'cardInfoPanel',
@@ -1365,26 +1620,23 @@ function initUsageOverlay() {
       title: '카드 이름으로 바로 획득',
       lines: [
         'Ctrl + G: 행운 카드 이름의 일부를 입력해서, 그 이름을 포함하는 카드를 바로 획득할 수 있습니다.',
-        '예: "주사위"를 입력하면 이름에 "주사위"가 포함된 카드 중 아직 획득하지 않은 첫 카드를 찾습니다.',
-        '정확한 전체 이름이 아니라, 키워드 위주로 입력해도 됩니다.'
+        '예를 들어, "주사위"를 입력하면 이름에 "주사위"가 포함된 카드 중 아직 획득하지 않은 첫 카드를 찾습니다.',
+        '정확한 전체 이름이 아니라, 키워드 위주로 입력해도 됩니다.',
+        '"자세히" 버튼을 눌러, 특수 키워드를 사용해 더 빠르게 검색하는 방법을 확인할 수 있습니다.'
       ],
-      region: REGION_CARDINFO
-    },
-    {
-      id: 'exScore',
-      title: '예상 점수와 통계 활용',
-      lines: [
-        '예상 점수(하늘색 영역): 클릭하면 시뮬레이션 정확도(시행 횟수)를 수정할 수 있습니다.',
-        'Ctrl + R: 예상 점수를 재계산할 수 있습니다. 점수 출력 영역을 클릭해도 같은 기능을 사용할 수 있습니다.',
-        '점수 출력 영역에 마우스를 올려두면 최소·최대·중앙값·표준편차·변동계수 등 상세 통계를 볼 수 있습니다.',
-        '"자세히" 버튼을 눌러 각 통계의 의미와 해석 방법에 대한 간단한 가이드를 확인할 수 있습니다.'
-      ],
-      region: {
-        x1: REGION_BTN_ACCURACY.x1,
-        x2: REGION_BTN_EXSCORE.x2,
-        y1: REGION_BTN_ACCURACY.y1,
-        y2: REGION_BTN_EXSCORE.y2
-      }
+      region: REGION_CARDINFO,
+      detailHtml:
+        '검색용 특수 키워드:<br>' +
+        '앞으로 N칸 이동: ' +
+          '<span style="font-weight:600;color:#1d4ed8;">+N</span> ' +
+          '또는 ' +
+          '<span style="font-weight:600;color:#1d4ed8;">N</span><br>' +
+        '뒤로 N칸 이동: ' +
+          '<span style="font-weight:600;color:#1d4ed8;">-N</span><br>' +
+        '주사위 N배: ' +
+          '<span style="font-weight:600;color:#1d4ed8;">*N</span><br>' +
+        '다음 스테이지: ' +
+          '<span style="font-weight:600;color:#1d4ed8;">&gt;</span>'
     },
     {
       id: 'mode',
@@ -1435,26 +1687,6 @@ function createUsageOverlayWithSteps(steps) {
   highlightBox.style.boxShadow = '0 0 0 4px rgba(56, 189, 248, 0.35)';
   highlightBox.style.pointerEvents = 'none';
   highlightBox.style.transition = 'box-shadow 0.6s ease';
-
-  var pulseTimer = null;
-  function startPulse() {
-    stopPulse();
-    var strong = '0 0 0 4px rgba(56, 189, 248, 0.6), 0 0 16px rgba(56, 189, 248, 0.95)';
-    var weak = '0 0 0 4px rgba(56, 189, 248, 0.35)';
-    var on = false;
-    highlightBox.style.boxShadow = weak;
-    pulseTimer = setInterval(function () {
-      highlightBox.style.boxShadow = on ? weak : strong;
-      on = !on;
-    }, 650);
-  }
-  function stopPulse() {
-    if (pulseTimer) {
-      clearInterval(pulseTimer);
-      pulseTimer = null;
-    }
-    highlightBox.style.boxShadow = '0 0 0 4px rgba(56, 189, 248, 0.35)';
-  }
 
   var bubble = document.createElement('div');
   bubble.id = 'adventure-usage-bubble';
@@ -1626,7 +1858,6 @@ function createUsageOverlayWithSteps(steps) {
 
   function cleanup() {
     isActive = false;
-    stopPulse();
     if (root && root.parentNode) root.parentNode.removeChild(root);
     canvas.removeEventListener('click', canvasClickListener, true);
     window.removeEventListener('resize', renderStep);
@@ -1646,12 +1877,17 @@ function createUsageOverlayWithSteps(steps) {
     var prevStep = steps[currentStepIndex];
     var nextStep = steps[index];
 
-    // 5 → 4로 되돌아갈 때
+    // 7 → 8로 넘어갈 때
+    if (prevStep && nextStep && prevStep.id === 'cardInfoButton' && nextStep.id === 'cardInfoPanel' && !showCardInfoYN) {
+      drawCardInfo();
+    }
+
+    // 8 → 7로 되돌아갈 때
     if (prevStep && nextStep && prevStep.id === 'cardInfoPanel' && nextStep.id === 'cardInfoButton') {
       closeCardInfoPanelGlobal();
     }
-    // 6 → 7로 넘어갈 때
-    if (prevStep && nextStep && prevStep.id === 'cardGetByName' && nextStep.id === 'exScore') {
+    // 9 → 10으로 넘어갈 때
+    if (prevStep && nextStep && prevStep.id === 'cardGetByName' && nextStep.id === 'mode') {
       closeCardInfoPanelGlobal();
     }
 
@@ -1673,7 +1909,7 @@ function createUsageOverlayWithSteps(steps) {
     var localX = x / scaleX;
     var localY = y / scaleY;
 
-    // 5번, 6번 스텝에서는 실수로 카드 정보창이 닫히지 않도록 시도
+    // 8번, 9번 스텝에서는 실수로 카드 정보창이 닫히지 않도록 시도
     if (step.id === 'cardInfoPanel' || step.id === 'cardGetByName') {
       if (!isInsideRegion(localX, localY, REGION_CARDINFO)) {
         e.stopPropagation();
@@ -1682,14 +1918,6 @@ function createUsageOverlayWithSteps(steps) {
       }
       // 영역 안 클릭은 그대로 통과
       return;
-    }
-
-    // 4번 스텝: 카드 정보 아이콘 클릭 유도
-    if (step.waitForCardInfoClick && isInsideRegion(localX, localY, REGION_BTN_CARDINFO)) {
-      setTimeout(function () {
-        goToStep(currentStepIndex + 1);
-      }, 120);
-      // 게임 로직으로 이벤트는 그대로 보내서 실제 창이 열리게 함
     }
   }
 
@@ -1744,12 +1972,6 @@ function createUsageOverlayWithSteps(steps) {
     highlightBox.style.width = width + 'px';
     highlightBox.style.height = height + 'px';
 
-    if (step.pulseHighlight) {
-      startPulse();
-    } else {
-      stopPulse();
-    }
-
     titleEl.textContent = step.title;
     bodyEl.innerHTML = '';
 
@@ -1800,7 +2022,7 @@ function createUsageOverlayWithSteps(steps) {
       nextBtn.style.cursor = 'pointer';
     }
 
-    if (step.id === 'exScore') {
+    if (step.detailHtml) {
       detailBtn.style.display = 'inline-block';
       detailBtn.textContent = '자세히';
       detailPanel.style.display = 'none';
@@ -1862,21 +2084,14 @@ function createUsageOverlayWithSteps(steps) {
   });
 
   detailBtn.addEventListener('click', function () {
+    let step = steps[currentStepIndex];
+
+    if (!step || !step.detailHtml) return;
+    
     if (detailPanel.style.display === 'none') {
       detailPanel.style.display = 'block';
       detailBtn.textContent = '간단히';
-      detailPanel.innerHTML =
-        '<div style="margin-bottom:4px;"><strong style="color:#0f172a;">통계값 의미</strong></div>' +
-        '<ul style="margin:0 0 4px 0; padding-left:16px; list-style:disc;">' +
-        '<li><span style="font-weight:600;color:#1d4ed8;">최소/최대</span>: 가장 낮은 결과와 가장 높은 결과입니다.</li>' +
-        '<li><span style="font-weight:600;color:#1d4ed8;">중앙값</span>: 결과들을 정렬했을 때 정확히 가운데에 오는 값입니다.</li>' +
-        '<li><span style="font-weight:600;color:#1d4ed8;">표준편차</span>: 결과들이 평균에서 얼마나 퍼져 있는지를 나타냅니다.</li>' +
-        '<li><span style="font-weight:600;color:#1d4ed8;">변동계수</span>: 표준편차를 평균으로 나눈 값으로, 상대적인 변동성을 보여줍니다.</li>' +
-        '</ul>' +
-        '<div style="margin-top:2px;">' +
-        '예를 들어, <span style="font-weight:600;color:#16a34a;">평균은 높은데 표준편차와 변동계수가 크면</span> 운에 따라 결과 편차가 크다는 뜻이고,' +
-        ' <span style="font-weight:600;color:#b91c1c;">평균이 비슷한 두 선택지에서 변동계수가 더 작은 쪽</span>은 보다 안정적인 선택이라고 볼 수 있습니다.' +
-        '</div>';
+      detailPanel.innerHTML = step.detailHtml;
     } else {
       detailPanel.style.display = 'none';
       detailBtn.textContent = '자세히';
