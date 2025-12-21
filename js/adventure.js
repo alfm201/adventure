@@ -31,12 +31,12 @@ function setup() {
 }
 
 function imagesPreload() {
-  for (let i = 1; i < 82; i++) {
+  for (let i = 1; i < 83; i++) {
     const img = new Image();
     img.src = `./img/${i}.png`;
     backgroundImages.push(img);
   }
-  backgroundImages[80].onload = () => {
+  backgroundImages[81].onload = () => {
     calcEx();
     eventSetup();
     // updateBoard();
@@ -187,6 +187,8 @@ function drawStatusBar() {
   drawBtn(btnText = '재시작', x = 690, y = 642, width = 90, height = 38, radius = 12, opacity = 1, lineColor = 'rgb(53, 79, 108)', fillColor = 'rgb(45, 137, 195)');
   drawBtn(btnText = '모드변경', x = 788, y = 642, width = 90, height = 38, radius = 12, opacity = 1, lineColor = 'rgb(53, 79, 108)', fillColor = 'rgb(45, 137, 195)');
   drawBtn(btnText = '도움말', x = 886, y = 642, width = 90, height = 38, radius = 12, opacity = 1, lineColor = 'rgb(53, 79, 108)', fillColor = 'rgb(45, 137, 195)');
+  ctx.drawImage(backgroundImages[81], 0, 0, 54, 44, 1106, 639, 54, 44);
+  ctx.drawImage(backgroundImages[81], 54, 0, 54, 44, 1170, 639, 54, 44);
 }
 
 function drawDiceOverlay() {
@@ -518,6 +520,8 @@ const REGION_BTN_CHANGEMODE = { x1: 788, x2: 878, y1: 642, y2: 680 };
 const REGION_BTN_HELP = { x1: 886, x2: 976, y1: 642, y2: 680 };
 const REGION_BTN_ACCURACY = { x1: 11, x2: 199, y1: 288, y2: 313 };
 const REGION_BTN_EXSCORE = { x1: 9, x2: 201, y1: 313, y2: 433 };
+const REGION_BTN_PREV_STAGE = { x1: 1106, x2: 1160, y1: 639, y2: 683 };
+const REGION_BTN_NEXT_STAGE = { x1: 1170, x2: 1224, y1: 639, y2: 683 };
 const REGION_CHARACTER = { x1: 59, x2: 149, y1: 82, y2: 202 };
 const REGION_EXSCORES = { x1: 9, x2: 201, y1: 321, y2: 425 };
 
@@ -693,7 +697,12 @@ function eventCanvasRightClick(e) {
     let index = Math.trunc((y - 15 + env.cardInfoScrollOffset) / 30);
     env.getCard(index, true);
     calcEx();
-    // updateBoard();
+  } else if (isInsideRegion(x, y, REGION_CARDS)) {
+    let cardIndex = Math.trunc((x - 379) / 43) - 1;
+    if (env.cards[cardIndex] !== undefined) {
+      env.cards.splice(cardIndex, 1);
+      calcEx();
+    }
   }
   e.preventDefault();
 }
@@ -733,6 +742,22 @@ function eventCanvasClick(e) {
       done = env.step(action);
       calcEx();
       // updateBoard();
+    } else {
+      let name;
+      name = prompt('행운카드 이름');
+      if (name !== undefined && name !== '') {
+        name = name.replace('+', '앞으로 ');
+        name = name.replace('-', '뒤로 ');
+        name = name.replace('*', '주사위 ');
+        name = name.replace(/^>.*/, '다음 스테이지');
+        for (let i = 0; i < env.cardInfo.length; i++) {
+          if (userCardInfo[i][1].indexOf(name) >= 0 && env.cardInfo[i][3] === 0) {
+            env.getCard(i);
+            calcEx();
+            break;
+          }
+        }
+      }
     }
   } else if (isInsideRegion(x, y, REGION_SCORE)) {
     let n = prompt('이동', env.score);
@@ -806,6 +831,12 @@ function eventCanvasClick(e) {
   } else if (isInsideRegion(x, y, REGION_BTN_HELP)) {
     closeCardInfoPanelGlobal();
     initUsageOverlay();
+  } else if (isInsideRegion(x, y, REGION_BTN_PREV_STAGE)) {
+    env.moveStage(-1);
+    calcEx();
+  } else if (isInsideRegion(x, y, REGION_BTN_NEXT_STAGE)) {
+    env.moveStage(1);
+    calcEx();
   } else if (showCardInfoYN) {
     showCardInfoYN = false;
     updateBoard();
@@ -885,6 +916,22 @@ function eventKeydown(e) {
       done = env.step(action);
       calcEx();
       // updateBoard();
+    } else {
+      let name;
+      name = prompt('행운카드 이름');
+      if (name !== undefined && name !== '') {
+        name = name.replace('+', '앞으로 ');
+        name = name.replace('-', '뒤로 ');
+        name = name.replace('*', '주사위 ');
+        name = name.replace(/^>.*/, '다음 스테이지');
+        for (let i = 0; i < env.cardInfo.length; i++) {
+          if (userCardInfo[i][1].indexOf(name) >= 0 && env.cardInfo[i][3] === 0) {
+            env.getCard(i);
+            calcEx();
+            break;
+          }
+        }
+      }
     }
   } else if (e.key === 'ArrowLeft') {
     env.moveStage(-1);
@@ -905,6 +952,22 @@ function newEventKeydown(e) {
       done = env.step(action);
       calcEx();
       // updateBoard();
+    } else {
+      let name;
+      name = prompt('행운카드 이름');
+      if (name !== undefined && name !== '') {
+        name = name.replace('+', '앞으로 ');
+        name = name.replace('-', '뒤로 ');
+        name = name.replace('*', '주사위 ');
+        name = name.replace(/^>.*/, '다음 스테이지');
+        for (let i = 0; i < env.cardInfo.length; i++) {
+          if (userCardInfo[i][1].indexOf(name) >= 0 && env.cardInfo[i][3] === 0) {
+            env.getCard(i);
+            calcEx();
+            break;
+          }
+        }
+      }
     }
   } else if (e.key === '1') {
     if (!env.autoProcess) {
