@@ -70,18 +70,25 @@ function drawMainScreen() {
 }
 
 function drawExScores() {
-  if (env.exScores[0] >= env.exScore) {
+  if (isExScoreHighlighted(0)) {
     drawText(`주사위: ${formatValue(env.exScores[0])}`, 14, 328, 'red', 14, 'left');
   } else {
     drawText(`주사위: ${formatValue(env.exScores[0])}`, 14, 328, 'black', 14, 'left');
   }
   for (let i = 0; i < 5; i++) {
-    if (env.exScores[i + 1] >= env.exScore) {
+    if (isExScoreHighlighted(i + 1)) {
       drawText(`${i + 1}번카드: ${formatValue(env.exScores[i + 1])}`, 14, 346 + i * 18, 'red', 14, 'left');
     } else {
       drawText(`${i + 1}번카드: ${formatValue(env.exScores[i + 1])}`, 14, 346 + i * 18, 'black', 14, 'left');
     }
   }
+}
+
+function isExScoreHighlighted(action) {
+  if (env.exHighlights) {
+    return env.exHighlights[action];
+  }
+  return env.exScores[action] >= env.exScore;
 }
 
 function drawTooltip(x, y, text, size = 14, lineHeight = 18) {
@@ -631,12 +638,7 @@ function eventCanvasMousemove(e) {
 
   if (isInsideRegion(x, y, REGION_EXSCORES)) {
     tooltipIndex = Math.trunc((y - 321) / (104 / 6));
-    let min = env.exValues.min[tooltipIndex];
-    let max = env.exValues.max[tooltipIndex];
-    let std = env.exValues.std[tooltipIndex];
-    let mid = env.exValues.mid[tooltipIndex];
-    let avg = env.exScores[tooltipIndex];
-    tooltipInfo.text = `최소: ${min}\n최대: ${max}\n중앙값: ${mid}\n표준편차: ${std}\n변동계수: ${isNaN(std / avg) ? 0 : (std / avg).toFixed(6)}`;
+    tooltipInfo.text = getExScoreTooltipText(tooltipIndex);
     tooltipInfo.x = x;
     tooltipInfo.y = y;
 
@@ -1069,6 +1071,37 @@ function getStopDestinationScore(startScore, value) {
   return Math.min(2898, targetScore);
 }
 
+function getExScoreTooltipText(action) {
+  let values = env.exValues || {};
+  let avg = env.exScores[action];
+  let count = values.count ? values.count[action] : 0;
+  let se = values.se ? values.se[action] : 0;
+  let min = values.min ? values.min[action] : 0;
+  let max = values.max ? values.max[action] : 0;
+  let mid = values.mid ? values.mid[action] : 0;
+  return '샘플수: ' + formatCountValue(count) +
+    '\n범위: ' + formatIntegerValue(min) + ' ~ ' + formatIntegerValue(max) +
+    '\n중앙값: ' + formatIntegerValue(mid) +
+    '\n표준오차: ' + formatValue(se) +
+    '\n95% CI: ' + formatConfidenceInterval(avg, se);
+}
+
+function formatCountValue(value) {
+  return typeof value === 'number' && isFinite(value) ? Math.round(value).toLocaleString() : value;
+}
+
+function formatIntegerValue(value) {
+  return typeof value === 'number' && isFinite(value) ? String(Math.round(value)) : value;
+}
+
+function formatConfidenceInterval(avg, se) {
+  if (typeof avg !== 'number' || !isFinite(avg) || typeof se !== 'number' || !isFinite(se)) {
+    return '-';
+  }
+  let margin = 1.96 * se;
+  return formatIntegerValue(avg - margin) + ' ~ ' + formatIntegerValue(avg + margin);
+}
+
 
 
 
@@ -1402,8 +1435,12 @@ function simulation(iteration = 10000, state, route) {
     let maxScores = new Array(actionSize).fill(0);
     let stdScores = new Array(actionSize).fill(0);
     let medianScores = new Array(actionSize).fill(0);
+    let countScores = new Array(actionSize).fill(0);
+    let sumScores = new Array(actionSize).fill(0);
+    let sumSqScores = new Array(actionSize).fill(0);
+    let scoreCountArrays = new Array(actionSize).fill(0).map(() => new Uint32Array(2899));
+    let scoreCounts = new Array(actionSize).fill(0).map(() => []);
     for (let i = 0; i < actionSize; i++) {
-      let scores = [];
       if (route !== undefined && route.includes(i)) {
         for (let j = 0; j < iteration; j++) {
           let done = false;
@@ -1417,28 +1454,56 @@ function simulation(iteration = 10000, state, route) {
           while (!done) {
             done = sEnv.step(sEnv.chooseAction());
           }
-          scores.push(sEnv.score);
+          let score = sEnv.score;
+          countScores[i]++;
+          sumScores[i] += score;
+          sumSqScores[i] += score * score;
+          minScores[i] = countScores[i] === 1 ? score : Math.min(minScores[i], score);
+          maxScores[i] = countScores[i] === 1 ? score : Math.max(maxScores[i], score);
+          if (score >= 0 && score < scoreCountArrays[i].length) {
+            scoreCountArrays[i][score]++;
+          }
         }
-        avgScores[i] = scores.reduce((a, v) => a + v, 0) / scores.length;
-        minScores[i] = scores.reduce((min, current) => (current < min ? current : min), scores[0]);
-        maxScores[i] = scores.reduce((max, current) => (current > max ? current : max), scores[0]);
-        let variance = scores.reduce((a, v) => a + Math.pow(v - avgScores[i], 2), 0) / scores.length;
+        avgScores[i] = sumScores[i] / countScores[i];
+        let variance = Math.max(0, sumSqScores[i] / countScores[i] - avgScores[i] * avgScores[i]);
         stdScores[i] = Math.sqrt(variance);
-        let sortedScores = [...scores].sort((a, b) => a - b);
-        let median;
-        if (sortedScores.length % 2 === 0) {
-          median = (sortedScores[sortedScores.length / 2 - 1] + sortedScores[sortedScores.length / 2]) / 2;
-        } else {
-          median = sortedScores[Math.floor(sortedScores.length / 2)];
-        }
-        medianScores[i] = median;
+        medianScores[i] = getMedianFromCounts(scoreCountArrays[i], countScores[i]);
+        scoreCounts[i] = compactScoreCounts(scoreCountArrays[i]);
       }
     }
-    return [1, { avg: avgScores, min: minScores, max: maxScores, std: stdScores, mid: medianScores }];
+    return [1, { avg: avgScores, min: minScores, max: maxScores, std: stdScores, mid: medianScores, count: countScores, sum: sumScores, sumSq: sumSqScores, scoreCounts: scoreCounts }];
   } catch (err) {
     console.error(err);
     return [-1];
   }
+}
+
+function getMedianFromCounts(scoreCounts, count) {
+  if (count === 0) return 0;
+  let leftTarget = Math.floor((count + 1) / 2);
+  let rightTarget = Math.floor((count + 2) / 2);
+  let seen = 0;
+  let leftValue;
+  for (let score = 0; score < scoreCounts.length; score++) {
+    seen += scoreCounts[score];
+    if (leftValue === undefined && seen >= leftTarget) {
+      leftValue = score;
+    }
+    if (seen >= rightTarget) {
+      return (leftValue + score) / 2;
+    }
+  }
+  return 0;
+}
+
+function compactScoreCounts(scoreCounts) {
+  let compact = [];
+  for (let score = 0; score < scoreCounts.length; score++) {
+    if (scoreCounts[score] > 0) {
+      compact.push([score, scoreCounts[score]]);
+    }
+  }
+  return compact;
 }
 `;
 
@@ -1459,92 +1524,359 @@ for (let i = 0; i < 6; i++) {
   workers.push(new Worker(workerUrl));
 }
 let workerRunnings = new Array(6).fill(false);
+const ADAPTIVE_BATCH_RATIO = 0.02;
+const ADAPTIVE_MAX_RATIO = 10;
+const ADAPTIVE_MIN_RATIO = 0.15;
+const ADAPTIVE_STOP_GAP = 5;
+const ADAPTIVE_STOP_Z = 2.5;
+const ADAPTIVE_HIGHLIGHT_Z = 1.96;
+const ADAPTIVE_PRUNE_GAP = 7;
+const ADAPTIVE_PRUNE_Z = 2.5;
+
+function getAdaptiveBatches(iteration) {
+  iteration = Math.max(1, Math.floor(Number(iteration) || 1));
+  let maxIteration = iteration * ADAPTIVE_MAX_RATIO;
+  let batchSize = Math.max(1, Math.floor(iteration * ADAPTIVE_BATCH_RATIO));
+  let batches = [];
+  let used = 0;
+  while (used < maxIteration) {
+    let batch = Math.min(batchSize, maxIteration - used);
+    batches.push(batch);
+    used += batch;
+  }
+  return batches;
+}
+
+function createActionStats() {
+  return { count: 0, sum: 0, sumSq: 0, min: Infinity, max: -Infinity, scoreCounts: new Uint32Array(2899) };
+}
+
+function mergeActionStats(acc, batch, action) {
+  let count = batch.count[action] || 0;
+  if (count === 0) return;
+  acc.count += count;
+  acc.sum += batch.sum[action] || 0;
+  acc.sumSq += batch.sumSq[action] || 0;
+  acc.min = Math.min(acc.min, batch.min[action]);
+  acc.max = Math.max(acc.max, batch.max[action]);
+  if (batch.scoreCounts && batch.scoreCounts[action]) {
+    let counts = batch.scoreCounts[action];
+    if (counts.length > 0 && Array.isArray(counts[0])) {
+      counts.forEach(([score, scoreCount]) => {
+        if (score >= 0 && score < acc.scoreCounts.length) {
+          acc.scoreCounts[score] += scoreCount;
+        }
+      });
+    } else {
+      for (let score = 0; score < counts.length; score++) {
+        acc.scoreCounts[score] += counts[score];
+      }
+    }
+  } else if (batch.scores && batch.scores[action]) {
+    batch.scores[action].forEach(score => {
+      if (score >= 0 && score < acc.scoreCounts.length) {
+        acc.scoreCounts[score]++;
+      }
+    });
+  }
+}
+
+function getMedianFromCounts(scoreCounts, count) {
+  if (count === 0) return 0;
+  let leftTarget = Math.floor((count + 1) / 2);
+  let rightTarget = Math.floor((count + 2) / 2);
+  let seen = 0;
+  let leftValue;
+  for (let score = 0; score < scoreCounts.length; score++) {
+    seen += scoreCounts[score];
+    if (leftValue === undefined && seen >= leftTarget) {
+      leftValue = score;
+    }
+    if (seen >= rightTarget) {
+      return (leftValue + score) / 2;
+    }
+  }
+  return 0;
+}
+
+function getActionSummary(acc) {
+  if (acc.count === 0) {
+    return { count: 0, avg: 0, min: 0, max: 0, std: 0, se: Infinity, mid: 0 };
+  }
+  let avg = acc.sum / acc.count;
+  let variance = Math.max(0, acc.sumSq / acc.count - avg * avg);
+  let std = Math.sqrt(variance);
+  return {
+    count: acc.count,
+    avg: avg,
+    min: acc.min,
+    max: acc.max,
+    std: std,
+    se: Math.sqrt(variance / acc.count),
+    mid: getMedianFromCounts(acc.scoreCounts, acc.count),
+  };
+}
+
+function getAdaptiveDecision(actionStats, activeActions) {
+  let summaries = actionStats.map(getActionSummary);
+  let usedIteration = activeActions.length > 0 ? actionStats[activeActions[0]].count : 0;
+  let minIteration = Math.ceil(workerIteration * ADAPTIVE_MIN_RATIO);
+  let candidates = activeActions
+    .filter(action => actionStats[action].count > 0)
+    .map(action => ({ action: action, ...summaries[action] }))
+    .sort((a, b) => b.avg - a.avg);
+
+  if (candidates.length <= 1) {
+    return { stop: true, summaries: summaries, bestAction: candidates.length > 0 ? candidates[0].action : 0, gap: Infinity, z: Infinity };
+  }
+
+  let best = candidates[0];
+  let second = candidates[1];
+  let gap = best.avg - second.avg;
+  let combinedSe = Math.sqrt(best.se * best.se + second.se * second.se);
+  let z = combinedSe > 0 ? gap / combinedSe : Infinity;
+  return {
+    stop: usedIteration >= minIteration && gap >= ADAPTIVE_STOP_GAP && z >= ADAPTIVE_STOP_Z,
+    summaries: summaries,
+    bestAction: best.action,
+    gap: gap,
+    z: z,
+  };
+}
+
+function pruneAdaptiveActions(actionStats, activeActions) {
+  let usedIteration = activeActions.length > 0 ? actionStats[activeActions[0]].count : 0;
+  let minIteration = Math.ceil(workerIteration * ADAPTIVE_MIN_RATIO);
+  if (activeActions.length <= 2 || usedIteration < minIteration) {
+    return activeActions;
+  }
+
+  let summaries = actionStats.map(getActionSummary);
+  let candidates = activeActions
+    .filter(action => actionStats[action].count > 0)
+    .map(action => ({ action: action, ...summaries[action] }))
+    .sort((a, b) => b.avg - a.avg);
+
+  if (candidates.length <= 2) {
+    return activeActions;
+  }
+
+  let best = candidates[0];
+  let keepActions = new Set(candidates.slice(0, 2).map(item => item.action));
+  for (let i = 2; i < candidates.length; i++) {
+    let candidate = candidates[i];
+    let gap = best.avg - candidate.avg;
+    let combinedSe = Math.sqrt(best.se * best.se + candidate.se * candidate.se);
+    let z = combinedSe > 0 ? gap / combinedSe : Infinity;
+    if (gap < ADAPTIVE_PRUNE_GAP || z < ADAPTIVE_PRUNE_Z) {
+      keepActions.add(candidate.action);
+    }
+  }
+
+  return activeActions.filter(action => keepActions.has(action));
+}
 
 function calcEx(r = [0, 1, 2, 3, 4, 5]) {
   env.exScores = new Array(6).fill(0);
-  env.exValues = { min: new Array(6).fill(0), max: new Array(6).fill(0), std: new Array(6).fill(0), mid: new Array(6).fill(0) };
-  tooltipInfo.text = `최소: 0\n최대: 0\n중앙값: 0\n표준편차: 0\n변동계수: 0`;
+  env.exHighlights = new Array(6).fill(false);
+  env.exValues = {
+    min: new Array(6).fill(0),
+    max: new Array(6).fill(0),
+    std: new Array(6).fill(0),
+    mid: new Array(6).fill(0),
+    count: new Array(6).fill(0),
+    se: new Array(6).fill(0),
+    gap: new Array(6).fill(0),
+    z: new Array(6).fill(0),
+    status: new Array(6).fill(''),
+  };
+  tooltipInfo.text = getExScoreTooltipText(0);
+
+  let activeActions = [];
   for (let i = 0; i < 6; i++) {
     if (i === 0 || env.cards[i - 1] !== undefined && r.includes(i)) {
-      env.exScores[i] = '계산중...';
+      activeActions.push(i);
+      env.exScores[i] = '\uACC4\uC0B0\uC911...';
+      env.exHighlights[i] = false;
       env.exValues.min[i] = 0;
       env.exValues.max[i] = 0;
       env.exValues.std[i] = 0;
       env.exValues.mid[i] = 0;
+      env.exValues.count[i] = 0;
+      env.exValues.se[i] = 0;
+      env.exValues.gap[i] = 0;
+      env.exValues.z[i] = 0;
+      env.exValues.status[i] = '계산중';
 
       if (workerRunnings[i]) {
         workers[i].terminate();
         workers[i] = new Worker(workerUrl);
         workerRunnings[i] = false;
       }
+    }
+  }
 
-      workers[i].postMessage({
-        idx: workerReqIndex,
-        iteration: workerIteration,
+  let requestId = workerReqIndex++;
+  let displayActions = activeActions.slice();
+  let batches = getAdaptiveBatches(workerIteration);
+  let batchIndex = 0;
+  let usedIteration = 0;
+  let pendingActions = new Set();
+  let actionStats = new Array(6).fill(0).map(() => createActionStats());
+  let lastDecision = { stop: false, summaries: actionStats.map(getActionSummary), bestAction: undefined, gap: 0, z: 0 };
+
+  function applySummaries(decision) {
+    displayActions.forEach(action => {
+      let summary = decision.summaries[action];
+      env.exScores[action] = summary.avg;
+      env.exValues.min[action] = summary.min;
+      env.exValues.max[action] = summary.max;
+      env.exValues.mid[action] = summary.mid;
+      env.exValues.std[action] = parseFloat(summary.std.toFixed(3));
+      env.exValues.count[action] = summary.count;
+      env.exValues.se[action] = parseFloat(summary.se.toFixed(3));
+    });
+    applyExHighlights(decision);
+
+    if (tooltipIndex !== undefined && displayActions.includes(tooltipIndex)) {
+      tooltipInfo.text = getExScoreTooltipText(tooltipIndex);
+    }
+  }
+
+  function finishCalc(decision) {
+    applySummaries(decision);
+    env.exAction = decision.bestAction;
+    console.timeEnd(workerIteration + ' simulation');
+    console.log('adaptive simulation used ' + usedIteration + '/' + workerIteration + ', gap=' + decision.gap.toFixed(3) + ', z=' + decision.z.toFixed(3));
+    updateBoard();
+  }
+
+  function applyExHighlights(decision) {
+    env.exHighlights = new Array(6).fill(false);
+    env.exAction = decision.bestAction;
+
+    if (decision.bestAction === undefined) {
+      env.exScore = Infinity;
+      return;
+    }
+
+    let best = decision.summaries[decision.bestAction];
+    env.exScore = best.avg;
+    let activeActionSet = new Set(activeActions);
+    displayActions.forEach(action => {
+      let summary = decision.summaries[action];
+      env.exValues.status[action] = action === decision.bestAction ? '추천' : activeActionSet.has(action) ? '후보' : '제외';
+      if (summary.count === 0 && actionStats[action].count === 0) {
+        env.exValues.gap[action] = 0;
+        env.exValues.z[action] = 0;
+        return;
+      }
+      let gap = best.avg - summary.avg;
+      let combinedSe = Math.sqrt(best.se * best.se + summary.se * summary.se);
+      env.exValues.gap[action] = parseFloat(gap.toFixed(3));
+      env.exValues.z[action] = combinedSe > 0 && isFinite(combinedSe) ? parseFloat((gap / combinedSe).toFixed(3)) : 0;
+    });
+    activeActions.forEach(action => {
+      let summary = decision.summaries[action];
+      let gap = best.avg - summary.avg;
+      env.exHighlights[action] = action === decision.bestAction || gap <= calcHighlightMargin(usedIteration, best, summary);
+    });
+  }
+
+  function runBatch() {
+    if (batchIndex >= batches.length) {
+      finishCalc(lastDecision);
+      return;
+    }
+
+    let batchIteration = batches[batchIndex];
+    batchIndex++;
+    usedIteration += batchIteration;
+    pendingActions = new Set(activeActions);
+
+    activeActions.forEach(action => {
+      workers[action].postMessage({
+        idx: requestId,
+        iteration: batchIteration,
         state: env.getState(),
         stage: stage,
         cardInfo: cardInfo,
-        route: [i],
+        route: [action],
       });
-      workerRunnings[i] = true;
+      workerRunnings[action] = true;
+    });
+  }
 
-      workers[i].onmessage = function (e) {
-        if (e.data.idx === workerReqIndex - 1) {
-          switch (e.data.res[0]) {
-            case undefined:
-            case -1:
-              // Error
-              env.exScores[e.data.route] = String(env.exScores[i]).replace('계산중...', 'Error');
-              if (env.exScores.indexOf('계산중...') === -1) {
-                console.timeEnd(`${workerIteration} simulation`);
-              }
-              updateBoard();
-              return;
-            case -2:
-              // GameOver
-              env.exScores[e.data.route] = env.score;
-              if (env.exScores.indexOf('계산중...') === -1) {
-                console.timeEnd(`${workerIteration} simulation`);
-              }
-              updateBoard();
-              return;
-          }
-          workerRunnings[e.data.route] = false;
-          env.exScores[e.data.route] = e.data.res[1].avg[e.data.route];
-          env.exValues.min[e.data.route] = e.data.res[1].min[e.data.route];
-          env.exValues.max[e.data.route] = e.data.res[1].max[e.data.route];
-          env.exValues.mid[e.data.route] = e.data.res[1].mid[e.data.route];
-          env.exValues.std[e.data.route] = parseFloat(e.data.res[1].std[e.data.route].toFixed(3));
-          if (tooltipIndex === i) {
-            let min = env.exValues.min[i];
-            let max = env.exValues.max[i];
-            let std = env.exValues.std[i];
-            let mid = env.exValues.mid[i];
-            let avg = env.exScores[i];
-            tooltipInfo.text = tooltipInfo.text = `최소: ${min}\n최대: ${max}\n중앙값: ${mid}\n표준편차: ${std}\n변동계수: ${isNaN(std / avg) ? 0 : (std / avg).toFixed(6)}`;
-          }
-          if (env.exScores.indexOf('계산중...') === -1) {
-            let maxValue = Math.max(...env.exScores.filter(el => typeof (el) === 'number'));
-            env.exAction = env.exScores.indexOf(maxValue);
-            env.exScore = maxValue - calcLoss(workerIteration);
-            console.timeEnd(`${workerIteration} simulation`);
-          }
+  activeActions.forEach(i => {
+    workers[i].onmessage = function (e) {
+      if (e.data.idx !== requestId) return;
+      let action = Number(e.data.route);
+
+      switch (e.data.res[0]) {
+        case undefined:
+        case -1:
+          env.exScores[action] = String(env.exScores[action]).replace('\uACC4\uC0B0\uC911...', 'Error');
+          workerRunnings[action] = false;
+          pendingActions.delete(action);
+          if (pendingActions.size === 0) console.timeEnd(workerIteration + ' simulation');
           updateBoard();
+          return;
+        case -2:
+          env.exScores[action] = env.score;
+          workerRunnings[action] = false;
+          pendingActions.delete(action);
+          if (pendingActions.size === 0) console.timeEnd(workerIteration + ' simulation');
+          updateBoard();
+          return;
+      }
+
+      workerRunnings[action] = false;
+      pendingActions.delete(action);
+      mergeActionStats(actionStats[action], e.data.res[1], action);
+
+      if (pendingActions.size === 0) {
+        lastDecision = getAdaptiveDecision(actionStats, activeActions);
+        applySummaries(lastDecision);
+        updateBoard();
+        if (lastDecision.stop || batchIndex >= batches.length) {
+          finishCalc(lastDecision);
+        } else {
+          activeActions = pruneAdaptiveActions(actionStats, activeActions);
+          lastDecision = getAdaptiveDecision(actionStats, activeActions);
+          applySummaries(lastDecision);
+          updateBoard();
+          if (activeActions.length <= 1) {
+            finishCalc(lastDecision);
+          } else {
+            runBatch();
+          }
         }
       }
-    }
+    };
+  });
+
+  if (activeActions.length === 0) {
+    updateBoard();
+    return;
   }
-  console.time(`${workerIteration} simulation`)
-  workerReqIndex++;
+
+  console.time(workerIteration + ' simulation');
   env.exAction = undefined;
   env.exScore = Infinity;
   updateBoard();
+  runBatch();
 }
 
-function calcLoss(x) {
-  if (x > 999999) return 0;
-  const logX = Math.log10(x);
-  return 0.25 * Math.pow(logX, 2) - 3.25 * logX + 10.5;
+function calcHighlightMargin(iteration, bestSummary, candidateSummary) {
+  if (bestSummary && candidateSummary) {
+    let combinedSe = Math.sqrt(bestSummary.se * bestSummary.se + candidateSummary.se * candidateSummary.se);
+    if (isFinite(combinedSe)) {
+      return ADAPTIVE_HIGHLIGHT_Z * combinedSe;
+    }
+  }
+
+  iteration = Math.max(1, Number(iteration) || 1);
+  return Math.max(1, 95 / Math.sqrt(iteration));
 }
 
 function getBoardInfo() {
@@ -1599,7 +1931,7 @@ function initUsageOverlay() {
       lines: [
         '예상 점수(하늘색 영역): 클릭하면 시뮬레이션 정확도(시행 횟수)를 수정할 수 있습니다.',
         'Ctrl + R: 예상 점수를 재계산할 수 있습니다. 점수 출력 영역을 클릭해도 같은 기능을 사용할 수 있습니다.',
-        '점수 출력 영역에 마우스를 올려두면 최소·최대·중앙값·표준편차·변동계수 등 상세 통계를 볼 수 있습니다.',
+        '점수 출력 영역에 마우스를 올려두면 샘플수·범위·중앙값·표준오차·95% CI 등 상세 통계를 볼 수 있습니다.',
         '"자세히" 버튼을 눌러 각 통계의 의미와 해석 방법에 대한 간단한 가이드를 확인할 수 있습니다.'
       ],
       region: {
@@ -1611,14 +1943,15 @@ function initUsageOverlay() {
       detailHtml:
         '<div style="margin-bottom:4px;"><strong style="color:#0f172a;">통계값 의미</strong></div>' +
         '<ul style="margin:0 0 4px 0; padding-left:16px; list-style:disc;">' +
-        '<li><span style="font-weight:600;color:#1d4ed8;">최소/최대</span>: 가장 낮은 결과와 가장 높은 결과입니다.</li>' +
+        '<li><span style="font-weight:600;color:#1d4ed8;">샘플수</span>: 해당 선택지를 기준으로 완료한 시뮬레이션 횟수입니다.</li>' +
+        '<li><span style="font-weight:600;color:#1d4ed8;">범위</span>: 가장 낮은 결과와 가장 높은 결과입니다.</li>' +
         '<li><span style="font-weight:600;color:#1d4ed8;">중앙값</span>: 결과들을 정렬했을 때 정확히 가운데에 오는 값입니다.</li>' +
-        '<li><span style="font-weight:600;color:#1d4ed8;">표준편차</span>: 결과들이 평균에서 얼마나 퍼져 있는지를 나타냅니다.</li>' +
-        '<li><span style="font-weight:600;color:#1d4ed8;">변동계수</span>: 표준편차를 평균으로 나눈 값으로, 상대적인 변동성을 보여줍니다.</li>' +
+        '<li><span style="font-weight:600;color:#1d4ed8;">표준오차</span>: 시뮬레이션 평균이 반복 측정에서 얼마나 흔들릴 수 있는지를 나타냅니다.</li>' +
+        '<li><span style="font-weight:600;color:#1d4ed8;">95% CI</span>: 같은 방식으로 시뮬레이션해 신뢰구간을 반복해서 만들면, 그 구간들 중 약 95%가 실제 기대값을 포함합니다.</li>' +
         '</ul>' +
         '<div style="margin-top:2px;">' +
-        '예를 들어, 평균은 높은데 표준편차와 변동계수가 크면<br><span style="font-weight:600;color:#b91c1c;">운에 따라 결과 편차가 크다</span>는 뜻이고,<br>' +
-        '평균이 비슷한 두 선택지에서 변동계수가 더 작은 쪽은<br><span style="font-weight:600;color:#16a34a;">보다 안정적인 선택</span>이라고 볼 수 있습니다.' +
+        '95% CI가 많이 겹치는 선택지들은 아직 기대값 차이가 뚜렷하지 않을 수 있습니다.<br>' +
+        '반대로 한 선택지의 구간이 다른 선택지보다 전반적으로 높으면<br><span style="font-weight:600;color:#16a34a;">더 안정적으로 우세한 선택</span>이라고 볼 수 있습니다.' +
         '</div>'
     },
     {
