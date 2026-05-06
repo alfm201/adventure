@@ -65,8 +65,8 @@ function drawMainScreen() {
   if (tooltipIndex >= 0 && tooltipIndex <= 6) {
     drawTooltip(tooltipInfo.x, tooltipInfo.y, tooltipInfo.text);
   }
+  drawPreviewPosition();
   drawDiceOverlay();
-  showCardPos = -1;
 }
 
 function drawExScores() {
@@ -123,6 +123,27 @@ function formatValue(value) {
 function drawCardPos(moveValue) {
   if (stage[env.score - 1][1] === stage[env.score + moveValue - 1][1]) {
     drawCanvas(79, 2, 923, ((stage[env.score + moveValue - 1][6] - 1) % 10) * 96 + 244, parseInt((stage[env.score + moveValue - 1][6] - 1) / 10) * 96 + 60, 92, 92);
+  }
+}
+
+function drawPreviewPosition() {
+  if (!env.autoProcess && isDraggingCharacter && characterDragTargetScore !== null && characterDragTargetScore !== env.score) {
+    drawCardPos(characterDragTargetScore - env.score);
+    return;
+  }
+
+  if (!env.autoProcess && showDiceOverlay && diceOverlayHoverIndex >= 0) {
+    let value = diceOverlayHoverIndex + 2;
+    let destScore = getStopDestinationScore(env.score, value);
+    drawCardPos(destScore - env.score);
+    return;
+  }
+
+  if (showCardPos >= 0) {
+    let card = env.cards[showCardPos];
+    if (card && card[1] === 1) {
+      drawCardPos(card[2]);
+    }
   }
 }
 
@@ -558,6 +579,12 @@ function eventCanvasMouseup(e) {
 function eventCanvasMouseleave(e) {
   isDragging = false;
   isDraggingCharacter = false;
+  characterDragTargetScore = null;
+  characterDragStartScore = null;
+  showDiceOverlay = false;
+  diceOverlayHoverIndex = -1;
+  showCardPos = -1;
+  updateBoard();
 }
 
 function eventWindowBlur(e) {
@@ -577,7 +604,7 @@ function eventCanvasMousedown(e) {
     preventClick = true;
     dragStartY = y;
     initialScrollOffset = env.cardInfoScrollOffset;
-  } else if (!showCardInfoYN && isInsideRegion(x, y, regionCurrentCharacter)) {
+  } else if (!env.autoProcess && !showCardInfoYN && isInsideRegion(x, y, regionCurrentCharacter)) {
     isDraggingCharacter = true;
     preventClick = true;
     characterDragStartScore = env.score;
@@ -589,16 +616,19 @@ function eventCanvasMousemove(e) {
   let x = e.offsetX;
   let y = e.offsetY;
 
+  if (env.autoProcess && (showDiceOverlay || diceOverlayHoverIndex !== -1 || isDraggingCharacter)) {
+    showDiceOverlay = false;
+    diceOverlayHoverIndex = -1;
+    isDraggingCharacter = false;
+    characterDragTargetScore = null;
+    characterDragStartScore = null;
+    updateBoard();
+  }
+
   if (isDraggingCharacter) {
     const targetScore = getScoreFromMousePosition(x, y);
     characterDragTargetScore = targetScore;
-
     updateBoard();
-    if (targetScore !== null && targetScore !== env.score) {
-      const moveValue = targetScore - env.score;
-      drawCardPos(moveValue);
-    }
-
     return;
   }
 
@@ -606,7 +636,7 @@ function eventCanvasMousemove(e) {
   const r = getDiceOverlayRect();
   const inOverlay = r ? r.some(rect => (x >= rect.x1 && x <= rect.x2 && y >= rect.y1 && y <= rect.y2)) : false;
 
-  if (inStep || inOverlay) {
+  if (!env.autoProcess && (inStep || inOverlay)) {
     if (!showDiceOverlay) {
       showDiceOverlay = true;
       diceOverlayHoverIndex = -1;
@@ -617,16 +647,6 @@ function eventCanvasMousemove(e) {
     if (diceOverlayHoverIndex !== idx) {
       diceOverlayHoverIndex = idx;
       updateBoard();
-
-      if (idx >= 0) {
-        const value = idx + 2;
-        const destScore = getStopDestinationScore(env.score, value);
-
-        if (stage[env.score - 1][1] === stage[destScore - 1][1]) {
-          const moveValue = destScore - env.score;
-          drawCardPos(moveValue);
-        }
-      }
     }
   } else {
     if (showDiceOverlay) {
@@ -663,17 +683,19 @@ function eventCanvasMousemove(e) {
     if (env.cards[cardIndex] !== undefined) {
       if (showCardPos !== cardIndex) {
         if (env.cards[cardIndex][1] === 1) {
-          updateBoard();
-          drawCardPos(env.cards[cardIndex][2]);
           showCardPos = cardIndex;
+          updateBoard();
         } else if (showCardPos > -1) {
+          showCardPos = -1;
           updateBoard();
         }
       }
     } else if (showCardPos !== -1) {
+      showCardPos = -1;
       updateBoard();
     }
   } else if (showCardPos !== -1) {
+    showCardPos = -1;
     updateBoard();
   }
 }
@@ -719,7 +741,7 @@ function eventCanvasClick(e) {
     return;
   }
 
-  if (showDiceOverlay) {
+  if (!env.autoProcess && showDiceOverlay) {
     const idx = getDiceOverlayButtonIndex(x, y);
     if (idx >= 0) {
       const value = idx + 2;
@@ -1709,6 +1731,13 @@ function getAdaptiveSampleActions(actionStats, activeActions, maxIteration) {
 }
 
 function calcEx(r = [0, 1, 2, 3, 4, 5]) {
+  if (env.autoProcess) {
+    showDiceOverlay = false;
+    diceOverlayHoverIndex = -1;
+    isDraggingCharacter = false;
+    characterDragTargetScore = null;
+    characterDragStartScore = null;
+  }
   env.exScores = new Array(6).fill(0);
   env.exHighlights = new Array(6).fill(false);
   env.exValues = {
