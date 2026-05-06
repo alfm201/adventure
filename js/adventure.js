@@ -1519,32 +1519,41 @@ const workerUrl = URL.createObjectURL(workerBlob);
 
 let workerIteration = 10000;
 let workerReqIndex = 1;
+const workerCount = Math.max(2, Math.min(8, (navigator.hardwareConcurrency || 6) - 1));
 let workers = [];
-for (let i = 0; i < 6; i++) {
-  workers.push(new Worker(workerUrl));
-}
-let workerRunnings = new Array(6).fill(false);
-const ADAPTIVE_BATCH_RATIO = 0.02;
+let workerRunnings = [];
+const ADAPTIVE_INITIAL_RATIO = 0.1;
+const ADAPTIVE_BATCH_RATIO = 0.05;
 const ADAPTIVE_MAX_RATIO = 10;
-const ADAPTIVE_MIN_RATIO = 0.15;
-const ADAPTIVE_STOP_GAP = 5;
-const ADAPTIVE_STOP_Z = 2.5;
+const ADAPTIVE_BOUND_Z = 1.8;
 const ADAPTIVE_HIGHLIGHT_Z = 1.96;
-const ADAPTIVE_PRUNE_GAP = 7;
-const ADAPTIVE_PRUNE_Z = 2.5;
+const ADAPTIVE_SAMPLE_LIMIT = 2;
 
-function getAdaptiveBatches(iteration) {
-  iteration = Math.max(1, Math.floor(Number(iteration) || 1));
-  let maxIteration = iteration * ADAPTIVE_MAX_RATIO;
-  let batchSize = Math.max(1, Math.floor(iteration * ADAPTIVE_BATCH_RATIO));
-  let batches = [];
-  let used = 0;
-  while (used < maxIteration) {
-    let batch = Math.min(batchSize, maxIteration - used);
-    batches.push(batch);
-    used += batch;
+resetWorkers();
+
+function resetWorkers() {
+  workers.forEach(worker => worker.terminate());
+  workers = [];
+  workerRunnings = [];
+  for (let i = 0; i < workerCount; i++) {
+    workers.push(new Worker(workerUrl));
+    workerRunnings.push(false);
   }
-  return batches;
+}
+
+function getAdaptiveInitialIteration(iteration) {
+  iteration = Math.max(1, Math.floor(Number(iteration) || 1));
+  return Math.max(1, Math.floor(iteration * ADAPTIVE_INITIAL_RATIO));
+}
+
+function getAdaptiveBatchIteration(iteration) {
+  iteration = Math.max(1, Math.floor(Number(iteration) || 1));
+  return Math.max(1, Math.floor(iteration * ADAPTIVE_BATCH_RATIO));
+}
+
+function getAdaptiveMaxIteration(iteration) {
+  iteration = Math.max(1, Math.floor(Number(iteration) || 1));
+  return Math.max(1, Math.floor(iteration * ADAPTIVE_MAX_RATIO));
 }
 
 function createActionStats() {
@@ -1619,8 +1628,6 @@ function getActionSummary(acc) {
 
 function getAdaptiveDecision(actionStats, activeActions) {
   let summaries = actionStats.map(getActionSummary);
-  let usedIteration = activeActions.length > 0 ? actionStats[activeActions[0]].count : 0;
-  let minIteration = Math.ceil(workerIteration * ADAPTIVE_MIN_RATIO);
   let candidates = activeActions
     .filter(action => actionStats[action].count > 0)
     .map(action => ({ action: action, ...summaries[action] }))
@@ -1635,8 +1642,10 @@ function getAdaptiveDecision(actionStats, activeActions) {
   let gap = best.avg - second.avg;
   let combinedSe = Math.sqrt(best.se * best.se + second.se * second.se);
   let z = combinedSe > 0 ? gap / combinedSe : Infinity;
+  let bestLcb = best.avg - ADAPTIVE_BOUND_Z * best.se;
+  let maxOtherUcb = Math.max(...candidates.slice(1).map(candidate => candidate.avg + ADAPTIVE_BOUND_Z * candidate.se));
   return {
-    stop: usedIteration >= minIteration && gap >= ADAPTIVE_STOP_GAP && z >= ADAPTIVE_STOP_Z,
+    stop: bestLcb > maxOtherUcb,
     summaries: summaries,
     bestAction: best.action,
     gap: gap,
@@ -1645,9 +1654,7 @@ function getAdaptiveDecision(actionStats, activeActions) {
 }
 
 function pruneAdaptiveActions(actionStats, activeActions) {
-  let usedIteration = activeActions.length > 0 ? actionStats[activeActions[0]].count : 0;
-  let minIteration = Math.ceil(workerIteration * ADAPTIVE_MIN_RATIO);
-  if (activeActions.length <= 2 || usedIteration < minIteration) {
+  if (activeActions.length <= 2) {
     return activeActions;
   }
 
@@ -1662,18 +1669,43 @@ function pruneAdaptiveActions(actionStats, activeActions) {
   }
 
   let best = candidates[0];
-  let keepActions = new Set(candidates.slice(0, 2).map(item => item.action));
-  for (let i = 2; i < candidates.length; i++) {
+  let bestLcb = best.avg - ADAPTIVE_BOUND_Z * best.se;
+  let keepActions = new Set([best.action]);
+  for (let i = 1; i < candidates.length; i++) {
     let candidate = candidates[i];
-    let gap = best.avg - candidate.avg;
-    let combinedSe = Math.sqrt(best.se * best.se + candidate.se * candidate.se);
-    let z = combinedSe > 0 ? gap / combinedSe : Infinity;
-    if (gap < ADAPTIVE_PRUNE_GAP || z < ADAPTIVE_PRUNE_Z) {
+    let candidateUcb = candidate.avg + ADAPTIVE_BOUND_Z * candidate.se;
+    if (candidateUcb >= bestLcb) {
       keepActions.add(candidate.action);
     }
   }
 
   return activeActions.filter(action => keepActions.has(action));
+}
+
+function getAdaptiveSampleActions(actionStats, activeActions, maxIteration) {
+  let summaries = actionStats.map(getActionSummary);
+  let candidates = activeActions
+    .filter(action => actionStats[action].count > 0 && actionStats[action].count < maxIteration)
+    .map(action => ({ action: action, ...summaries[action] }))
+    .sort((a, b) => b.avg - a.avg);
+
+  if (candidates.length <= 1) {
+    return candidates.map(candidate => candidate.action);
+  }
+
+  let best = candidates[0];
+  let bestLcb = best.avg - ADAPTIVE_BOUND_Z * best.se;
+  let sampleActions = candidates
+    .filter(candidate => candidate.action === best.action || candidate.avg + ADAPTIVE_BOUND_Z * candidate.se >= bestLcb)
+    .map(candidate => candidate.action)
+    .sort((a, b) => actionStats[a].count - actionStats[b].count)
+    .slice(0, ADAPTIVE_SAMPLE_LIMIT);
+
+  if (actionStats[best.action].count < maxIteration && !sampleActions.includes(best.action)) {
+    sampleActions.push(best.action);
+  }
+
+  return sampleActions;
 }
 
 function calcEx(r = [0, 1, 2, 3, 4, 5]) {
@@ -1707,21 +1739,18 @@ function calcEx(r = [0, 1, 2, 3, 4, 5]) {
       env.exValues.gap[i] = 0;
       env.exValues.z[i] = 0;
       env.exValues.status[i] = '계산중';
-
-      if (workerRunnings[i]) {
-        workers[i].terminate();
-        workers[i] = new Worker(workerUrl);
-        workerRunnings[i] = false;
-      }
     }
   }
 
   let requestId = workerReqIndex++;
+  resetWorkers();
+  let simulationState = env.getState();
   let displayActions = activeActions.slice();
-  let batches = getAdaptiveBatches(workerIteration);
-  let batchIndex = 0;
-  let usedIteration = 0;
-  let pendingActions = new Set();
+  let initialIteration = getAdaptiveInitialIteration(workerIteration);
+  let batchIteration = getAdaptiveBatchIteration(workerIteration);
+  let maxIteration = getAdaptiveMaxIteration(workerIteration);
+  let jobQueue = [];
+  let pendingJobs = 0;
   let actionStats = new Array(6).fill(0).map(() => createActionStats());
   let lastDecision = { stop: false, summaries: actionStats.map(getActionSummary), bestAction: undefined, gap: 0, z: 0 };
 
@@ -1747,7 +1776,7 @@ function calcEx(r = [0, 1, 2, 3, 4, 5]) {
     applySummaries(decision);
     env.exAction = decision.bestAction;
     console.timeEnd(workerIteration + ' simulation');
-    console.log('adaptive simulation used ' + usedIteration + '/' + workerIteration + ', gap=' + decision.gap.toFixed(3) + ', z=' + decision.z.toFixed(3));
+    console.log('adaptive simulation used ' + getMaxActionIteration() + '/' + workerIteration + ', gap=' + decision.gap.toFixed(3) + ', z=' + decision.z.toFixed(3));
     updateBoard();
   }
 
@@ -1779,36 +1808,88 @@ function calcEx(r = [0, 1, 2, 3, 4, 5]) {
     activeActions.forEach(action => {
       let summary = decision.summaries[action];
       let gap = best.avg - summary.avg;
-      env.exHighlights[action] = action === decision.bestAction || gap <= calcHighlightMargin(usedIteration, best, summary);
+      env.exHighlights[action] = action === decision.bestAction || gap <= calcHighlightMargin(getMaxActionIteration(), best, summary);
     });
   }
 
-  function runBatch() {
-    if (batchIndex >= batches.length) {
+  function getMaxActionIteration() {
+    return Math.max(0, ...actionStats.map(stat => stat.count));
+  }
+
+  function runBatch(actions, iteration) {
+    let jobs = createBatchJobs(actions, iteration);
+    if (jobs.length === 0) {
       finishCalc(lastDecision);
       return;
     }
 
-    let batchIteration = batches[batchIndex];
-    batchIndex++;
-    usedIteration += batchIteration;
-    pendingActions = new Set(activeActions);
-
-    activeActions.forEach(action => {
-      workers[action].postMessage({
-        idx: requestId,
-        iteration: batchIteration,
-        state: env.getState(),
-        stage: stage,
-        cardInfo: cardInfo,
-        route: [action],
-      });
-      workerRunnings[action] = true;
-    });
+    jobQueue = jobs;
+    pendingJobs = jobQueue.length;
+    scheduleJobs();
   }
 
-  activeActions.forEach(i => {
-    workers[i].onmessage = function (e) {
+  function createBatchJobs(actions, iteration) {
+    let jobs = [];
+    let chunksPerAction = Math.max(1, Math.ceil(workerCount / Math.max(1, actions.length)));
+    let chunkSize = Math.max(1, Math.ceil(iteration / chunksPerAction));
+    actions.forEach(action => {
+      let remaining = Math.min(iteration, maxIteration - actionStats[action].count);
+      while (remaining > 0) {
+        let jobIteration = Math.min(chunkSize, remaining);
+        jobs.push({ action: action, iteration: jobIteration });
+        remaining -= jobIteration;
+      }
+    });
+    return jobs;
+  }
+
+  function scheduleJobs() {
+    for (let i = 0; i < workers.length && jobQueue.length > 0; i++) {
+      if (workerRunnings[i]) continue;
+      let job = jobQueue.shift();
+      workerRunnings[i] = true;
+      workers[i].postMessage({
+        idx: requestId,
+        iteration: job.iteration,
+        state: simulationState,
+        stage: stage,
+        cardInfo: cardInfo,
+        route: [job.action],
+      });
+    }
+  }
+
+  function completeJob(workerIndex) {
+    workerRunnings[workerIndex] = false;
+    pendingJobs--;
+    if (pendingJobs === 0) {
+      finishBatch();
+    } else {
+      scheduleJobs();
+    }
+  }
+
+  function finishBatch() {
+    lastDecision = getAdaptiveDecision(actionStats, activeActions);
+    applySummaries(lastDecision);
+    updateBoard();
+    if (lastDecision.stop || activeActions.every(action => actionStats[action].count >= maxIteration)) {
+      finishCalc(lastDecision);
+    } else {
+      activeActions = pruneAdaptiveActions(actionStats, activeActions);
+      lastDecision = getAdaptiveDecision(actionStats, activeActions);
+      applySummaries(lastDecision);
+      updateBoard();
+      if (activeActions.length <= 1) {
+        finishCalc(lastDecision);
+      } else {
+        runBatch(getAdaptiveSampleActions(actionStats, activeActions, maxIteration), batchIteration);
+      }
+    }
+  }
+
+  workers.forEach((worker, workerIndex) => {
+    worker.onmessage = function (e) {
       if (e.data.idx !== requestId) return;
       let action = Number(e.data.route);
 
@@ -1816,42 +1897,18 @@ function calcEx(r = [0, 1, 2, 3, 4, 5]) {
         case undefined:
         case -1:
           env.exScores[action] = String(env.exScores[action]).replace('\uACC4\uC0B0\uC911...', 'Error');
-          workerRunnings[action] = false;
-          pendingActions.delete(action);
-          if (pendingActions.size === 0) console.timeEnd(workerIteration + ' simulation');
+          completeJob(workerIndex);
           updateBoard();
           return;
         case -2:
           env.exScores[action] = env.score;
-          workerRunnings[action] = false;
-          pendingActions.delete(action);
-          if (pendingActions.size === 0) console.timeEnd(workerIteration + ' simulation');
+          completeJob(workerIndex);
           updateBoard();
           return;
       }
 
-      workerRunnings[action] = false;
-      pendingActions.delete(action);
       mergeActionStats(actionStats[action], e.data.res[1], action);
-
-      if (pendingActions.size === 0) {
-        lastDecision = getAdaptiveDecision(actionStats, activeActions);
-        applySummaries(lastDecision);
-        updateBoard();
-        if (lastDecision.stop || batchIndex >= batches.length) {
-          finishCalc(lastDecision);
-        } else {
-          activeActions = pruneAdaptiveActions(actionStats, activeActions);
-          lastDecision = getAdaptiveDecision(actionStats, activeActions);
-          applySummaries(lastDecision);
-          updateBoard();
-          if (activeActions.length <= 1) {
-            finishCalc(lastDecision);
-          } else {
-            runBatch();
-          }
-        }
-      }
+      completeJob(workerIndex);
     };
   });
 
@@ -1864,7 +1921,7 @@ function calcEx(r = [0, 1, 2, 3, 4, 5]) {
   env.exAction = undefined;
   env.exScore = Infinity;
   updateBoard();
-  runBatch();
+  runBatch(activeActions, initialIteration);
 }
 
 function calcHighlightMargin(iteration, bestSummary, candidateSummary) {
