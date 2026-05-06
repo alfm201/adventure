@@ -23,6 +23,29 @@ let tooltipInfo = { x: 0, y: 0, w: 0, h: 0, text: '' };
 let showDiceOverlay = false;
 let diceOverlayHoverIndex = -1;
 let regionCurrentCharacter = { x1: 0, y1: 0, x2: 0, y2: 0 };
+let computeSettings = {
+  engine: 'gpu',
+  cpuIteration: 10000,
+  cpuWorkers: null,
+  cpuUsage: 'medium',
+  cpuMaxPct: 500,
+  gpuIteration: 100000,
+  gpuBatchPct: 50,
+  gpuMaxPct: 1000,
+  gpuUsage: 'medium',
+  gpuLoad: 'medium',
+};
+let computeModeReady = false;
+let pendingInitialCalc = false;
+let gpuTablesCache = null;
+let gpuDisabledReason = '';
+let computePerfStats = { gpu: {}, cpu: {} };
+let computePerfBenchmarkRunning = false;
+let computePerfBenchmarkId = 0;
+let computePerfBenchmarkPromise = null;
+let computePerfRecommendations = { gpu: null, cpu: null, engine: null };
+let computePerfUiFrame = null;
+let computePerfPendingUiKeys = new Set();
 
 setup();
 
@@ -30,23 +53,115 @@ function setup() {
   getBoardInfo();
 }
 
+function updateLoadingOverlay({ progress, status, detail, step } = {}) {
+  let loading = document.getElementById('adventure-loading');
+  if (!loading) return;
+  let safeProgress = Math.max(0, Math.min(100, Math.round(Number(progress) || 0)));
+  let fill = document.getElementById('adventure-loading-fill');
+  let percent = document.getElementById('adventure-loading-percent');
+  let statusEl = document.getElementById('adventure-loading-status');
+  let detailEl = document.getElementById('adventure-loading-detail');
+  if (fill) fill.style.width = `${safeProgress}%`;
+  if (percent) percent.textContent = `${safeProgress}%`;
+  if (status && statusEl) statusEl.textContent = status;
+  if (detail && detailEl) detailEl.textContent = detail;
+  if (step !== undefined) {
+    loading.querySelectorAll('.adventure-loading-step').forEach((el, index) => {
+      el.classList.toggle('is-active', index <= step);
+    });
+  }
+}
+
 function imagesPreload() {
-  for (let i = 1; i < 83; i++) {
+  updateLoadingOverlay({
+    progress: 6,
+    status: '보드 이미지를 불러오고 있습니다.',
+    detail: '이미지 0 / 82',
+    step: 0,
+  });
+  let loadedImages = 0;
+  let totalImages = 82;
+  let started = false;
+
+  async function startAfterImages() {
+    if (started) return;
+    started = true;
+    updateLoadingOverlay({
+      progress: 72,
+      status: '보드를 초기화하고 있습니다.',
+      detail: '이벤트와 상태 정보를 준비하는 중',
+      step: 1,
+    });
+    eventSetup();
+    updateLoadingOverlay({
+      progress: 82,
+      status: '계산 엔진을 점검하고 있습니다.',
+      detail: 'GPU 사용 가능 여부를 확인하는 중',
+      step: 2,
+    });
+    await prepareGpuReadbackModeOnLoad();
+    updateLoadingOverlay({
+      progress: 96,
+      status: '계산 방식을 선택할 준비가 끝났습니다.',
+      detail: isGpuAvailable() ? 'GPU/CPU 옵션을 준비했습니다.' : 'GPU 점검 실패로 CPU 옵션만 준비했습니다.',
+      step: 2,
+    });
+    showComputeModeModal(() => {
+      computeModeReady = true;
+      updateLoadingOverlay({
+        progress: 100,
+        status: '시뮬레이션을 시작합니다.',
+        detail: '잠시만 기다려 주세요.',
+        step: 2,
+      });
+      hideLoadingOverlay();
+      calcEx();
+    });
+  }
+
+  function markImageReady() {
+    loadedImages += 1;
+    let imageProgress = 8 + (loadedImages / totalImages) * 58;
+    updateLoadingOverlay({
+      progress: imageProgress,
+      status: '보드 이미지를 불러오고 있습니다.',
+      detail: `이미지 ${loadedImages} / ${totalImages}`,
+      step: 0,
+    });
+    if (loadedImages >= totalImages) startAfterImages();
+  }
+
+  for (let i = 1; i <= totalImages; i++) {
     const img = new Image();
+    img.onload = markImageReady;
+    img.onerror = markImageReady;
     img.src = `./img/${i}.png`;
     backgroundImages.push(img);
   }
-  backgroundImages[81].onload = () => {
-    calcEx();
-    eventSetup();
-    // updateBoard();
+  setTimeout(startAfterImages, 5000);
+}
+
+async function prepareGpuReadbackModeOnLoad() {
+  if (!navigator.gpu || !window.gpuRolloutWorkbench || typeof window.gpuRolloutWorkbench.prepareGpuReadbackMode !== 'function') return;
+  try {
+    let tables = buildGpuTables();
+    await window.gpuRolloutWorkbench.prepareGpuReadbackMode({
+      tables,
+      sample: { state: new Board().getState(), actionCount: 1 },
+      seed: getGpuRandomSeed(),
+    });
+    let selfTest = await verifyGpuEngineOnLoad(tables);
+    if (!selfTest.ok) {
+      markGpuUnavailable(selfTest.reason);
+    }
+  } catch (error) {
+    console.warn('GPU readback self-test failed during initial loading.', error);
+    markGpuUnavailable(String(error && error.message ? error.message : error));
   }
 }
 
 function updateBoard() {
-  // console.time('Update Board');
   drawMainScreen();
-  // console.timeEnd('Update Board');
 }
 
 function drawMainScreen() {
@@ -452,7 +567,6 @@ function drawCounter() {
 }
 
 
-// 이벤트 처리용 변수
 let isDragging = false;
 let preventClick = false;
 let dragStartY = 0;
@@ -461,7 +575,6 @@ let isDraggingCharacter = false;
 let characterDragTargetScore = null;
 let characterDragStartScore = null;
 
-// 이벤트 처리용 함수
 function measureMultilineText(ctx, text, lineHeight) {
   const lines = text.split('\n');
 
@@ -482,7 +595,6 @@ function measureMultilineText(ctx, text, lineHeight) {
 }
 
 
-// 터치 이벤트
 canvas.addEventListener('touchstart', function (e) {
   let x = e.touches[0].clientX;
   let y = e.touches[0].clientY;
@@ -516,7 +628,6 @@ canvas.addEventListener('touchend', function (e) {
 });
 
 
-// 마우스 이벤트
 function eventSetup() {
   canvas.addEventListener('click', eventCanvasClick);
   canvas.addEventListener('wheel', eventCanvasWheel);
@@ -765,7 +876,6 @@ function eventCanvasClick(e) {
     if (env.cards[action - 1] !== undefined) {
       done = env.step(action);
       calcEx();
-      // updateBoard();
     } else {
       let name;
       name = prompt('행운카드 이름');
@@ -792,7 +902,6 @@ function eventCanvasClick(e) {
       env.rankReg = true;
       env.checkEvent();
       calcEx();
-      // updateBoard();
     } else {
       alert('올바른 숫자를 입력하세요.');
     }
@@ -804,7 +913,6 @@ function eventCanvasClick(e) {
       env.diceUse = n;
       env.rankReg = true;
       calcEx();
-      // updateBoard();
     } else {
       alert('올바른 숫자를 입력하세요.');
     }
@@ -820,20 +928,10 @@ function eventCanvasClick(e) {
     }
     env.rankReg = true;
     calcEx();
-    // updateBoard();
   } else if (isInsideRegion(x, y, REGION_BTN_EXSCORE)) {
     calcEx();
   } else if (isInsideRegion(x, y, REGION_BTN_ACCURACY)) {
-    let n = prompt('계산 정확도 (빠름: 2천, 보통: 1만, 정확: 10만 이상)', workerIteration);
-    if (n === null || n == '') return;
-    n = Number(n);
-    if (!isNaN(n) && n > 0) {
-      workerIteration = n;
-      calcEx();
-      // updateBoard();
-    } else {
-      alert('올바른 숫자를 입력하세요.');
-    }
+    showComputeModeModal(() => calcEx());
   } else if (isInsideRegion(x, y, REGION_BTN_CHANGEMODE)) {
     if (confirm(`동작 모드를 ${env.autoProcess ? '수동' : '자동'}으로 변경하시겠습니까?`)) {
       env.changeMode();
@@ -850,7 +948,6 @@ function eventCanvasClick(e) {
       env.resetBoard();
       done = false;
       calcEx();
-      // updateBoard();
     }
   } else if (isInsideRegion(x, y, REGION_BTN_HELP)) {
     closeCardInfoPanelGlobal();
@@ -867,7 +964,6 @@ function eventCanvasClick(e) {
   }
 
   if (done && env.autoProcess && !env.rankReg) {
-    // postRankingData(env.score);
     env.rankReg = true;
   }
 }
@@ -890,7 +986,6 @@ function eventKeydown(e) {
         env.rankReg = true;
         env.checkEvent();
         calcEx();
-        // updateBoard();
       } else {
         alert('올바른 숫자를 입력하세요.');
       }
@@ -906,7 +1001,6 @@ function eventKeydown(e) {
         env.diceUse = n;
         env.rankReg = true;
         calcEx();
-        // updateBoard();
       } else {
         alert('올바른 숫자를 입력하세요.');
       }
@@ -939,7 +1033,6 @@ function eventKeydown(e) {
     if (env.cards[action - 1] !== undefined) {
       done = env.step(action);
       calcEx();
-      // updateBoard();
     } else {
       let name;
       name = prompt('행운카드 이름');
@@ -975,7 +1068,6 @@ function newEventKeydown(e) {
     if (env.cards[action - 1] !== undefined) {
       done = env.step(action);
       calcEx();
-      // updateBoard();
     } else {
       let name;
       name = prompt('행운카드 이름');
@@ -1003,7 +1095,6 @@ function newEventKeydown(e) {
         env.rankReg = true;
         env.checkEvent();
         calcEx();
-        // updateBoard();
       } else {
         alert('올바른 숫자를 입력하세요.');
       }
@@ -1017,7 +1108,6 @@ function newEventKeydown(e) {
         env.diceUse = n;
         env.rankReg = true;
         calcEx();
-        // updateBoard();
       } else {
         alert('올바른 숫자를 입력하세요.');
       }
@@ -1292,7 +1382,6 @@ class Board {
       stage[this.score - 1][2],       // 현재 스페이스 ID
       this.diceUse,                   // 주사위 사용 횟수
       this.isDouble ? 1 : 0,          // 더블 상태
-      // this.cards.length,              // 보유한 카드 수
       ...Array(5).fill(0).map((_, i) => this.cards[i] ? this.cards[i][0] : 0), // cardIds 패딩 (최대 5개)
       ...this.cardInfo.map(card => card[3]) // 모든 카드의 cardGetYN 상태 (고정 길이 30)
     ];
@@ -1471,7 +1560,6 @@ function simulation(iteration = 10000, state, route) {
           sEnv.autoProcess = true;
 
           sEnv.step(i);
-          // sEnv.step(Math.trunc(Math.random() * (sEnv.cards.length + 1)));
 
           while (!done) {
             done = sEnv.step(sEnv.chooseAction());
@@ -1541,17 +1629,1225 @@ const workerUrl = URL.createObjectURL(workerBlob);
 
 let workerIteration = 10000;
 let workerReqIndex = 1;
-const workerCount = Math.max(2, Math.min(8, (navigator.hardwareConcurrency || 6) - 1));
+const logicalCpuCount = navigator.hardwareConcurrency || 6;
+const estimatedPhysicalCoreCount = Math.max(2, Math.ceil(logicalCpuCount / 2));
+const maxWorkerCount = Math.max(2, Math.min(estimatedPhysicalCoreCount, logicalCpuCount - 1));
+let workerCount = Math.ceil(maxWorkerCount / 2);
+computeSettings.cpuWorkers = workerCount;
 let workers = [];
 let workerRunnings = [];
+let calcExRequestId = 0;
 const ADAPTIVE_INITIAL_RATIO = 0.1;
 const ADAPTIVE_BATCH_RATIO = 0.05;
 const ADAPTIVE_MAX_RATIO = 10;
 const ADAPTIVE_BOUND_Z = 1.8;
 const ADAPTIVE_HIGHLIGHT_Z = 1.96;
 const ADAPTIVE_SAMPLE_LIMIT = 2;
+const PERF_BENCHMARK_MAX_PCT = 200;
+const PERF_BENCHMARK_COOLDOWN_MS = 500;
+const PERF_GPU_WARMUP_ROLLOUTS = 4096;
+const PERF_GPU_SETTLE_MAX_PCT = 50;
+const PERF_GPU_CALIBRATION_SMALL_ROLLOUTS = 8192;
+const PERF_GPU_CALIBRATION_LARGE_ROLLOUTS = 65536;
+const PERF_GPU_STABLE_CHUNK_TARGET_MS = 1200;
+const PERF_GPU_STABLE_CHUNK_LIMIT_MS = 2600;
+const GPU_BASE_ITERATION = 100000;
+let gpuCalibrationProfile = null;
 
 resetWorkers();
+
+function terminateCalcWorkers() {
+  workers.forEach(worker => worker.terminate());
+  workers = [];
+  workerRunnings = [];
+}
+
+function beginCalcExRequest() {
+  calcExRequestId++;
+  terminateCalcWorkers();
+  return calcExRequestId;
+}
+
+function isCalcExRequestActive(requestId) {
+  return requestId === calcExRequestId;
+}
+
+function getGpuRandomSeed() {
+  const values = new Uint32Array(1);
+  crypto.getRandomValues(values);
+  return values[0] >>> 0;
+}
+
+function getGpuMaxPctForUsage(value) {
+  if (value === 'high') return 10000;
+  if (value === 'low') return 1000;
+  return 2000;
+}
+
+function getCpuMaxPctForWorkers(cpuWorkers) {
+  let defaultCpuWorkers = Math.ceil(maxWorkerCount / 2);
+  let value = Math.max(1, Math.min(maxWorkerCount, Number(cpuWorkers) || defaultCpuWorkers));
+  if (value <= 1) return 200;
+  if (value >= maxWorkerCount) return 1000;
+  return 500;
+}
+
+function getGpuUsageSettings(value) {
+  let calibrated = getGpuCalibratedUsageSettings(value);
+  if (calibrated) return calibrated;
+
+  if (value === 'high') {
+    return { gpuIteration: GPU_BASE_ITERATION, gpuBatchPct: 200, gpuMaxPct: getGpuMaxPctForUsage('high'), gpuLoad: 'high', targetChunkMs: 1000, yieldMs: 0, initialChunkPct: 100, minChunkPct: 100 };
+  }
+  if (value === 'low') {
+    return { gpuIteration: GPU_BASE_ITERATION, gpuBatchPct: 50, gpuMaxPct: getGpuMaxPctForUsage('low'), gpuLoad: 'low', targetChunkMs: 200, yieldMs: 12, initialChunkPct: 100, minChunkPct: 50 };
+  }
+  return { gpuIteration: GPU_BASE_ITERATION, gpuBatchPct: 100, gpuMaxPct: getGpuMaxPctForUsage('medium'), gpuLoad: 'medium', targetChunkMs: 500, yieldMs: 4, initialChunkPct: 100, minChunkPct: 75 };
+}
+
+function createGpuUsageSetting(value, option) {
+  return {
+    gpuIteration: GPU_BASE_ITERATION,
+    gpuBatchPct: option.gpuBatchPct,
+    gpuMaxPct: option.gpuMaxPct || getGpuMaxPctForUsage(value),
+    gpuLoad: value,
+    targetChunkMs: option.targetChunkMs,
+    yieldMs: option.yieldMs,
+    cooldownRatio: option.cooldownRatio || 0,
+    initialChunkPct: option.initialChunkPct || 100,
+    minChunkPct: option.minChunkPct,
+  };
+}
+
+function getGpuCalibratedUsageSettings(value) {
+  if (!gpuCalibrationProfile || !gpuCalibrationProfile.options) return null;
+  let option = gpuCalibrationProfile.options[value];
+  if (!option) return null;
+  return createGpuUsageSetting(value, option);
+}
+
+function createGpuCalibrationProfile(smallMs, largeMs) {
+  let safeSmallMs = Math.max(1, smallMs || 1);
+  let safeLargeMs = Math.max(1, largeMs || 1);
+  let smallToLargeRatio = safeSmallMs / safeLargeMs;
+
+  function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+  }
+
+  function pct(value) {
+    return Math.max(1, Math.round(value));
+  }
+
+  let speedScale = clamp(Math.sqrt(350 / safeLargeMs), 0.2, 6);
+  let overheadPressure = clamp((smallToLargeRatio - 0.16) / 0.44, 0, 1);
+  let slowPressure = clamp((safeLargeMs - 500) / 1600, 0, 1);
+  let fastPressure = clamp((260 - safeLargeMs) / 240, 0, 1);
+
+  let lowBatchPct = pct(clamp(
+    22 * (1 + overheadPressure * 0.45 + slowPressure * 0.4) / Math.pow(speedScale, 0.22),
+    8,
+    65,
+  ));
+  let mediumBatchPct = pct(clamp(
+    82 * (1 + overheadPressure * 0.65 + slowPressure * 0.55) / Math.pow(speedScale, 0.14),
+    Math.max(40, lowBatchPct * 2.2),
+    450,
+  ));
+  let highBatchPct = pct(clamp(
+    220 * (1 + overheadPressure * 0.8 + slowPressure * 0.85) * Math.pow(speedScale, 0.08),
+    Math.max(150, mediumBatchPct * 1.7),
+    1000,
+  ));
+
+  let lowYieldMs = pct(clamp(70 + safeLargeMs * 0.12 + fastPressure * 120 + overheadPressure * 70, 70, 700));
+  let mediumYieldMs = pct(clamp(12 + safeLargeMs * 0.025 + fastPressure * 32 + overheadPressure * 24, 8, 160));
+  let lowMinChunkPct = pct(clamp(10 + overheadPressure * 12 + slowPressure * 16 - fastPressure * 4, 6, 45));
+  let mediumMinChunkPct = pct(clamp(42 + overheadPressure * 22 + slowPressure * 16 - fastPressure * 6, 28, 90));
+  let lowCooldownRatio = clamp(0.75 + fastPressure * 0.65 + overheadPressure * 0.35, 0.65, 1.6);
+  let mediumCooldownRatio = clamp(0.12 + fastPressure * 0.16 + overheadPressure * 0.1, 0.08, 0.35);
+
+  let options = {
+    low: {
+      gpuBatchPct: lowBatchPct,
+      gpuMaxPct: getGpuMaxPctForUsage('low'),
+      targetChunkMs: pct(clamp(safeLargeMs * 0.14, 35, 650)),
+      yieldMs: lowYieldMs,
+      cooldownRatio: lowCooldownRatio,
+      minChunkPct: lowMinChunkPct,
+    },
+    medium: {
+      gpuBatchPct: mediumBatchPct,
+      gpuMaxPct: getGpuMaxPctForUsage('medium'),
+      targetChunkMs: pct(clamp(safeLargeMs * 0.55, 120, 1600)),
+      yieldMs: mediumYieldMs,
+      cooldownRatio: mediumCooldownRatio,
+      minChunkPct: mediumMinChunkPct,
+    },
+    high: {
+      gpuBatchPct: highBatchPct,
+      gpuMaxPct: getGpuMaxPctForUsage('high'),
+      targetChunkMs: pct(clamp(safeLargeMs * 1.9, 500, 3500)),
+      yieldMs: 0,
+      cooldownRatio: 0,
+      minChunkPct: 100,
+    },
+  };
+
+  return {
+    smallMs: safeSmallMs,
+    largeMs: safeLargeMs,
+    smallToLargeRatio,
+    speedScale,
+    overheadPressure,
+    stableChunkPct: null,
+    stableChunkMs: null,
+    stableChunkLimited: false,
+    options,
+  };
+}
+
+function tuneGpuProfileForStableChunk(profile, stableChunkPct, stableChunkMs, limited) {
+  if (!profile || !profile.options || !Number.isFinite(stableChunkPct)) return profile;
+  profile.stableChunkPct = stableChunkPct;
+  profile.stableChunkMs = stableChunkMs;
+  profile.stableChunkLimited = limited === true;
+  if (!profile.stableChunkLimited) return profile;
+
+  let safePct = Math.max(8, Math.floor(stableChunkPct));
+  let mediumCap = Math.max(40, Math.min(profile.options.medium.gpuBatchPct, safePct));
+  let highCap = Math.max(mediumCap, Math.min(profile.options.high.gpuBatchPct, Math.floor(safePct * 1.5)));
+
+  profile.options.low.gpuBatchPct = Math.min(profile.options.low.gpuBatchPct, Math.max(8, Math.floor(safePct * 0.45)));
+  profile.options.low.minChunkPct = 100;
+  profile.options.low.initialChunkPct = 100;
+  profile.options.medium.gpuBatchPct = mediumCap;
+  profile.options.medium.minChunkPct = Math.min(profile.options.medium.minChunkPct, 70);
+  profile.options.medium.initialChunkPct = 100;
+  profile.options.high.gpuBatchPct = highCap;
+  profile.options.high.minChunkPct = 100;
+  profile.options.high.initialChunkPct = 100;
+  return profile;
+}
+
+function applyGpuUsageSettings(value) {
+  let settings = getGpuUsageSettings(value);
+  computeSettings.gpuUsage = value;
+  computeSettings.gpuIteration = settings.gpuIteration;
+  computeSettings.gpuBatchPct = settings.gpuBatchPct;
+  computeSettings.gpuMaxPct = settings.gpuMaxPct;
+  computeSettings.gpuLoad = settings.gpuLoad;
+  computeSettings.targetChunkMs = settings.targetChunkMs;
+  computeSettings.yieldMs = settings.yieldMs;
+  computeSettings.cooldownRatio = settings.cooldownRatio;
+  computeSettings.initialChunkPct = settings.initialChunkPct;
+  computeSettings.minChunkPct = settings.minChunkPct;
+}
+
+function getGpuLoadConfig(gpuLoad = computeSettings.gpuLoad) {
+  if (gpuLoad === 'low') return { targetChunkMs: 200, yieldMs: 12, cooldownRatio: 0.35, initialChunkPct: 100, minChunkPct: 50 };
+  if (gpuLoad === 'medium') return { targetChunkMs: 500, yieldMs: 4, cooldownRatio: 0.05, initialChunkPct: 100, minChunkPct: 75 };
+  return { targetChunkMs: 1000, yieldMs: 0, cooldownRatio: 0, initialChunkPct: 100, minChunkPct: 100 };
+}
+
+function createGpuDispatchTuner(batchIteration, settings = {}) {
+  let loadConfig = getGpuLoadConfig(settings.gpuLoad);
+  let targetChunkMs = Math.max(4, settings.targetChunkMs || loadConfig.targetChunkMs);
+  let baseYieldMs = Math.max(0, settings.yieldMs !== undefined ? settings.yieldMs : loadConfig.yieldMs);
+  let cooldownRatio = Math.max(0, settings.cooldownRatio !== undefined ? settings.cooldownRatio : loadConfig.cooldownRatio || 0);
+  let currentYieldMs = baseYieldMs;
+  let initialChunkPct = Math.max(1, Math.min(100, settings.initialChunkPct || loadConfig.initialChunkPct));
+  let minChunkPct = Math.max(0, Math.min(100, settings.minChunkPct || loadConfig.minChunkPct || 0));
+  let fixedChunkPct = settings.gpuLoad === 'low' ? Math.max(minChunkPct, initialChunkPct) : 0;
+  if (fixedChunkPct > 0) {
+    minChunkPct = fixedChunkPct;
+    cooldownRatio = Math.min(cooldownRatio, 0.25);
+  }
+  let minDispatchIteration = Math.max(64, Math.floor(batchIteration * Math.max(minChunkPct, 0.5) / 100));
+  let maxDispatchIteration = Math.max(minDispatchIteration, batchIteration);
+  let dispatchIteration = Math.max(
+    minDispatchIteration,
+    Math.min(maxDispatchIteration, Math.floor(batchIteration * initialChunkPct / 100)),
+  );
+
+  return {
+    get yieldMs() {
+      return currentYieldMs;
+    },
+    next(remaining) {
+      return Math.max(1, Math.min(remaining, Math.round(dispatchIteration)));
+    },
+    record(elapsedMs, iteration) {
+      if (!elapsedMs || elapsedMs <= 0 || !isFinite(elapsedMs)) return;
+      currentYieldMs = Math.min(1500, baseYieldMs + elapsedMs * cooldownRatio);
+      if (fixedChunkPct > 0) return;
+      let targetIteration = iteration * targetChunkMs / elapsedMs;
+      let blend = elapsedMs > targetChunkMs * 1.4 ? 0.45 : 0.25;
+      dispatchIteration = dispatchIteration * (1 - blend) + targetIteration * blend;
+      dispatchIteration = Math.max(minDispatchIteration, Math.min(maxDispatchIteration, dispatchIteration));
+    },
+  };
+}
+
+function waitGpuYield(ms) {
+  if (ms <= 0) return Promise.resolve();
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function recordComputePerf(engine, key, elapsedMs, options = {}) {
+  if (!computePerfStats[engine]) computePerfStats[engine] = {};
+  let previous = computePerfStats[engine][key];
+  if (!previous || options.replace) {
+    computePerfStats[engine][key] = { count: 1, avgMs: elapsedMs, lastMs: elapsedMs, running: false };
+    updateComputePerfHelpUI(engine, key);
+    updateComputeOverallProgressUI();
+    return;
+  }
+  let count = previous.count + 1;
+  computePerfStats[engine][key] = {
+    count,
+    avgMs: previous.avgMs + (elapsedMs - previous.avgMs) / count,
+    lastMs: elapsedMs,
+    running: false,
+  };
+  updateComputePerfHelpUI(engine, key);
+  updateComputeOverallProgressUI();
+}
+
+function setComputePerfRunning(engine, key, progressPct = 0) {
+  if (!computePerfStats[engine]) computePerfStats[engine] = {};
+  let previous = computePerfStats[engine][key] || { count: 0, avgMs: 0, lastMs: 0 };
+  computePerfStats[engine][key] = { ...previous, running: true, error: null, progressPct };
+  updateComputePerfHelpUI(engine, key);
+  updateComputeOverallProgressUI();
+}
+
+function setComputePerfProgress(engine, key, progressPct) {
+  if (!computePerfStats[engine]) computePerfStats[engine] = {};
+  let stat = computePerfStats[engine][key];
+  if (!stat || !stat.running) return;
+  computePerfStats[engine][key] = { ...stat, progressPct };
+  scheduleComputePerfUIRefresh(engine, key);
+}
+
+function setComputePerfError(engine, key) {
+  if (!computePerfStats[engine]) computePerfStats[engine] = {};
+  let previous = computePerfStats[engine][key] || { count: 0, avgMs: 0, lastMs: 0 };
+  computePerfStats[engine][key] = { ...previous, running: false, error: true };
+  updateComputePerfHelpUI(engine, key);
+  updateComputeOverallProgressUI();
+}
+
+function cancelComputePerfBenchmark() {
+  computePerfBenchmarkId++;
+  if (!computePerfBenchmarkRunning) return;
+  computePerfBenchmarkRunning = false;
+  Object.keys(computePerfStats).forEach(engine => {
+    Object.keys(computePerfStats[engine] || {}).forEach(key => {
+      let stat = computePerfStats[engine][key];
+      if (stat && stat.running) {
+        computePerfStats[engine][key] = { ...stat, running: false };
+        updateComputePerfHelpUI(engine, key);
+      }
+    });
+  });
+  updateComputeOverallProgressUI();
+}
+
+async function waitComputePerfBenchmarkIdle() {
+  let promise = computePerfBenchmarkPromise;
+  if (!promise) return;
+  try {
+    await promise;
+  } catch (error) {
+    console.warn('Compute perf benchmark stopped.', error);
+  }
+}
+
+function getComputePerfText(engine, key) {
+  let stat = computePerfStats[engine] && computePerfStats[engine][key];
+  if (stat && stat.running) return `계산중입니다. [${getComputePerfProgressPct(engine, key)}%]`;
+  if (stat && stat.error) return '이 기기에서 측정하지 못했습니다.';
+  if (!stat) return '이 기기에서 첫 계산 후 추론 시간을 표시합니다.';
+  return `이 기기에서 측정한 추론 시간은 약 ${Math.round(stat.avgMs)}ms/회입니다.`;
+}
+
+function getComputePerfHtml(engine, key) {
+  let stat = computePerfStats[engine] && computePerfStats[engine][key];
+  if (!stat || stat.running || stat.error || stat.count <= 0) return getComputePerfText(engine, key);
+  return `이 기기에서 측정한 추론 시간은 약 <strong style="color:#0f172a;font-weight:800;">${Math.round(stat.avgMs)}ms/회</strong>입니다.`;
+}
+
+function getComputePerfProgressPct(engine, key) {
+  let stat = computePerfStats[engine] && computePerfStats[engine][key];
+  if (!stat || !stat.running) return 0;
+  return Math.max(0, Math.min(100, Math.round(stat.progressPct || 0)));
+}
+
+function updateComputePerfProgressBar(card, engine, key) {
+  let track = card && card.querySelector('[data-perf-progress]');
+  if (!track) return;
+  let fill = track.querySelector('[data-perf-progress-fill]');
+  let stat = computePerfStats[engine] && computePerfStats[engine][key];
+  let running = stat && stat.running;
+  let pct = getComputePerfProgressPct(engine, key);
+  track.style.display = running ? 'block' : 'none';
+  if (fill) fill.style.width = `${pct}%`;
+}
+
+function updateComputePerfOptionUI(engine, key) {
+  let modal = document.getElementById('adventure-compute-modal');
+  if (!modal) return;
+  let perf = modal.querySelector(`[data-perf-engine="${engine}"][data-perf-key="${key}"]`);
+  if (perf) perf.innerHTML = getComputePerfHtml(engine, key);
+  let card = modal.querySelector(`[data-option-engine="${engine}"][data-option-key="${key}"]`);
+  updateComputePerfProgressBar(card, engine, key);
+}
+
+function flushComputePerfUIRefresh() {
+  computePerfUiFrame = null;
+  let keys = Array.from(computePerfPendingUiKeys);
+  computePerfPendingUiKeys.clear();
+  keys.forEach(value => {
+    let [engine, key] = value.split(':');
+    updateComputePerfOptionUI(engine, key);
+  });
+  updateComputeOverallProgressUI();
+}
+
+function scheduleComputePerfUIRefresh(engine, key) {
+  computePerfPendingUiKeys.add(`${engine}:${key}`);
+  if (computePerfUiFrame !== null) return;
+  let scheduleFrame = window.requestAnimationFrame || (callback => window.setTimeout(callback, 100));
+  computePerfUiFrame = scheduleFrame(flushComputePerfUIRefresh);
+}
+
+function getComputeOptionCompletion(engine, key) {
+  let stat = computePerfStats[engine] && computePerfStats[engine][key];
+  if (!stat) return 0;
+  if (stat.running) return getComputePerfProgressPct(engine, key);
+  if (stat.error || stat.count > 0) return 100;
+  return 0;
+}
+
+function updateComputeOverallProgressUI() {
+  let modal = document.getElementById('adventure-compute-modal');
+  if (!modal) return;
+  let box = modal.querySelector('[data-overall-perf-progress]');
+  if (!box) return;
+  if (computePerfRecommendations.engine) {
+    box.style.display = 'none';
+    return;
+  }
+  let cards = Array.from(modal.querySelectorAll('[data-option-engine][data-option-key]'))
+    .filter(card => card.dataset.optionEngine !== 'gpu' || isGpuAvailable());
+  if (cards.length === 0) {
+    box.style.display = 'none';
+    return;
+  }
+  let total = cards.reduce((sum, card) => {
+    return sum + getComputeOptionCompletion(card.dataset.optionEngine, card.dataset.optionKey);
+  }, 0);
+  let pct = Math.max(0, Math.min(100, Math.round(total / cards.length)));
+  let text = box.querySelector('[data-overall-perf-text]');
+  let fill = box.querySelector('[data-overall-perf-fill]');
+  box.style.display = computePerfBenchmarkRunning || pct > 0 ? 'block' : 'none';
+  if (text) text.textContent = `추천 항목 계산중입니다. [${pct}%]`;
+  if (fill) fill.style.width = `${pct}%`;
+}
+
+function getBestMeasuredComputeOption(engine, keys) {
+  let best = null;
+  keys.forEach(key => {
+    let stat = computePerfStats[engine] && computePerfStats[engine][key];
+    if (!stat || stat.running || stat.error || stat.count <= 0) return;
+    if (!best || stat.avgMs < best.avgMs) {
+      best = { key: key, avgMs: stat.avgMs };
+    }
+  });
+  return best ? best.key : null;
+}
+
+function getMeasuredComputeAvg(engine, key) {
+  let stat = computePerfStats[engine] && computePerfStats[engine][key];
+  if (!stat || stat.running || stat.error || stat.count <= 0) return Infinity;
+  return stat.avgMs;
+}
+
+function getRecommendedComputeEngine() {
+  let gpuAvg = getMeasuredComputeAvg('gpu', computePerfRecommendations.gpu);
+  let cpuAvg = getMeasuredComputeAvg('cpu', computePerfRecommendations.cpu);
+  if (!isFinite(gpuAvg) && !isFinite(cpuAvg)) return null;
+  if (!isFinite(gpuAvg)) return 'cpu';
+  if (!isFinite(cpuAvg)) return 'gpu';
+  return gpuAvg <= cpuAvg ? 'gpu' : 'cpu';
+}
+
+function updateComputeEngineCards() {
+  let modal = document.getElementById('adventure-compute-modal');
+  if (!modal) return;
+  ['gpu', 'cpu'].forEach(engine => {
+    let card = modal.querySelector(`#compute-${engine}-card`);
+    if (!card) return;
+    let input = card.querySelector('input[type="radio"]');
+    let badge = card.querySelector('[data-engine-recommend-badge]');
+    let selected = input && input.checked;
+    let recommended = computePerfRecommendations.engine === engine;
+    if (engine === 'gpu' && !isGpuAvailable()) {
+      card.style.borderColor = '#fecaca';
+      card.style.background = '#fff1f2';
+      card.style.boxShadow = 'none';
+      if (badge) badge.style.display = 'none';
+      return;
+    }
+    card.style.borderColor = selected ? '#2563eb' : (recommended ? '#16a34a' : '#cbd5e1');
+    card.style.background = selected ? '#eff6ff' : (recommended ? '#f0fdf4' : '#f8fafc');
+    card.style.boxShadow = recommended ? '0 0 0 2px rgba(22, 163, 74, 0.16)' : 'none';
+    if (badge) badge.style.display = recommended ? 'inline-flex' : 'none';
+  });
+  updateComputeOverallProgressUI();
+}
+
+function updateComputeOptionCards(engine) {
+  let modal = document.getElementById('adventure-compute-modal');
+  if (!modal) return;
+  let cards = modal.querySelectorAll(`[data-option-engine="${engine}"]`);
+  cards.forEach(card => {
+    let key = card.dataset.optionKey;
+    let input = card.querySelector('input[type="radio"]');
+    let perf = card.querySelector('[data-perf-text]');
+    let badge = card.querySelector('[data-recommend-badge]');
+    let selected = input && input.checked;
+    let recommended = computePerfRecommendations[engine] === key;
+    card.style.borderColor = selected ? '#2563eb' : (recommended ? '#16a34a' : '#cbd5e1');
+    card.style.background = selected ? '#eff6ff' : (recommended ? '#f0fdf4' : '#f8fafc');
+    card.style.boxShadow = recommended ? '0 0 0 2px rgba(22, 163, 74, 0.16)' : 'none';
+    if (perf) perf.innerHTML = getComputePerfHtml(engine, key);
+    updateComputePerfProgressBar(card, engine, key);
+    if (badge) badge.style.display = recommended ? 'inline-flex' : 'none';
+  });
+}
+
+function updateComputePerfHelpUI(engine, key) {
+  updateComputePerfOptionUI(engine, key);
+  updateComputeOptionCards(engine);
+  updateComputeOverallProgressUI();
+}
+
+function isGpuAvailable() {
+  return Boolean(navigator.gpu && window.gpuRolloutWorkbench && !gpuDisabledReason);
+}
+
+function markGpuUnavailable(reason) {
+  gpuDisabledReason = reason || 'GPU engine self-test failed.';
+  computeSettings.engine = 'cpu';
+}
+
+function getGpuUnavailableMessage() {
+  if (!navigator.gpu) return 'WebGPU를 사용할 수 없어 CPU 엔진으로 시작합니다.';
+  if (gpuDisabledReason) return '현재 GPU가 시뮬레이션 엔진과 호환되지 않아 CPU 엔진으로 시작합니다.';
+  return 'GPU 엔진을 사용할 수 없어 CPU 엔진으로 시작합니다.';
+}
+
+function createGpuSelfTestState({ diceUse = 0, isDouble = 0 } = {}) {
+  let state = new Board().getState().slice();
+  state[1] = true;
+  state[5] = diceUse;
+  state[6] = isDouble ? 1 : 0;
+  return state;
+}
+
+function getGpuSummaryMean(summary) {
+  return summary && (summary.mean !== undefined ? summary.mean : summary.avg);
+}
+
+function compactGpuSelfTestSummary(summary) {
+  if (!summary) return null;
+  return {
+    mean: getGpuSummaryMean(summary),
+    std: summary.std,
+    min: summary.min,
+    max: summary.max,
+  };
+}
+
+function validateGpuSelfTestSummary(label, summary, failures) {
+  let mean = getGpuSummaryMean(summary);
+  if (!summary || !Number.isFinite(mean)) {
+    failures.push(`${label}: missing GPU summary`);
+    return;
+  }
+  if (label === 'done') {
+    if (mean !== 1 || summary.min !== 1 || summary.max !== 1) {
+      failures.push(`done-state ${JSON.stringify(compactGpuSelfTestSummary(summary))}`);
+    }
+    return;
+  }
+  if (label === 'double') {
+    if (mean < 4 || mean > 25 || summary.max > 64) {
+      failures.push(`double-state ${JSON.stringify(compactGpuSelfTestSummary(summary))}`);
+    }
+    return;
+  }
+  if (label === 'initial') {
+    if (mean < 1200 || mean > 2200 || summary.max > 2700) {
+      failures.push(`initial-state ${JSON.stringify(compactGpuSelfTestSummary(summary))}`);
+    }
+  }
+}
+
+async function verifyGpuEngineOnLoad(tables) {
+  if (!window.gpuRolloutWorkbench || typeof window.gpuRolloutWorkbench.runGpu !== 'function') {
+    return { ok: false, reason: 'GPU workbench is unavailable.' };
+  }
+  let seed = 0x4d4f4231;
+  let cases = [
+    { label: 'done', state: createGpuSelfTestState({ diceUse: 100, isDouble: 0 }), rolloutCount: 64, seed: seed ^ 0x44444444 },
+    { label: 'double', state: createGpuSelfTestState({ diceUse: 100, isDouble: 1 }), rolloutCount: 256, seed: seed ^ 0x55555555 },
+    { label: 'initial', state: createGpuSelfTestState(), rolloutCount: 512, seed: (seed + 512) >>> 0 },
+  ];
+  let failures = [];
+  for (const testCase of cases) {
+    let summary = await window.gpuRolloutWorkbench.runGpu({
+      tables,
+      sample: { state: testCase.state, actionCount: 1 },
+      action: 0,
+      rolloutCount: testCase.rolloutCount,
+      seed: testCase.seed >>> 0,
+    });
+    validateGpuSelfTestSummary(testCase.label, summary, failures);
+  }
+  return {
+    ok: failures.length === 0,
+    reason: failures.join(' / '),
+  };
+}
+
+function buildGpuTables() {
+  if (gpuTablesCache) return gpuTablesCache;
+  gpuTablesCache = {
+    stageId: stage.map(row => Number(row[1] || 0)),
+    stageMove: stage.map(row => Number(row[4] || 0)),
+    stageEvent: stage.map(row => Number(row[5] || 0)),
+    cardType: [0, ...cardInfo.map(row => Number(row[1] || 0))],
+    cardValue: [0, ...cardInfo.map(row => Number(row[2] || 0))],
+  };
+  return gpuTablesCache;
+}
+
+function mergeGpuSummary(acc, summary) {
+  if (!summary || summary.count <= 0) return;
+  let variance = summary.std * summary.std;
+  acc.count += summary.count;
+  acc.sum += summary.mean * summary.count;
+  acc.sumSq += (variance + summary.mean * summary.mean) * summary.count;
+  acc.min = Math.min(acc.min, summary.min);
+  acc.max = Math.max(acc.max, summary.max);
+}
+
+function getBenchmarkInferenceState() {
+  let sample = new Board();
+  sample.autoProcess = false;
+  [2, 9, 18].forEach(cardIndex => sample.getCard(cardIndex));
+  sample.autoProcess = true;
+  return sample.getState();
+}
+
+function getStateActionCount(state) {
+  return 1 + state.slice(7, 12).filter(cardId => cardId !== 0).length;
+}
+
+function getStateActiveActions(state) {
+  return Array.from({ length: getStateActionCount(state) }, (_, index) => index);
+}
+
+function getAdaptiveProgressPct(actionStats, activeActions, maxIteration) {
+  let activeActionSet = new Set(activeActions.map(Number));
+  let completed = 0;
+  let remaining = 0;
+  actionStats.forEach((stat, action) => {
+    let count = Math.min(stat.count, maxIteration);
+    if (count > 0 || activeActionSet.has(action)) {
+      completed += count;
+    }
+    if (activeActionSet.has(action)) {
+      remaining += Math.max(0, maxIteration - count);
+    }
+  });
+  let total = completed + remaining;
+  if (total <= 0) return 0;
+  return Math.min(99, completed / total * 100);
+}
+
+async function warmUpGpuInferenceForState(simulationState, options = {}) {
+  if (!window.gpuRolloutWorkbench) return false;
+  let isCancelled = typeof options.isCancelled === 'function' ? options.isCancelled : () => false;
+  if (isCancelled()) return false;
+  let actionCount = getStateActionCount(simulationState);
+  let tables = buildGpuTables();
+  let sample = { state: simulationState, actionCount: actionCount };
+  await window.gpuRolloutWorkbench.runGpuAllActions({
+    tables: tables,
+    sample: sample,
+    rolloutCount: PERF_GPU_WARMUP_ROLLOUTS,
+    seed: getGpuRandomSeed(),
+  });
+  if (isCancelled()) return false;
+  await window.gpuRolloutWorkbench.runGpu({
+    tables: tables,
+    sample: sample,
+    action: 0,
+    rolloutCount: PERF_GPU_WARMUP_ROLLOUTS,
+    seed: getGpuRandomSeed(),
+  });
+  if (isCancelled()) return false;
+  await runGpuInferenceForState(simulationState, 'high', {
+    maxPct: PERF_GPU_SETTLE_MAX_PCT,
+    disableConfidenceStop: true,
+    disablePrune: true,
+    isCancelled,
+  });
+  return !isCancelled();
+}
+
+async function calibrateGpuStableChunkForState(tables, sample, options = {}) {
+  let isCancelled = typeof options.isCancelled === 'function' ? options.isCancelled : () => false;
+  let candidates = [
+    PERF_GPU_CALIBRATION_SMALL_ROLLOUTS,
+    PERF_GPU_CALIBRATION_SMALL_ROLLOUTS * 2,
+    PERF_GPU_CALIBRATION_SMALL_ROLLOUTS * 4,
+    PERF_GPU_CALIBRATION_SMALL_ROLLOUTS * 8,
+    PERF_GPU_CALIBRATION_SMALL_ROLLOUTS * 16,
+    PERF_GPU_CALIBRATION_SMALL_ROLLOUTS * 32,
+    PERF_GPU_CALIBRATION_SMALL_ROLLOUTS * 64,
+  ];
+  let stableRollouts = candidates[0];
+  let stableMs = Infinity;
+  let limited = false;
+
+  for (const rolloutCount of candidates) {
+    if (isCancelled()) return null;
+    await waitGpuYield(35);
+    if (isCancelled()) return null;
+    let startedAt = performance.now();
+    try {
+      await window.gpuRolloutWorkbench.runGpuAllActions({
+        tables: tables,
+        sample: sample,
+        rolloutCount: rolloutCount,
+        seed: getGpuRandomSeed(),
+      });
+    } catch (error) {
+      limited = true;
+      break;
+    }
+    if (isCancelled()) return null;
+    let elapsedMs = performance.now() - startedAt;
+    if (elapsedMs <= PERF_GPU_STABLE_CHUNK_LIMIT_MS) {
+      stableRollouts = rolloutCount;
+      stableMs = elapsedMs;
+    }
+    if (elapsedMs > PERF_GPU_STABLE_CHUNK_TARGET_MS) {
+      limited = true;
+      break;
+    }
+  }
+
+  return {
+    stableChunkPct: Math.max(1, stableRollouts / GPU_BASE_ITERATION * 100),
+    stableChunkMs: stableMs,
+    limited,
+  };
+}
+
+async function calibrateGpuInferenceForState(simulationState, options = {}) {
+  if (!window.gpuRolloutWorkbench) return null;
+  let isCancelled = typeof options.isCancelled === 'function' ? options.isCancelled : () => false;
+  if (isCancelled()) return null;
+  let actionCount = getStateActionCount(simulationState);
+  let tables = buildGpuTables();
+  let sample = { state: simulationState, actionCount: actionCount };
+
+  let smallStartedAt = performance.now();
+  await window.gpuRolloutWorkbench.runGpuAllActions({
+    tables: tables,
+    sample: sample,
+    rolloutCount: PERF_GPU_CALIBRATION_SMALL_ROLLOUTS,
+    seed: getGpuRandomSeed(),
+  });
+  if (isCancelled()) return null;
+  let smallMs = performance.now() - smallStartedAt;
+
+  await waitGpuYield(60);
+  if (isCancelled()) return null;
+
+  let largeStartedAt = performance.now();
+  await window.gpuRolloutWorkbench.runGpuAllActions({
+    tables: tables,
+    sample: sample,
+    rolloutCount: PERF_GPU_CALIBRATION_LARGE_ROLLOUTS,
+    seed: getGpuRandomSeed(),
+  });
+  if (isCancelled()) return null;
+  let largeMs = performance.now() - largeStartedAt;
+
+  gpuCalibrationProfile = createGpuCalibrationProfile(smallMs, largeMs);
+  try {
+    let stableChunk = await calibrateGpuStableChunkForState(tables, sample, { isCancelled });
+    if (isCancelled()) return null;
+    if (stableChunk) {
+      tuneGpuProfileForStableChunk(
+        gpuCalibrationProfile,
+        stableChunk.stableChunkPct,
+        stableChunk.stableChunkMs,
+        stableChunk.limited,
+      );
+    }
+  } catch (error) {
+    console.warn('GPU stable chunk calibration failed.', error);
+  }
+  applyGpuUsageSettings(computeSettings.gpuUsage || 'medium');
+  return gpuCalibrationProfile;
+}
+
+async function runGpuInferenceForState(simulationState, gpuUsage, options = {}) {
+  let settings = { ...getGpuUsageSettings(gpuUsage), ...(options.settingsPatch || {}) };
+  if (options.maxPct !== undefined) settings.gpuMaxPct = options.maxPct;
+  let isCancelled = typeof options.isCancelled === 'function' ? options.isCancelled : () => false;
+  let adaptiveControl = {
+    disableConfidenceStop: options.disableConfidenceStop === true || options.disableEarlyStop === true,
+    disablePrune: options.disablePrune === true || options.disableEarlyStop === true,
+  };
+  let actionCount = getStateActionCount(simulationState);
+  let activeActions = getStateActiveActions(simulationState);
+  let batchIteration = Math.max(1, Math.floor(settings.gpuIteration * settings.gpuBatchPct / 100));
+  let maxIteration = Math.max(1, Math.floor(settings.gpuIteration * settings.gpuMaxPct / 100));
+  let fixedFullRun = adaptiveControl.disableConfidenceStop && adaptiveControl.disablePrune;
+  let initialIteration = fixedFullRun ? maxIteration : Math.max(1, Math.floor(settings.gpuIteration * 0.1));
+  let dispatchTuner = createGpuDispatchTuner(batchIteration, settings);
+  let actionStats = new Array(6).fill(0).map(() => createActionStats());
+  let tables = buildGpuTables();
+  let onProgress = typeof options.onProgress === 'function' ? options.onProgress : null;
+
+  function reportProgress(done = false) {
+    if (!onProgress) return;
+    if (done) {
+      onProgress(100);
+      return;
+    }
+    onProgress(getAdaptiveProgressPct(actionStats.slice(0, actionCount), activeActions, maxIteration));
+  }
+
+  function getMaxActionIteration() {
+    return Math.max(0, ...actionStats.map(stat => stat.count));
+  }
+
+  async function evaluateGpuBatch(actions, iteration) {
+    let sample = { state: simulationState, actionCount: actionCount };
+    let remaining = iteration;
+    let allActions = actions.length === actionCount && actions.every((action, index) => action === index);
+    while (remaining > 0) {
+      if (isCancelled()) return false;
+      let chunkIteration = dispatchTuner.next(remaining);
+      let chunkStartedAt = performance.now();
+      if (allActions) {
+        let result = await window.gpuRolloutWorkbench.runGpuAllActions({
+          tables: tables,
+          sample: sample,
+          rolloutCount: chunkIteration,
+          seed: getGpuRandomSeed(),
+        });
+        if (isCancelled()) return false;
+        actions.forEach(action => mergeGpuSummary(actionStats[action], result.summaries[action]));
+      } else {
+        let results = await Promise.all(actions.map(action => window.gpuRolloutWorkbench.runGpu({
+          tables: tables,
+          sample: sample,
+          action: action,
+          rolloutCount: chunkIteration,
+          seed: getGpuRandomSeed(),
+        }).then(summary => ({ action, summary }))));
+
+        if (isCancelled()) return false;
+        results.forEach(({ action, summary }) => {
+          mergeGpuSummary(actionStats[action], { action: action, count: chunkIteration, ...summary });
+        });
+      }
+      dispatchTuner.record(performance.now() - chunkStartedAt, chunkIteration);
+      remaining -= chunkIteration;
+      reportProgress();
+      if (remaining > 0) await waitGpuYield(dispatchTuner.yieldMs);
+    }
+    return true;
+  }
+
+  async function runBatch(actions, iteration) {
+    let runnableActions = actions
+      .map(Number)
+      .filter(action => actionStats[action].count < maxIteration)
+      .map(action => ({
+        action: action,
+        iteration: Math.min(iteration, maxIteration - actionStats[action].count),
+      }))
+      .filter(job => job.iteration > 0);
+
+    if (runnableActions.length === 0) return false;
+
+    if (adaptiveControl.disablePrune && runnableActions.length === actionCount) {
+      let sharedIteration = Math.min(...runnableActions.map(job => job.iteration));
+      let canBatchAll = sharedIteration > 0 &&
+        runnableActions.every((job, index) => job.action === index && job.iteration === sharedIteration);
+      if (canBatchAll) {
+        return evaluateGpuBatch(activeActions, sharedIteration);
+      }
+    }
+
+    for (const job of runnableActions) {
+      if (!await evaluateGpuBatch([job.action], job.iteration)) return false;
+    }
+    return true;
+  }
+
+  if (activeActions.length === actionCount) {
+    if (!await evaluateGpuBatch(activeActions, initialIteration)) return null;
+  } else {
+    if (!await runBatch(activeActions, initialIteration)) return null;
+  }
+
+  while (true) {
+    if (isCancelled()) return null;
+    let decision = getAdaptiveDecision(actionStats, activeActions);
+    if (shouldStopAdaptive(decision, actionStats, activeActions, maxIteration, adaptiveControl)) {
+      reportProgress(true);
+      return decision;
+    }
+
+    if (!adaptiveControl.disablePrune) {
+      activeActions = pruneAdaptiveActions(actionStats, activeActions);
+    }
+    decision = getAdaptiveDecision(actionStats, activeActions);
+    if (!adaptiveControl.disablePrune && activeActions.length <= 1) {
+      reportProgress(true);
+      return decision;
+    }
+
+    let progressed = await runBatch(getAdaptiveNextActions(actionStats, activeActions, maxIteration, adaptiveControl), batchIteration);
+    if (isCancelled()) return null;
+    if (!progressed || getMaxActionIteration() >= maxIteration) {
+      reportProgress(true);
+      return getAdaptiveDecision(actionStats, activeActions);
+    }
+  }
+}
+
+function runCpuInferenceForState(simulationState, cpuWorkers, options = {}) {
+  return new Promise((resolve, reject) => {
+    let requestId = workerReqIndex++;
+    let isCancelled = typeof options.isCancelled === 'function' ? options.isCancelled : () => false;
+    let activeActions = getStateActiveActions(simulationState);
+    let adaptiveControl = {
+      disableConfidenceStop: options.disableConfidenceStop === true || options.disableEarlyStop === true,
+      disablePrune: options.disablePrune === true || options.disableEarlyStop === true,
+    };
+    let iteration = computeSettings.cpuIteration;
+    let initialIteration = getAdaptiveInitialIteration(iteration);
+    let batchIteration = getAdaptiveBatchIteration(iteration);
+    let maxIteration = options.maxPct !== undefined
+      ? Math.max(1, Math.floor(iteration * options.maxPct / 100))
+      : getAdaptiveMaxIteration(iteration, getCpuMaxPctForWorkers(cpuWorkers));
+    let actionStats = new Array(6).fill(0).map(() => createActionStats());
+    let localWorkers = Array.from({ length: cpuWorkers }, () => new Worker(workerUrl));
+    let localRunnings = new Array(cpuWorkers).fill(false);
+    let jobQueue = [];
+    let pendingJobs = 0;
+    let lastDecision = { stop: false, summaries: actionStats.map(getActionSummary), bestAction: undefined, gap: 0, z: 0 };
+    let finished = false;
+    let onProgress = typeof options.onProgress === 'function' ? options.onProgress : null;
+
+    function reportProgress(done = false) {
+      if (!onProgress) return;
+      if (done) {
+        onProgress(100);
+        return;
+      }
+      onProgress(getAdaptiveProgressPct(actionStats, activeActions, maxIteration));
+    }
+
+    function cleanup() {
+      localWorkers.forEach(worker => worker.terminate());
+    }
+
+    function cancel() {
+      if (finished) return true;
+      if (!isCancelled()) return false;
+      finished = true;
+      cleanup();
+      reject(new Error('cancelled'));
+      return true;
+    }
+
+    function fail(error) {
+      if (finished) return;
+      finished = true;
+      cleanup();
+      reject(error);
+    }
+
+    function finish(decision) {
+      if (cancel()) return;
+      if (finished) return;
+      finished = true;
+      reportProgress(true);
+      cleanup();
+      resolve(decision);
+    }
+
+    function createBatchJobs(actions, batchSize) {
+      let jobs = [];
+      let chunksPerAction = Math.max(1, Math.ceil(cpuWorkers / Math.max(1, actions.length)));
+      let chunkSize = Math.max(1, Math.ceil(batchSize / chunksPerAction));
+      actions.forEach(action => {
+        let remaining = Math.min(batchSize, maxIteration - actionStats[action].count);
+        while (remaining > 0) {
+          let jobIteration = Math.min(chunkSize, remaining);
+          jobs.push({ action: action, iteration: jobIteration });
+          remaining -= jobIteration;
+        }
+      });
+      return jobs;
+    }
+
+    function scheduleJobs() {
+      if (cancel()) return;
+      for (let i = 0; i < localWorkers.length && jobQueue.length > 0; i++) {
+        if (localRunnings[i]) continue;
+        let job = jobQueue.shift();
+        localRunnings[i] = true;
+        localWorkers[i].postMessage({
+          idx: requestId,
+          iteration: job.iteration,
+          state: simulationState,
+          stage: stage,
+          cardInfo: cardInfo,
+          route: [job.action],
+        });
+      }
+    }
+
+    function completeJob(workerIndex) {
+      if (cancel()) return;
+      localRunnings[workerIndex] = false;
+      pendingJobs--;
+      if (pendingJobs === 0) {
+        finishBatch();
+      } else {
+        scheduleJobs();
+      }
+    }
+
+    function runBatch(actions, batchSize) {
+      if (cancel()) return;
+      let jobs = createBatchJobs(actions, batchSize);
+      if (jobs.length === 0) {
+        finish(lastDecision);
+        return;
+      }
+
+      jobQueue = jobs;
+      pendingJobs = jobQueue.length;
+      scheduleJobs();
+    }
+
+    function finishBatch() {
+      if (cancel()) return;
+      lastDecision = getAdaptiveDecision(actionStats, activeActions);
+      reportProgress();
+      if (shouldStopAdaptive(lastDecision, actionStats, activeActions, maxIteration, adaptiveControl)) {
+        finish(lastDecision);
+        return;
+      }
+
+      if (!adaptiveControl.disablePrune) {
+        activeActions = pruneAdaptiveActions(actionStats, activeActions);
+      }
+      lastDecision = getAdaptiveDecision(actionStats, activeActions);
+      if (!adaptiveControl.disablePrune && activeActions.length <= 1) {
+        finish(lastDecision);
+        return;
+      }
+
+      runBatch(getAdaptiveNextActions(actionStats, activeActions, maxIteration, adaptiveControl), batchIteration);
+    }
+
+    localWorkers.forEach((worker, workerIndex) => {
+      worker.onerror = error => fail(error);
+      worker.onmessage = function (e) {
+        if (cancel()) return;
+        if (e.data.idx !== requestId) return;
+        let action = Number(e.data.route);
+
+        if (e.data.res[0] === -1 || e.data.res[0] === undefined) {
+          completeJob(workerIndex);
+          return;
+        }
+        if (e.data.res[0] === -2) {
+          completeJob(workerIndex);
+          return;
+        }
+
+        mergeActionStats(actionStats[action], e.data.res[1], action);
+        completeJob(workerIndex);
+      };
+    });
+
+    runBatch(activeActions, initialIteration);
+  });
+}
+
+async function measureComputePerfOptions(gpuAvailable, cpuWorkerCandidates) {
+  if (computePerfBenchmarkRunning) return;
+  let benchmarkId = ++computePerfBenchmarkId;
+  let isBenchmarkActive = () => computePerfBenchmarkRunning && benchmarkId === computePerfBenchmarkId;
+  computePerfBenchmarkRunning = true;
+  try {
+    let benchmarkState = getBenchmarkInferenceState();
+    let gpuOptions = gpuAvailable ? ['low', 'medium', 'high'] : [];
+    let cpuOptions = cpuWorkerCandidates.map(value => String(value));
+    computePerfRecommendations = { gpu: null, cpu: null, engine: null };
+    updateComputeEngineCards();
+    updateComputeOptionCards('gpu');
+    updateComputeOptionCards('cpu');
+
+    gpuOptions.forEach(option => setComputePerfRunning('gpu', option, 0));
+    cpuOptions.forEach(option => setComputePerfRunning('cpu', option, 0));
+    if (gpuOptions.length > 0) {
+      try {
+        await warmUpGpuInferenceForState(benchmarkState, { isCancelled: () => !isBenchmarkActive() });
+        if (!isBenchmarkActive()) return;
+        await calibrateGpuInferenceForState(benchmarkState, { isCancelled: () => !isBenchmarkActive() });
+        if (!isBenchmarkActive()) return;
+      } catch (error) {
+        if (!isBenchmarkActive()) return;
+        console.warn('GPU perf warm-up failed.', error);
+      }
+    }
+
+    for (let index = 0; index < gpuOptions.length; index++) {
+      if (!isBenchmarkActive()) return;
+      let option = gpuOptions[index];
+      setComputePerfRunning('gpu', option, 0);
+      try {
+        let elapsedMs = await measureGpuPerfOption(benchmarkState, option, isBenchmarkActive);
+        if (!isBenchmarkActive()) return;
+        if (elapsedMs === null) return;
+        recordComputePerf('gpu', option, elapsedMs, { replace: true });
+      } catch (error) {
+        if (!isBenchmarkActive()) return;
+        console.warn('GPU perf measurement failed.', option, error);
+        setComputePerfError('gpu', option);
+      }
+      if (index < gpuOptions.length - 1) await waitGpuYield(PERF_BENCHMARK_COOLDOWN_MS);
+    }
+    computePerfRecommendations.gpu = getBestMeasuredComputeOption('gpu', gpuOptions);
+    updateComputeOptionCards('gpu');
+
+    for (let index = 0; index < cpuOptions.length; index++) {
+      if (!isBenchmarkActive()) return;
+      let option = cpuOptions[index];
+      setComputePerfRunning('cpu', option, 0);
+      try {
+        let workerTotal = Math.max(1, Math.min(maxWorkerCount, Number(option) || maxWorkerCount));
+        let startedAt = performance.now();
+        await runCpuInferenceForState(benchmarkState, workerTotal, {
+          maxPct: PERF_BENCHMARK_MAX_PCT,
+          disableConfidenceStop: true,
+          disablePrune: true,
+          isCancelled: () => !isBenchmarkActive(),
+          onProgress: pct => {
+            if (isBenchmarkActive()) setComputePerfProgress('cpu', option, pct);
+          },
+        });
+        if (!isBenchmarkActive()) return;
+        recordComputePerf('cpu', option, performance.now() - startedAt, { replace: true });
+      } catch (error) {
+        if (!isBenchmarkActive()) return;
+        console.warn('CPU perf measurement failed.', option, error);
+        setComputePerfError('cpu', option);
+      }
+      if (index < cpuOptions.length - 1) await waitGpuYield(PERF_BENCHMARK_COOLDOWN_MS);
+    }
+    computePerfRecommendations.cpu = getBestMeasuredComputeOption('cpu', cpuOptions);
+    updateComputeOptionCards('cpu');
+    computePerfRecommendations.engine = getRecommendedComputeEngine();
+    updateComputeEngineCards();
+  } finally {
+    if (benchmarkId === computePerfBenchmarkId) {
+      computePerfBenchmarkRunning = false;
+      updateComputeOverallProgressUI();
+    }
+  }
+}
+
+function getGpuPerfMeasurementFallbackPatch(option) {
+  let batchPct = option === 'high' ? 16 : option === 'medium' ? 12 : 8;
+  return {
+    gpuBatchPct: batchPct,
+    targetChunkMs: option === 'high' ? 260 : 180,
+    yieldMs: option === 'high' ? 45 : 90,
+    cooldownRatio: 0,
+    initialChunkPct: 100,
+    minChunkPct: 100,
+  };
+}
+
+function applyGpuPerfMeasurementFallback(option) {
+  if (!gpuCalibrationProfile || !gpuCalibrationProfile.options || !gpuCalibrationProfile.options[option]) return;
+  Object.assign(gpuCalibrationProfile.options[option], getGpuPerfMeasurementFallbackPatch(option));
+  if ((computeSettings.gpuUsage || 'medium') === option) {
+    applyGpuUsageSettings(option);
+  }
+}
+
+async function measureGpuPerfOption(benchmarkState, option, isBenchmarkActive) {
+  let startedAt = performance.now();
+  try {
+    await runGpuInferenceForState(benchmarkState, option, {
+      maxPct: PERF_BENCHMARK_MAX_PCT,
+      disableConfidenceStop: true,
+      disablePrune: true,
+      isCancelled: () => !isBenchmarkActive(),
+      onProgress: pct => {
+        if (isBenchmarkActive()) setComputePerfProgress('gpu', option, pct);
+      },
+    });
+    if (!isBenchmarkActive()) return null;
+    return performance.now() - startedAt;
+  } catch (error) {
+    if (!isBenchmarkActive()) return null;
+    console.warn('GPU perf measurement retrying with conservative chunk.', option, error);
+    if (window.gpuRolloutWorkbench && typeof window.gpuRolloutWorkbench.resetGpuContext === 'function') {
+      window.gpuRolloutWorkbench.resetGpuContext();
+    }
+  }
+
+  setComputePerfRunning('gpu', option, 0);
+  await waitGpuYield(PERF_BENCHMARK_COOLDOWN_MS);
+  startedAt = performance.now();
+  await runGpuInferenceForState(benchmarkState, option, {
+    maxPct: PERF_BENCHMARK_MAX_PCT,
+    disableConfidenceStop: true,
+    disablePrune: true,
+    settingsPatch: getGpuPerfMeasurementFallbackPatch(option),
+    isCancelled: () => !isBenchmarkActive(),
+    onProgress: pct => {
+      if (isBenchmarkActive()) setComputePerfProgress('gpu', option, pct);
+    },
+  });
+  if (!isBenchmarkActive()) return null;
+  let elapsedMs = performance.now() - startedAt;
+  applyGpuPerfMeasurementFallback(option);
+  return elapsedMs;
+}
 
 function resetWorkers() {
   workers.forEach(worker => worker.terminate());
@@ -1573,13 +2869,44 @@ function getAdaptiveBatchIteration(iteration) {
   return Math.max(1, Math.floor(iteration * ADAPTIVE_BATCH_RATIO));
 }
 
-function getAdaptiveMaxIteration(iteration) {
+function getAdaptiveMaxIteration(iteration, maxPct) {
   iteration = Math.max(1, Math.floor(Number(iteration) || 1));
-  return Math.max(1, Math.floor(iteration * ADAPTIVE_MAX_RATIO));
+  let pct = maxPct !== undefined ? Math.max(1, Number(maxPct) || 1) : ADAPTIVE_MAX_RATIO * 100;
+  return Math.max(1, Math.floor(iteration * pct / 100));
+}
+
+function isAdaptiveEarlyStopDisabled() {
+  let params = new URLSearchParams(window.location.search);
+  return params.get('noEarlyStop') === '1';
+}
+
+function normalizeAdaptiveControl(control) {
+  if (typeof control === 'boolean') {
+    return { disableConfidenceStop: control, disablePrune: control };
+  }
+  let urlDisabled = isAdaptiveEarlyStopDisabled();
+  return {
+    disableConfidenceStop: control && control.disableConfidenceStop !== undefined ? control.disableConfidenceStop : urlDisabled,
+    disablePrune: control && control.disablePrune !== undefined ? control.disablePrune : urlDisabled,
+  };
+}
+
+function shouldStopAdaptive(decision, actionStats, activeActions, maxIteration, control) {
+  let adaptiveControl = normalizeAdaptiveControl(control);
+  return activeActions.every(action => actionStats[action].count >= maxIteration) ||
+    (!adaptiveControl.disableConfidenceStop && decision.stop);
+}
+
+function getAdaptiveNextActions(actionStats, activeActions, maxIteration, control) {
+  let adaptiveControl = normalizeAdaptiveControl(control);
+  if (adaptiveControl.disablePrune) {
+    return activeActions.filter(action => actionStats[action].count < maxIteration);
+  }
+  return getAdaptiveSampleActions(actionStats, activeActions, maxIteration);
 }
 
 function createActionStats() {
-  return { count: 0, sum: 0, sumSq: 0, min: Infinity, max: -Infinity, scoreCounts: new Uint32Array(2899) };
+  return { count: 0, sum: 0, sumSq: 0, min: Infinity, max: -Infinity, scoreCounts: new Uint32Array(2899), scoreCountTotal: 0 };
 }
 
 function mergeActionStats(acc, batch, action) {
@@ -1596,17 +2923,20 @@ function mergeActionStats(acc, batch, action) {
       counts.forEach(([score, scoreCount]) => {
         if (score >= 0 && score < acc.scoreCounts.length) {
           acc.scoreCounts[score] += scoreCount;
+          acc.scoreCountTotal += scoreCount;
         }
       });
     } else {
       for (let score = 0; score < counts.length; score++) {
         acc.scoreCounts[score] += counts[score];
+        acc.scoreCountTotal += counts[score];
       }
     }
   } else if (batch.scores && batch.scores[action]) {
     batch.scores[action].forEach(score => {
       if (score >= 0 && score < acc.scoreCounts.length) {
         acc.scoreCounts[score]++;
+        acc.scoreCountTotal++;
       }
     });
   }
@@ -1644,7 +2974,7 @@ function getActionSummary(acc) {
     max: acc.max,
     std: std,
     se: Math.sqrt(variance / acc.count),
-    mid: getMedianFromCounts(acc.scoreCounts, acc.count),
+    mid: acc.scoreCountTotal > 0 ? getMedianFromCounts(acc.scoreCounts, acc.count) : avg,
   };
 }
 
@@ -1730,7 +3060,221 @@ function getAdaptiveSampleActions(actionStats, activeActions, maxIteration) {
   return sampleActions;
 }
 
+async function calcExGpu(activeActions, displayActions, simulationState, requestId) {
+  let actionCount = env.cards.length + 1;
+  let initialIteration = Math.max(1, Math.floor(computeSettings.gpuIteration * 0.1));
+  let batchIteration = Math.max(1, Math.floor(computeSettings.gpuIteration * computeSettings.gpuBatchPct / 100));
+  let maxIteration = Math.max(1, Math.floor(computeSettings.gpuIteration * computeSettings.gpuMaxPct / 100));
+  let dispatchTuner = createGpuDispatchTuner(batchIteration, computeSettings);
+  let actionStats = new Array(6).fill(0).map(() => createActionStats());
+  let tables = buildGpuTables();
+  let requestStartedAt = performance.now();
+  let recordedPerf = false;
+  setComputePerfRunning('gpu', computeSettings.gpuUsage || 'medium');
+
+  function isCurrentRequest() {
+    return isCalcExRequestActive(requestId);
+  }
+
+  function recordGpuPerfOnce() {
+    if (recordedPerf || !isCurrentRequest()) return;
+    recordedPerf = true;
+    recordComputePerf('gpu', computeSettings.gpuUsage || 'medium', performance.now() - requestStartedAt);
+  }
+
+  function getMaxActionIteration() {
+    return Math.max(0, ...actionStats.map(stat => stat.count));
+  }
+
+  function applySummaries(decision) {
+    if (!isCurrentRequest()) return;
+    displayActions.forEach(action => {
+      let summary = decision.summaries[action];
+      env.exScores[action] = summary.avg;
+      env.exValues.min[action] = summary.min;
+      env.exValues.max[action] = summary.max;
+      env.exValues.mid[action] = summary.mid;
+      env.exValues.std[action] = parseFloat(summary.std.toFixed(3));
+      env.exValues.count[action] = summary.count;
+      env.exValues.se[action] = parseFloat(summary.se.toFixed(3));
+    });
+    applyExHighlights(decision);
+
+    if (tooltipIndex !== undefined && displayActions.includes(tooltipIndex)) {
+      tooltipInfo.text = getExScoreTooltipText(tooltipIndex);
+    }
+  }
+
+  function applyExHighlights(decision) {
+    if (!isCurrentRequest()) return;
+    env.exHighlights = new Array(6).fill(false);
+    env.exAction = decision.bestAction;
+
+    if (decision.bestAction === undefined) {
+      env.exScore = Infinity;
+      return;
+    }
+
+    let best = decision.summaries[decision.bestAction];
+    env.exScore = best.avg;
+    let activeActionSet = new Set(activeActions);
+    displayActions.forEach(action => {
+      let summary = decision.summaries[action];
+      env.exValues.status[action] = action === decision.bestAction ? 'best' : activeActionSet.has(action) ? 'active' : 'pruned';
+      if (summary.count === 0 && actionStats[action].count === 0) {
+        env.exValues.gap[action] = 0;
+        env.exValues.z[action] = 0;
+        return;
+      }
+      let gap = best.avg - summary.avg;
+      let combinedSe = Math.sqrt(best.se * best.se + summary.se * summary.se);
+      env.exValues.gap[action] = parseFloat(gap.toFixed(3));
+      env.exValues.z[action] = combinedSe > 0 && isFinite(combinedSe) ? parseFloat((gap / combinedSe).toFixed(3)) : 0;
+    });
+    activeActions.forEach(action => {
+      let summary = decision.summaries[action];
+      let gap = best.avg - summary.avg;
+      env.exHighlights[action] = action === decision.bestAction || gap <= calcHighlightMargin(getMaxActionIteration(), best, summary);
+    });
+  }
+
+  async function evaluateGpuBatch(actions, iteration) {
+    let sample = { state: simulationState, actionCount: actionCount };
+    let remaining = iteration;
+    let allActions = actions.length === actionCount && actions.every((action, index) => action === index);
+    while (remaining > 0) {
+      if (!isCurrentRequest()) return false;
+      let chunkIteration = dispatchTuner.next(remaining);
+      let chunkStartedAt = performance.now();
+      if (allActions) {
+        let result = await window.gpuRolloutWorkbench.runGpuAllActions({
+          tables: tables,
+          sample: sample,
+          rolloutCount: chunkIteration,
+          seed: getGpuRandomSeed(),
+        });
+        if (!isCurrentRequest()) return false;
+        actions.forEach(action => mergeGpuSummary(actionStats[action], result.summaries[action]));
+      } else {
+        let results = await Promise.all(actions.map(action => window.gpuRolloutWorkbench.runGpu({
+          tables: tables,
+          sample: sample,
+          action: action,
+          rolloutCount: chunkIteration,
+          seed: getGpuRandomSeed(),
+        }).then(summary => ({ action, summary }))));
+
+        if (!isCurrentRequest()) return false;
+        results.forEach(({ action, summary }) => {
+          mergeGpuSummary(actionStats[action], { action: action, count: chunkIteration, ...summary });
+        });
+      }
+      dispatchTuner.record(performance.now() - chunkStartedAt, chunkIteration);
+      remaining -= chunkIteration;
+      if (remaining > 0) await waitGpuYield(dispatchTuner.yieldMs);
+    }
+    return true;
+  }
+
+  async function runBatch(actions, iteration) {
+    let runnableActions = actions
+      .map(Number)
+      .filter(action => actionStats[action].count < maxIteration)
+      .map(action => ({
+        action: action,
+        iteration: Math.min(iteration, maxIteration - actionStats[action].count),
+      }))
+      .filter(job => job.iteration > 0);
+
+    if (runnableActions.length === 0) return false;
+
+    for (const job of runnableActions) {
+      if (!isCurrentRequest()) return false;
+      let completed = await evaluateGpuBatch([job.action], job.iteration);
+      if (!completed) return false;
+    }
+    return true;
+  }
+
+  try {
+    console.time('GPU simulation');
+    if (!isCurrentRequest()) return;
+    env.exAction = undefined;
+    env.exScore = Infinity;
+    updateBoard();
+
+    let initialAllActions = activeActions.length === actionCount && activeActions.every((action, index) => action === index);
+    if (initialAllActions) {
+      let completed = await evaluateGpuBatch(activeActions, initialIteration);
+      if (!completed || !isCurrentRequest()) return;
+    } else {
+      let completed = await runBatch(activeActions, initialIteration);
+      if (!completed || !isCurrentRequest()) return;
+    }
+
+    while (true) {
+      if (!isCurrentRequest()) return;
+      let decision = getAdaptiveDecision(actionStats, activeActions);
+      applySummaries(decision);
+      updateBoard();
+
+      if (shouldStopAdaptive(decision, actionStats, activeActions, maxIteration)) {
+        env.exAction = decision.bestAction;
+        recordGpuPerfOnce();
+        console.timeEnd('GPU simulation');
+        console.log('gpu adaptive used ' + getMaxActionIteration() + '/' + computeSettings.gpuIteration + ', elapsed=' + (performance.now() - requestStartedAt).toFixed(1) + 'ms');
+        updateBoard();
+        return;
+      }
+
+      if (!isAdaptiveEarlyStopDisabled()) {
+        activeActions = pruneAdaptiveActions(actionStats, activeActions);
+      }
+      decision = getAdaptiveDecision(actionStats, activeActions);
+      applySummaries(decision);
+      updateBoard();
+
+      if (!isAdaptiveEarlyStopDisabled() && activeActions.length <= 1) {
+        env.exAction = decision.bestAction;
+        recordGpuPerfOnce();
+        console.timeEnd('GPU simulation');
+        updateBoard();
+        return;
+      }
+
+      let sampleActions = getAdaptiveNextActions(actionStats, activeActions, maxIteration);
+      let progressed = await runBatch(sampleActions, batchIteration);
+      if (!isCurrentRequest()) return;
+      if (!progressed) {
+        env.exAction = decision.bestAction;
+        recordGpuPerfOnce();
+        console.timeEnd('GPU simulation');
+        updateBoard();
+        return;
+      }
+    }
+  } catch (error) {
+    if (!isCurrentRequest()) return;
+    console.warn('GPU simulation failed.', error);
+    if (window.gpuRolloutWorkbench && typeof window.gpuRolloutWorkbench.resetGpuContext === 'function') {
+      window.gpuRolloutWorkbench.resetGpuContext();
+    }
+    displayActions.forEach(action => {
+      env.exScores[action] = 'GPU Error';
+      env.exValues.status[action] = 'error';
+    });
+    env.exAction = undefined;
+    env.exScore = Infinity;
+    updateBoard();
+  }
+}
+
 function calcEx(r = [0, 1, 2, 3, 4, 5]) {
+  if (!computeModeReady) {
+    pendingInitialCalc = true;
+    return;
+  }
+  let calcRequestId = beginCalcExRequest();
   if (env.autoProcess) {
     showDiceOverlay = false;
     diceOverlayHoverIndex = -1;
@@ -1771,19 +3315,36 @@ function calcEx(r = [0, 1, 2, 3, 4, 5]) {
     }
   }
 
+  if (activeActions.length === 0) {
+    if (isCalcExRequestActive(calcRequestId)) updateBoard();
+    return;
+  }
+
+  if (computeSettings.engine === 'gpu' && isGpuAvailable()) {
+    calcExGpu(activeActions, activeActions.slice(), env.getState(), calcRequestId);
+    return;
+  }
+
+  let requestStartedAt = performance.now();
+  workerIteration = computeSettings.cpuIteration;
+  workerCount = Math.max(1, Math.min(maxWorkerCount, Number(computeSettings.cpuWorkers) || maxWorkerCount));
+  computeSettings.cpuMaxPct = getCpuMaxPctForWorkers(workerCount);
+  setComputePerfRunning('cpu', String(workerCount));
+
   let requestId = workerReqIndex++;
   resetWorkers();
   let simulationState = env.getState();
   let displayActions = activeActions.slice();
   let initialIteration = getAdaptiveInitialIteration(workerIteration);
   let batchIteration = getAdaptiveBatchIteration(workerIteration);
-  let maxIteration = getAdaptiveMaxIteration(workerIteration);
+  let maxIteration = getAdaptiveMaxIteration(workerIteration, computeSettings.cpuMaxPct);
   let jobQueue = [];
   let pendingJobs = 0;
   let actionStats = new Array(6).fill(0).map(() => createActionStats());
   let lastDecision = { stop: false, summaries: actionStats.map(getActionSummary), bestAction: undefined, gap: 0, z: 0 };
 
   function applySummaries(decision) {
+    if (!isCalcExRequestActive(calcRequestId)) return;
     displayActions.forEach(action => {
       let summary = decision.summaries[action];
       env.exScores[action] = summary.avg;
@@ -1802,14 +3363,17 @@ function calcEx(r = [0, 1, 2, 3, 4, 5]) {
   }
 
   function finishCalc(decision) {
+    if (!isCalcExRequestActive(calcRequestId)) return;
     applySummaries(decision);
     env.exAction = decision.bestAction;
+    recordComputePerf('cpu', String(workerCount), performance.now() - requestStartedAt);
     console.timeEnd(workerIteration + ' simulation');
     console.log('adaptive simulation used ' + getMaxActionIteration() + '/' + workerIteration + ', gap=' + decision.gap.toFixed(3) + ', z=' + decision.z.toFixed(3));
     updateBoard();
   }
 
   function applyExHighlights(decision) {
+    if (!isCalcExRequestActive(calcRequestId)) return;
     env.exHighlights = new Array(6).fill(false);
     env.exAction = decision.bestAction;
 
@@ -1846,6 +3410,7 @@ function calcEx(r = [0, 1, 2, 3, 4, 5]) {
   }
 
   function runBatch(actions, iteration) {
+    if (!isCalcExRequestActive(calcRequestId)) return;
     let jobs = createBatchJobs(actions, iteration);
     if (jobs.length === 0) {
       finishCalc(lastDecision);
@@ -1873,6 +3438,7 @@ function calcEx(r = [0, 1, 2, 3, 4, 5]) {
   }
 
   function scheduleJobs() {
+    if (!isCalcExRequestActive(calcRequestId)) return;
     for (let i = 0; i < workers.length && jobQueue.length > 0; i++) {
       if (workerRunnings[i]) continue;
       let job = jobQueue.shift();
@@ -1889,6 +3455,7 @@ function calcEx(r = [0, 1, 2, 3, 4, 5]) {
   }
 
   function completeJob(workerIndex) {
+    if (!isCalcExRequestActive(calcRequestId)) return;
     workerRunnings[workerIndex] = false;
     pendingJobs--;
     if (pendingJobs === 0) {
@@ -1899,27 +3466,30 @@ function calcEx(r = [0, 1, 2, 3, 4, 5]) {
   }
 
   function finishBatch() {
+    if (!isCalcExRequestActive(calcRequestId)) return;
     lastDecision = getAdaptiveDecision(actionStats, activeActions);
     applySummaries(lastDecision);
     updateBoard();
-    if (lastDecision.stop || activeActions.every(action => actionStats[action].count >= maxIteration)) {
+    if (shouldStopAdaptive(lastDecision, actionStats, activeActions, maxIteration)) {
       finishCalc(lastDecision);
     } else {
-      activeActions = pruneAdaptiveActions(actionStats, activeActions);
+      if (!isAdaptiveEarlyStopDisabled()) {
+        activeActions = pruneAdaptiveActions(actionStats, activeActions);
+      }
       lastDecision = getAdaptiveDecision(actionStats, activeActions);
       applySummaries(lastDecision);
       updateBoard();
-      if (activeActions.length <= 1) {
+      if (!isAdaptiveEarlyStopDisabled() && activeActions.length <= 1) {
         finishCalc(lastDecision);
       } else {
-        runBatch(getAdaptiveSampleActions(actionStats, activeActions, maxIteration), batchIteration);
+        runBatch(getAdaptiveNextActions(actionStats, activeActions, maxIteration), batchIteration);
       }
     }
   }
 
   workers.forEach((worker, workerIndex) => {
     worker.onmessage = function (e) {
-      if (e.data.idx !== requestId) return;
+      if (e.data.idx !== requestId || !isCalcExRequestActive(calcRequestId)) return;
       let action = Number(e.data.route);
 
       switch (e.data.res[0]) {
@@ -1941,12 +3511,8 @@ function calcEx(r = [0, 1, 2, 3, 4, 5]) {
     };
   });
 
-  if (activeActions.length === 0) {
-    updateBoard();
-    return;
-  }
-
   console.time(workerIteration + ' simulation');
+  if (!isCalcExRequestActive(calcRequestId)) return;
   env.exAction = undefined;
   env.exScore = Infinity;
   updateBoard();
@@ -1970,6 +3536,230 @@ function getBoardInfo() {
   imagesPreload();
 }
 
+function hideLoadingOverlay() {
+  let loading = document.getElementById('adventure-loading');
+  if (loading && loading.parentNode) {
+    loading.parentNode.removeChild(loading);
+  }
+}
+
+function showComputeModeModal(onDone) {
+  hideLoadingOverlay();
+  let existing = document.getElementById('adventure-compute-modal');
+  if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+
+  let gpuAvailable = isGpuAvailable();
+  let root = document.createElement('div');
+  root.id = 'adventure-compute-modal';
+  root.style.position = 'fixed';
+  root.style.inset = '0';
+  root.style.zIndex = '10000';
+  root.style.display = 'flex';
+  root.style.alignItems = 'center';
+  root.style.justifyContent = 'center';
+  root.style.background = 'rgba(15, 23, 42, 0.62)';
+  root.style.fontFamily = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+
+  let card = document.createElement('div');
+  card.style.width = 'min(560px, calc(100vw - 32px))';
+  card.style.maxHeight = 'calc(100vh - 32px)';
+  card.style.overflow = 'auto';
+  card.style.borderRadius = '8px';
+  card.style.background = '#ffffff';
+  card.style.boxShadow = '0 24px 70px rgba(15, 23, 42, 0.35)';
+  card.style.border = '1px solid rgba(15, 23, 42, 0.12)';
+  card.style.padding = '22px';
+
+  let cpuWorkerCandidates = [1, Math.ceil(maxWorkerCount / 2), maxWorkerCount]
+    .filter((value, index, values) => value >= 1 && values.indexOf(value) === index);
+  let defaultCpuWorkers = Math.ceil(maxWorkerCount / 2);
+  let selectedCpuWorkers = Math.max(1, Math.min(maxWorkerCount, Number(computeSettings.cpuWorkers) || defaultCpuWorkers));
+  if (!cpuWorkerCandidates.includes(selectedCpuWorkers)) {
+    cpuWorkerCandidates.push(selectedCpuWorkers);
+    cpuWorkerCandidates.sort((a, b) => a - b);
+  }
+  let selectedGpuUsage = computeSettings.gpuUsage || 'medium';
+  let gpuCardDetail = gpuAvailable
+    ? 'WebGPU로 rollout batch를 계산합니다. 브라우저/GPU 지원이 필요하지만 추론 시간과 응답 속도 면에서 유리합니다.'
+    : '호환되지 않는 GPU로 감지되어 이 기기에서는 GPU 엔진을 사용할 수 없습니다.';
+  let gpuCardBadge = gpuAvailable
+    ? '<span data-engine-recommend-badge style="display:none;align-items:center;border-radius:999px;background:#16a34a;color:white;font-size:11px;font-weight:700;padding:2px 7px;">추천</span>'
+    : '<span style="display:inline-flex;align-items:center;border-radius:999px;background:#fee2e2;color:#991b1b;font-size:11px;font-weight:800;padding:2px 7px;">사용 불가</span>';
+  let gpuCardStyle = gpuAvailable
+    ? 'display:block;border:1px solid #2563eb;border-radius:8px;padding:12px;cursor:pointer;background:#eff6ff;'
+    : 'display:block;border:1px solid #fecaca;border-radius:8px;padding:12px;cursor:not-allowed;background:#fff1f2;opacity:0.9;';
+  let cpuWorkerCards = cpuWorkerCandidates.map(value => {
+    let label = value === 1 ? '낮음' : (value === maxWorkerCount ? '높음' : '보통');
+    let isDefault = value === defaultCpuWorkers;
+    let checked = value === selectedCpuWorkers ? ' checked' : '';
+    let defaultText = isDefault ? ' (기본값)' : '';
+    let detail = value === 1 ? '최소' : (value === maxWorkerCount ? '물리 코어 추정 기준 최대' : '물리 코어 추정 기준 중간');
+    return `
+      <label data-option-engine="cpu" data-option-key="${value}" style="display:block;border:1px solid #cbd5e1;border-radius:8px;padding:10px;cursor:pointer;background:#f8fafc;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:5px;">
+          <span style="display:flex;align-items:center;gap:7px;">
+            <input type="radio" name="cpu-workers" value="${value}" data-usage="${label}"${checked}>
+            <strong>${label}${defaultText}</strong>
+          </span>
+          <span data-recommend-badge style="display:none;align-items:center;border-radius:999px;background:#16a34a;color:white;font-size:11px;font-weight:700;padding:2px 7px;">추천</span>
+        </div>
+        <div style="font-size:12px;line-height:1.4;color:#334155;">${detail} / worker ${value}개</div>
+        <div data-perf-text data-perf-engine="cpu" data-perf-key="${value}" style="font-size:12px;line-height:1.4;color:#64748b;margin-top:5px;">${getComputePerfHtml('cpu', String(value))}</div>
+        <div data-perf-progress style="display:none;height:3px;background:#e2e8f0;border-radius:999px;overflow:hidden;margin-top:8px;">
+          <div data-perf-progress-fill style="height:100%;width:0%;background:#2563eb;border-radius:999px;transition:width 120ms linear;"></div>
+        </div>
+      </label>`;
+  }).join('');
+  let gpuUsageCards = [
+    { key: 'low', label: '낮음', detail: '다른 작업 우선', defaultText: '' },
+    { key: 'medium', label: '보통', detail: '균형', defaultText: ' (기본값)' },
+    { key: 'high', label: '높음', detail: '빠른 계산 우선', defaultText: '' },
+  ].map(option => `
+      <label data-option-engine="gpu" data-option-key="${option.key}" style="display:block;border:1px solid #cbd5e1;border-radius:8px;padding:10px;cursor:pointer;background:#f8fafc;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:5px;">
+          <span style="display:flex;align-items:center;gap:7px;">
+            <input type="radio" name="gpu-usage" value="${option.key}"${option.key === selectedGpuUsage ? ' checked' : ''}>
+            <strong>${option.label}${option.defaultText}</strong>
+          </span>
+          <span data-recommend-badge style="display:none;align-items:center;border-radius:999px;background:#16a34a;color:white;font-size:11px;font-weight:700;padding:2px 7px;">추천</span>
+        </div>
+        <div style="font-size:12px;line-height:1.4;color:#334155;">${option.detail}</div>
+        <div data-perf-text data-perf-engine="gpu" data-perf-key="${option.key}" style="font-size:12px;line-height:1.4;color:#64748b;margin-top:5px;">${getComputePerfHtml('gpu', option.key)}</div>
+        <div data-perf-progress style="display:none;height:3px;background:#e2e8f0;border-radius:999px;overflow:hidden;margin-top:8px;">
+          <div data-perf-progress-fill style="height:100%;width:0%;background:#2563eb;border-radius:999px;transition:width 120ms linear;"></div>
+        </div>
+      </label>`).join('');
+
+  card.innerHTML = `
+    <div style="font-size:20px;font-weight:700;color:#0f172a;margin-bottom:6px;">계산 방식 선택</div>
+    <div style="font-size:13px;line-height:1.55;color:#475569;margin-bottom:16px;">
+      GPU는 계산 비용과 응답 속도에서 유리합니다. 판단 품질은 유지됩니다. 선택은 주로 실행 비용과 대기 시간을 기준으로 하면 됩니다.
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
+      <label id="compute-gpu-card" style="${gpuCardStyle}">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;">
+          <span style="display:flex;align-items:center;gap:8px;">
+            <input type="radio" name="compute-engine" value="gpu" ${gpuAvailable ? 'checked' : 'disabled'}>
+            <strong>GPU 계산 엔진</strong>
+          </span>
+          ${gpuCardBadge}
+        </div>
+        <div style="font-size:12px;line-height:1.45;color:${gpuAvailable ? '#334155' : '#7f1d1d'};">${gpuCardDetail}</div>
+      </label>
+      <label id="compute-cpu-card" style="display:block;border:1px solid #cbd5e1;border-radius:8px;padding:12px;cursor:pointer;background:#f8fafc;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;">
+          <span style="display:flex;align-items:center;gap:8px;">
+            <input type="radio" name="compute-engine" value="cpu" ${gpuAvailable ? '' : 'checked'}>
+            <strong>CPU 계산 엔진</strong>
+          </span>
+          <span data-engine-recommend-badge style="display:none;align-items:center;border-radius:999px;background:#16a34a;color:white;font-size:11px;font-weight:700;padding:2px 7px;">추천</span>
+        </div>
+        <div style="font-size:12px;line-height:1.45;color:#334155;">기존 worker 계산입니다. 호환성은 좋지만 추론 시간이 길어질 수 있습니다.</div>
+      </label>
+    </div>
+    <div id="gpu-settings" style="margin-bottom:14px;">
+      <div style="font-weight:700;color:#0f172a;margin-bottom:6px;">GPU 사용량</div>
+      <div id="gpu-usage-options" style="display:grid;grid-template-columns:1fr;gap:8px;">
+        ${gpuUsageCards}
+      </div>
+    </div>
+    <div id="cpu-settings" style="margin-bottom:16px;">
+      <div style="font-weight:700;color:#0f172a;margin-bottom:6px;">CPU 사용량</div>
+      <div id="cpu-worker-options" style="display:grid;grid-template-columns:1fr;gap:8px;">
+        ${cpuWorkerCards}
+      </div>
+    </div>
+    <div data-overall-perf-progress style="display:none;margin:0 0 14px 0;padding:10px;border:1px solid #e2e8f0;border-radius:8px;background:#f8fafc;">
+      <div data-overall-perf-text style="font-size:12px;line-height:1.4;color:#475569;margin-bottom:7px;">추천 항목 계산중입니다. [0%]</div>
+      <div style="height:4px;background:#e2e8f0;border-radius:999px;overflow:hidden;">
+        <div data-overall-perf-fill style="height:100%;width:0%;background:#16a34a;border-radius:999px;transition:width 120ms linear;"></div>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;">
+      <button id="compute-start" style="border:0;border-radius:6px;padding:9px 14px;background:#2563eb;color:white;font-weight:700;cursor:pointer;">시작</button>
+    </div>
+  `;
+
+  root.appendChild(card);
+  document.body.appendChild(root);
+
+  let startButton = card.querySelector('#compute-start');
+
+  function getSelectedGpuUsage() {
+    return card.querySelector('input[name="gpu-usage"]:checked')?.value || 'medium';
+  }
+
+  function getSelectedCpuWorkers() {
+    return Math.max(1, Math.min(maxWorkerCount, Number(card.querySelector('input[name="cpu-workers"]:checked')?.value) || defaultCpuWorkers));
+  }
+
+  function applyGpuUsage(value) {
+    applyGpuUsageSettings(value);
+    updateComputeOptionCards('gpu');
+  }
+
+  function updateCpuWorkersHelp() {
+    let selectedCpu = card.querySelector('input[name="cpu-workers"]:checked');
+    let workers = getSelectedCpuWorkers();
+    computeSettings.cpuWorkers = workers;
+    computeSettings.cpuMaxPct = getCpuMaxPctForWorkers(workers);
+    computeSettings.cpuUsage = selectedCpu?.dataset?.usage || '보통';
+    updateComputeOptionCards('cpu');
+  }
+
+  function updateCards() {
+    let selected = card.querySelector('input[name="compute-engine"]:checked')?.value || 'cpu';
+    card.querySelector('#gpu-settings').style.display = selected === 'gpu' ? 'block' : 'none';
+    card.querySelector('#cpu-settings').style.display = selected === 'cpu' ? 'block' : 'none';
+    updateComputeEngineCards();
+  }
+
+  card.querySelectorAll('input[name="compute-engine"]').forEach(input => {
+    input.addEventListener('change', updateCards);
+  });
+  card.querySelectorAll('input[name="gpu-usage"]').forEach(input => {
+    input.addEventListener('change', () => applyGpuUsage(getSelectedGpuUsage()));
+  });
+  card.querySelectorAll('input[name="cpu-workers"]').forEach(input => {
+    input.addEventListener('change', updateCpuWorkersHelp);
+  });
+  startButton.addEventListener('click', async () => {
+    startButton.disabled = true;
+    startButton.style.opacity = '0.7';
+    cancelComputePerfBenchmark();
+    let selected = card.querySelector('input[name="compute-engine"]:checked')?.value || 'cpu';
+    computeSettings.engine = selected === 'gpu' && gpuAvailable ? 'gpu' : 'cpu';
+    computeSettings.cpuIteration = 10000;
+    computeSettings.cpuWorkers = getSelectedCpuWorkers();
+    computeSettings.cpuMaxPct = getCpuMaxPctForWorkers(computeSettings.cpuWorkers);
+    workerIteration = computeSettings.cpuIteration;
+    applyGpuUsage(getSelectedGpuUsage());
+    await waitComputePerfBenchmarkIdle();
+    root.remove();
+    if (typeof onDone === 'function') onDone();
+    if (pendingInitialCalc) {
+      pendingInitialCalc = false;
+      calcEx();
+    }
+  });
+
+  applyGpuUsage(getSelectedGpuUsage());
+  updateCpuWorkersHelp();
+  updateCards();
+  updateComputeEngineCards();
+  updateComputeOptionCards('gpu');
+  updateComputeOptionCards('cpu');
+  if (new URLSearchParams(window.location.search).get('skipPerfBenchmark') !== '1') {
+    setTimeout(() => {
+      if (!root.isConnected) return;
+      computePerfBenchmarkPromise = measureComputePerfOptions(gpuAvailable, cpuWorkerCandidates)
+        .catch(error => console.warn('Compute perf benchmark failed.', error))
+        .finally(() => {
+          computePerfBenchmarkPromise = null;
+        });
+    }, 0);
+  }
+}
 
 
 
@@ -1977,9 +3767,7 @@ function getBoardInfo() {
 
 
 
-// =======================
-// 공용: 카드 정보 창 닫기
-// =======================
+
 function closeCardInfoPanelGlobal() {
   try {
     if (typeof showCardInfoYN !== 'undefined' && showCardInfoYN) {
@@ -1988,17 +3776,11 @@ function closeCardInfoPanelGlobal() {
         updateBoard();
       }
     }
-  } catch (e) {
-    // 실패해도 무시
-  }
+  } catch (e) {}
 }
 
-// =======================
-// 사용법 안내 가이드
-// =======================
 function initUsageOverlay() {
   if (!canvas) return;
-  // 이미 떠 있으면 중복 생성 방지
   if (document.getElementById('adventure-usage-root')) return;
 
   var steps = [
@@ -2013,10 +3795,11 @@ function initUsageOverlay() {
     },
     {
       id: 'exScore',
-      title: '예상 점수와 통계 활용',
+      title: '예상 점수와 계산 설정',
       lines: [
-        '예상 점수(하늘색 영역): 클릭하면 시뮬레이션 정확도(시행 횟수)를 수정할 수 있습니다.',
+        '예상 점수(하늘색 영역): 클릭하면 계산 엔진과 사용량 옵션을 다시 선택할 수 있습니다.',
         'Ctrl + R: 예상 점수를 재계산할 수 있습니다. 점수 출력 영역을 클릭해도 같은 기능을 사용할 수 있습니다.',
+        '설정 창은 이 기기에서 GPU/CPU 옵션별 추론 시간을 실측하고, 가장 빠른 옵션과 엔진에 추천 배지를 표시합니다.',
         '점수 출력 영역에 마우스를 올려두면 샘플수·범위·중앙값·표준오차·95% CI 등 상세 통계를 볼 수 있습니다.',
         '"자세히" 버튼을 눌러 각 통계의 의미와 해석 방법에 대한 간단한 가이드를 확인할 수 있습니다.'
       ],
@@ -2156,6 +3939,7 @@ function initUsageOverlay() {
 function createUsageOverlayWithSteps(steps) {
   var currentStepIndex = 0;
   var isActive = true;
+  var detailOpen = false;
 
   var canvasWidth = canvas.width || 1024;
   var canvasHeight = canvas.height || 694;
@@ -2200,7 +3984,7 @@ function createUsageOverlayWithSteps(steps) {
   bubble.style.fontFamily = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
   bubble.style.color = '#0f172a';
   bubble.style.fontSize = '13px';
-  bubble.style.pointerEvents = 'auto';
+  bubble.style.pointerEvents = 'none';
 
   var bubbleArrow = document.createElement('div');
   bubbleArrow.style.position = 'absolute';
@@ -2229,6 +4013,7 @@ function createUsageOverlayWithSteps(steps) {
   footer.style.alignItems = 'center';
   footer.style.justifyContent = 'space-between';
   footer.style.marginTop = '4px';
+  footer.style.pointerEvents = 'auto';
 
   var leftFooter = document.createElement('div');
   leftFooter.style.display = 'flex';
@@ -2288,8 +4073,8 @@ function createUsageOverlayWithSteps(steps) {
   detailPanel.style.borderTop = '1px solid #e2e8f0';
   detailPanel.style.fontSize = '12px';
   detailPanel.style.color = '#4b5563';
+  detailPanel.style.pointerEvents = 'auto';
 
-  // 건너뛰기 확인 박스
   var skipConfirm = document.createElement('div');
   skipConfirm.style.position = 'fixed';
   skipConfirm.style.left = `${canvas.width / 2}px`
@@ -2356,13 +4141,31 @@ function createUsageOverlayWithSteps(steps) {
   root.appendChild(skipConfirm);
 
   document.body.appendChild(root);
+  var renderFrame = null;
+  var canvasResizeObserver = typeof ResizeObserver !== 'undefined'
+    ? new ResizeObserver(scheduleRenderStep)
+    : null;
+  if (canvasResizeObserver) canvasResizeObserver.observe(canvas);
 
   function cleanup() {
     isActive = false;
+    if (renderFrame !== null) cancelAnimationFrame(renderFrame);
+    if (canvasResizeObserver) canvasResizeObserver.disconnect();
     if (root && root.parentNode) root.parentNode.removeChild(root);
     canvas.removeEventListener('click', canvasClickListener, true);
-    window.removeEventListener('resize', renderStep);
+    window.removeEventListener('resize', scheduleRenderStep);
+    window.removeEventListener('scroll', scheduleRenderStep, true);
+    document.removeEventListener('mousemove', scheduleRenderStep, true);
+    document.removeEventListener('mouseup', scheduleRenderStep, true);
     document.removeEventListener('keydown', escHandler);
+  }
+
+  function scheduleRenderStep() {
+    if (!isActive || renderFrame !== null) return;
+    renderFrame = requestAnimationFrame(function () {
+      renderFrame = null;
+      renderStep();
+    });
   }
 
   function escHandler(e) {
@@ -2378,21 +4181,19 @@ function createUsageOverlayWithSteps(steps) {
     var prevStep = steps[currentStepIndex];
     var nextStep = steps[index];
 
-    // 7 → 8로 넘어갈 때
     if (prevStep && nextStep && prevStep.id === 'cardInfoButton' && nextStep.id === 'cardInfoPanel' && !showCardInfoYN) {
       drawCardInfo();
     }
 
-    // 8 → 7로 되돌아갈 때
     if (prevStep && nextStep && prevStep.id === 'cardInfoPanel' && nextStep.id === 'cardInfoButton') {
       closeCardInfoPanelGlobal();
     }
-    // 9 → 10으로 넘어갈 때
     if (prevStep && nextStep && prevStep.id === 'cardGetByName' && nextStep.id === 'mode') {
       closeCardInfoPanelGlobal();
     }
 
     currentStepIndex = index;
+    detailOpen = false;
     renderStep();
   }
 
@@ -2410,14 +4211,12 @@ function createUsageOverlayWithSteps(steps) {
     var localX = x / scaleX;
     var localY = y / scaleY;
 
-    // 8번, 9번 스텝에서는 실수로 카드 정보창이 닫히지 않도록 시도
     if (step.id === 'cardInfoPanel' || step.id === 'cardGetByName') {
       if (!isInsideRegion(localX, localY, REGION_CARDINFO)) {
         e.stopPropagation();
         e.preventDefault();
         return;
       }
-      // 영역 안 클릭은 그대로 통과
       return;
     }
   }
@@ -2427,17 +4226,17 @@ function createUsageOverlayWithSteps(steps) {
   function renderStep() {
     var step = steps[currentStepIndex];
     if (!step) return;
+    footer.style.pointerEvents = step.id === 'characterDrag' && isDraggingCharacter ? 'none' : 'auto';
+    detailPanel.style.pointerEvents = footer.style.pointerEvents;
 
     var canvasRect = canvas.getBoundingClientRect();
     var scaleX = canvasRect.width / canvasWidth;
     var scaleY = canvasRect.height / canvasHeight;
 
-    // 🔹 1) dynamicRegion이 있으면 우선 사용
     var r = null;
     if (typeof step.dynamicRegion === 'function') {
       r = step.dynamicRegion();
     }
-    // 🔹 2) 없거나 null이면 기존 region 사용
     if (!r && step.region) {
       r = step.region;
     }
@@ -2447,7 +4246,6 @@ function createUsageOverlayWithSteps(steps) {
     var width = (r.x2 - r.x1) * scaleX;
     var height = (r.y2 - r.y1) * scaleX;
 
-    // 강조 영역
     var pad = 6;
     left -= pad;
     top -= pad;
@@ -2495,9 +4293,9 @@ function createUsageOverlayWithSteps(steps) {
         li.innerHTML = '<span style="color:#1d4ed8; font-weight:600;">' +
           key +
           ':</span>' +
-          rest; // rest 부분은 HTML이 포함될 수 있음
+          rest;
       } else {
-        li.innerHTML = line; // 이 경우 전체 문자열을 HTML로 해석
+        li.innerHTML = line;
       }
 
       bodyEl.appendChild(li);
@@ -2534,26 +4332,75 @@ function createUsageOverlayWithSteps(steps) {
 
     if (step.detailHtml) {
       detailBtn.style.display = 'inline-block';
-      detailBtn.textContent = '자세히';
-      detailPanel.style.display = 'none';
+      detailBtn.textContent = detailOpen ? '간단히' : '자세히';
+      detailPanel.style.display = detailOpen ? 'block' : 'none';
+      if (detailOpen) detailPanel.innerHTML = step.detailHtml;
     } else {
       detailBtn.style.display = 'none';
+      detailOpen = false;
       detailPanel.style.display = 'none';
     }
 
     var bubbleWidth = 320;
     var margin = 18;
-    var bubbleLeft = left + width + margin;
-    var bubbleTop = top;
+    var bubbleRect = bubble.getBoundingClientRect();
+    var bubbleHeight = Math.max(bubbleRect.height, 120);
+    var bubbleLeft;
+    var bubbleTop;
+    var arrowMode = 'left';
+    var rightSpace = vw - (left + width) - margin;
+    var leftSpace = left - margin;
+    var bottomSpace = vh - (top + height) - margin;
+    var topSpace = top - margin;
 
-    if (bubbleLeft + bubbleWidth > vw - 16) {
-      bubbleLeft = Math.min(Math.max(16, left + width / 2 - bubbleWidth / 2), vw - bubbleWidth - 16);
+    if (rightSpace >= bubbleWidth + 16) {
+      bubbleLeft = left + width + margin;
+      bubbleTop = top;
+      arrowMode = 'left';
+    } else if (leftSpace >= bubbleWidth + 16) {
+      bubbleLeft = left - bubbleWidth - margin;
+      bubbleTop = top;
+      arrowMode = 'right';
+    } else if (bottomSpace >= bubbleHeight + 16 || bottomSpace >= topSpace) {
+      bubbleLeft = left + width / 2 - bubbleWidth / 2;
       bubbleTop = top + height + margin;
-      bubbleArrow.style.borderRight = '10px solid transparent';
-      bubbleArrow.style.borderTop = '8px solid white';
-      bubbleArrow.style.borderBottom = 'none';
-      bubbleArrow.style.left = '24px';
+      arrowMode = 'top';
+    } else {
+      bubbleLeft = left + width / 2 - bubbleWidth / 2;
+      bubbleTop = top - bubbleHeight - margin;
+      arrowMode = 'bottom';
+    }
+
+    bubbleLeft = Math.min(Math.max(16, bubbleLeft), Math.max(16, vw - bubbleWidth - 16));
+    bubbleTop = Math.min(Math.max(16, bubbleTop), Math.max(16, vh - bubbleHeight - 16));
+
+    bubbleArrow.style.borderTop = 'none';
+    bubbleArrow.style.borderBottom = 'none';
+    bubbleArrow.style.borderLeft = 'none';
+    bubbleArrow.style.borderRight = 'none';
+    bubbleArrow.style.left = '';
+    bubbleArrow.style.right = '';
+    bubbleArrow.style.top = '';
+    bubbleArrow.style.bottom = '';
+
+    if (arrowMode === 'top') {
+      bubbleArrow.style.borderLeft = '8px solid transparent';
+      bubbleArrow.style.borderRight = '8px solid transparent';
+      bubbleArrow.style.borderBottom = '8px solid white';
+      bubbleArrow.style.left = Math.min(Math.max(24, left + width / 2 - bubbleLeft), bubbleWidth - 24) + 'px';
       bubbleArrow.style.top = '-8px';
+    } else if (arrowMode === 'bottom') {
+      bubbleArrow.style.borderLeft = '8px solid transparent';
+      bubbleArrow.style.borderRight = '8px solid transparent';
+      bubbleArrow.style.borderTop = '8px solid white';
+      bubbleArrow.style.left = Math.min(Math.max(24, left + width / 2 - bubbleLeft), bubbleWidth - 24) + 'px';
+      bubbleArrow.style.bottom = '-8px';
+    } else if (arrowMode === 'right') {
+      bubbleArrow.style.borderTop = '8px solid transparent';
+      bubbleArrow.style.borderBottom = '8px solid transparent';
+      bubbleArrow.style.borderLeft = '10px solid white';
+      bubbleArrow.style.right = '-10px';
+      bubbleArrow.style.top = '18px';
     } else {
       bubbleArrow.style.borderTop = '8px solid transparent';
       bubbleArrow.style.borderBottom = '8px solid transparent';
@@ -2597,18 +4444,14 @@ function createUsageOverlayWithSteps(steps) {
     let step = steps[currentStepIndex];
 
     if (!step || !step.detailHtml) return;
-    
-    if (detailPanel.style.display === 'none') {
-      detailPanel.style.display = 'block';
-      detailBtn.textContent = '간단히';
-      detailPanel.innerHTML = step.detailHtml;
-    } else {
-      detailPanel.style.display = 'none';
-      detailBtn.textContent = '자세히';
-    }
+    detailOpen = !detailOpen;
+    renderStep();
   });
 
-  window.addEventListener('resize', renderStep);
+  window.addEventListener('resize', scheduleRenderStep);
+  window.addEventListener('scroll', scheduleRenderStep, true);
+  document.addEventListener('mousemove', scheduleRenderStep, true);
+  document.addEventListener('mouseup', scheduleRenderStep, true);
 
   renderStep();
 }
@@ -2624,12 +4467,3 @@ function styleUsagePrimaryBtn(btn, disabled) {
   btn.style.cursor = disabled ? 'default' : 'pointer';
   btn.style.opacity = disabled ? '0.4' : '1';
 }
-
-// DOM 로드 시 초기화
-(function () {
-  if (document.readyState === 'complete' || document.readyState === 'interactive') {
-    setTimeout(initUsageOverlay, 0);
-  } else {
-    document.addEventListener('DOMContentLoaded', initUsageOverlay);
-  }
-})();
