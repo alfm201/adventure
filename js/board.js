@@ -62,11 +62,20 @@ class Board {
     }
   }
 
+  clampScore(score) {
+    return Math.max(1, Math.min(2898, Number(score) || 1));
+  }
+
+  getMoveCardTargetIndex(card, extraMove = 0) {
+    const targetIndex = this.score + card[2] + extraMove - 1;
+    return targetIndex >= 0 && targetIndex < 2898 ? targetIndex : null;
+  }
+
   updateScore(value, stop = false) {
     if (stop) {
       value = this.checkStop(value);
     }
-    this.score = Math.min(2898, this.score + value);
+    this.score = this.clampScore(this.score + value);
     this.checkEvent();
   }
 
@@ -83,6 +92,7 @@ class Board {
   }
 
   checkEvent() {
+    this.score = this.clampScore(this.score);
     let eventType = stage[this.score - 1][5];
     switch (eventType) {
       case 2:
@@ -181,7 +191,7 @@ class Board {
 
   setState(state) {
     this.autoProcess = false;
-    this.score = state[2];
+    this.score = this.clampScore(state[2]);
     this.diceUse = state[5];
     this.isDouble = state[6] === 1;
 
@@ -211,21 +221,26 @@ class Board {
 
     for (let i = 0; i < len; i++) {
       // 칸수 행운카드 사용시 1칸 이상 점프하여 행운카드 획득
-      if (this.cards[i][1] === 1 && this.score + this.cards[i][2] - 1 < 2898 && stage[this.score + this.cards[i][2] - 1][4] > 0 && stage[this.score + this.cards[i][2] + stage[this.score + this.cards[i][2] - 1][4] - 1][5] === 2) {
+      const targetIndex = this.cards[i][1] === 1 ? this.getMoveCardTargetIndex(this.cards[i]) : null;
+      const jump = targetIndex === null ? 0 : stage[targetIndex][4];
+      const jumpTargetIndex = targetIndex === null ? null : targetIndex + jump;
+      if (targetIndex !== null && jump > 0 && jumpTargetIndex >= 0 && jumpTargetIndex < 2898 && stage[jumpTargetIndex][5] === 2) {
         return i + 1;
       }
     }
 
     for (let i = 0; i < len; i++) {
       // 칸수 행운카드 사용시 행운카드 획득
-      if (this.cards[i][1] === 1 && this.score + this.cards[i][2] - 1 < 2898 && stage[this.score + this.cards[i][2] - 1][5] === 2) {
+      const targetIndex = this.cards[i][1] === 1 ? this.getMoveCardTargetIndex(this.cards[i]) : null;
+      if (targetIndex !== null && stage[targetIndex][5] === 2) {
         return i + 1;
       }
     }
 
     for (let i = 0; i < len; i++) {
       // 칸수 행운카드 사용시 29칸 이상 점프
-      if (this.cards[i][1] === 1 && this.score + this.cards[i][2] - 1 < 2898 && stage[this.score + this.cards[i][2] - 1][4] >= 29) {
+      const targetIndex = this.cards[i][1] === 1 ? this.getMoveCardTargetIndex(this.cards[i]) : null;
+      if (targetIndex !== null && stage[targetIndex][4] >= 29) {
         return i + 1;
       }
     }
@@ -275,8 +290,10 @@ class Board {
       for (let i = 0; i < len; i++) {
         for (let j = 0; j < len; j++) {
           // 칸수 행운카드 2개 사용하여 행운카드 획득
-          if (i !== j && this.cards[i][1] === 1 && this.cards[j][1] === 1 && this.score + this.cards[i][2] + this.cards[j][2] - 1 < 2898 && this.score + this.cards[i][2] - 1 < 2898 &&
-            (stage[this.score + this.cards[i][2] - 1][4] > 0 && stage[this.score + this.cards[i][2] + this.cards[j][2] - 1][5] === 2)) {
+          const firstTargetIndex = this.cards[i][1] === 1 ? this.getMoveCardTargetIndex(this.cards[i]) : null;
+          const combinedTargetIndex = (this.cards[i][1] === 1 && this.cards[j][1] === 1) ? this.getMoveCardTargetIndex(this.cards[i], this.cards[j][2]) : null;
+          if (i !== j && firstTargetIndex !== null && combinedTargetIndex !== null &&
+            (stage[firstTargetIndex][4] > 0 && stage[combinedTargetIndex][5] === 2)) {
             return i + 1;
           }
         }
@@ -284,7 +301,8 @@ class Board {
 
       // 없으면 칸수 행운카드 사용
       for (let i = 0; i < len; i++) {
-        if (this.cards[i][1] === 1 && this.score + this.cards[i][2] - 1 < 2898 && Math.sign(stage[this.score + this.cards[i][2] - 1][4]) !== -1) {
+        const targetIndex = this.cards[i][1] === 1 ? this.getMoveCardTargetIndex(this.cards[i]) : null;
+        if (targetIndex !== null && Math.sign(stage[targetIndex][4]) !== -1) {
           return i + 1;
         }
       }
