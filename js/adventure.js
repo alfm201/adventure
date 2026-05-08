@@ -53,6 +53,18 @@ function setup() {
   getBoardInfo();
 }
 
+function getCanvasPoint(e) {
+  const rect = canvas.getBoundingClientRect();
+  const source = e.touches?.[0] || e.changedTouches?.[0] || e;
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+
+  return {
+    x: (source.clientX - rect.left) * scaleX,
+    y: (source.clientY - rect.top) * scaleY
+  };
+}
+
 function updateLoadingOverlay({ progress, status, detail, step } = {}) {
   let loading = document.getElementById('adventure-loading');
   if (!loading) return;
@@ -596,8 +608,7 @@ function measureMultilineText(ctx, text, lineHeight) {
 
 
 canvas.addEventListener('touchstart', function (e) {
-  let x = e.touches[0].clientX;
-  let y = e.touches[0].clientY;
+  let { x, y } = getCanvasPoint(e);
   const REGION_CARDINFO_SCROLLBAR = { x1: 459, x2: 509, y1: env.scrollbarY, y2: env.scrollbarY + 100 };
 
   if (showCardInfoYN && isInsideRegion(x, y, REGION_CARDINFO_SCROLLBAR)) {
@@ -611,8 +622,7 @@ canvas.addEventListener('touchstart', function (e) {
 canvas.addEventListener('touchmove', function (e) {
 
   if (isDragging) {
-    let x = e.touches[0].clientX;
-    let y = e.touches[0].clientY;
+    let { y } = getCanvasPoint(e);
     let dragDistance = y - dragStartY;
     let newScrollOffset = initialScrollOffset + (dragDistance / 500) * 300;
 
@@ -707,8 +717,7 @@ function eventWindowBlur(e) {
 
 function eventCanvasMousedown(e) {
   const REGION_CARDINFO_SCROLLBAR = { x1: 479, x2: 489, y1: env.scrollbarY, y2: env.scrollbarY + 100 };
-  let x = e.offsetX;
-  let y = e.offsetY;
+  let { x, y } = getCanvasPoint(e);
 
   if (showCardInfoYN && isInsideRegion(x, y, REGION_CARDINFO_SCROLLBAR)) {
     isDragging = true;
@@ -724,8 +733,7 @@ function eventCanvasMousedown(e) {
 }
 
 function eventCanvasMousemove(e) {
-  let x = e.offsetX;
-  let y = e.offsetY;
+  let { x, y } = getCanvasPoint(e);
 
   if (env.autoProcess && (showDiceOverlay || diceOverlayHoverIndex !== -1 || isDraggingCharacter)) {
     showDiceOverlay = false;
@@ -812,8 +820,7 @@ function eventCanvasMousemove(e) {
 }
 
 function eventCanvasWheel(e) {
-  let x = e.offsetX;
-  let y = e.offsetY;
+  let { x, y } = getCanvasPoint(e);
   if (showCardInfoYN && isInsideRegion(x, y, REGION_CARDINFO)) {
     env.cardInfoScrollOffset += e.deltaY - 10;
     const minOffset = 0;
@@ -826,8 +833,7 @@ function eventCanvasWheel(e) {
 }
 
 function eventCanvasRightClick(e) {
-  let x = e.offsetX;
-  let y = e.offsetY;
+  let { x, y } = getCanvasPoint(e);
   if (showCardInfoYN && isInsideRegion(x, y, REGION_CARDINFO)) {
     let index = Math.trunc((y - 15 + env.cardInfoScrollOffset) / 30);
     env.getCard(index, true);
@@ -843,8 +849,7 @@ function eventCanvasRightClick(e) {
 }
 
 function eventCanvasClick(e) {
-  let x = e.offsetX;
-  let y = e.offsetY;
+  let { x, y } = getCanvasPoint(e);
 
   if (preventClick) {
     e.preventDefault();
@@ -3559,16 +3564,20 @@ function showComputeModeModal(onDone) {
   root.style.justifyContent = 'center';
   root.style.background = 'rgba(15, 23, 42, 0.62)';
   root.style.fontFamily = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  root.style.boxSizing = 'border-box';
+  root.style.padding = '16px';
 
   let card = document.createElement('div');
-  card.style.width = 'min(560px, calc(100vw - 32px))';
+  card.style.width = 'min(560px, 100%)';
   card.style.maxHeight = 'calc(100vh - 32px)';
+  card.style.maxHeight = 'calc(100dvh - 32px)';
   card.style.overflow = 'auto';
   card.style.borderRadius = '8px';
   card.style.background = '#ffffff';
   card.style.boxShadow = '0 24px 70px rgba(15, 23, 42, 0.35)';
   card.style.border = '1px solid rgba(15, 23, 42, 0.12)';
   card.style.padding = '22px';
+  card.style.boxSizing = 'border-box';
 
   let cpuWorkerCandidates = [1, Math.ceil(maxWorkerCount / 2), maxWorkerCount]
     .filter((value, index, values) => value >= 1 && values.indexOf(value) === index);
@@ -3635,7 +3644,7 @@ function showComputeModeModal(onDone) {
     <div style="font-size:13px;line-height:1.55;color:#475569;margin-bottom:16px;">
       GPU는 계산 비용과 응답 속도에서 유리합니다. 판단 품질은 유지됩니다. 선택은 주로 실행 비용과 대기 시간을 기준으로 하면 됩니다.
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
+    <div id="compute-engine-options" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
       <label id="compute-gpu-card" style="${gpuCardStyle}">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;">
           <span style="display:flex;align-items:center;gap:8px;">
@@ -3877,7 +3886,8 @@ function initUsageOverlay() {
       title: '행운 카드 사용',
       lines: [
         'Ctrl + 1 ~ 5: 해당 번호의 행운 카드를 바로 사용합니다.',
-        '아래 카드 슬롯(1~5번)을 직접 클릭해도 카드를 사용할 수 있습니다.'
+        '아래 카드 슬롯(1~5번)을 직접 클릭해도 카드를 사용할 수 있습니다.',
+        '카드 슬롯을 오른쪽 클릭하면 실제로 이동하지 않고 해당 카드를 버립니다.'
       ],
       region: REGION_CARDS
     },
@@ -3976,7 +3986,11 @@ function createUsageOverlayWithSteps(steps) {
   var bubble = document.createElement('div');
   bubble.id = 'adventure-usage-bubble';
   bubble.style.position = 'fixed';
+  bubble.style.width = 'min(320px, calc(100vw - 32px))';
   bubble.style.maxWidth = '320px';
+  bubble.style.maxHeight = 'calc(100vh - 32px)';
+  bubble.style.maxHeight = 'calc(100dvh - 32px)';
+  bubble.style.overflow = 'auto';
   bubble.style.background = 'white';
   bubble.style.borderRadius = '14px';
   bubble.style.padding = '14px 16px 12px 16px';
@@ -4077,9 +4091,9 @@ function createUsageOverlayWithSteps(steps) {
 
   var skipConfirm = document.createElement('div');
   skipConfirm.style.position = 'fixed';
-  skipConfirm.style.left = `${canvas.width / 2}px`
-  skipConfirm.style.top = `${canvas.height / 2}px`
-  skipConfirm.style.transform = 'translateX(-50%)';
+  skipConfirm.style.left = '50%';
+  skipConfirm.style.top = '50%';
+  skipConfirm.style.transform = 'translate(-50%, -50%)';
   skipConfirm.style.background = 'white';
   skipConfirm.style.borderRadius = '14px';
   skipConfirm.style.padding = '12px 16px';
@@ -4090,6 +4104,7 @@ function createUsageOverlayWithSteps(steps) {
   skipConfirm.style.zIndex = '10000';
   skipConfirm.style.pointerEvents = 'auto';
   skipConfirm.style.minWidth = '260px';
+  skipConfirm.style.width = 'min(320px, calc(100vw - 32px))';
   skipConfirm.style.maxWidth = '320px';
 
   var skipText = document.createElement('div');
@@ -4244,7 +4259,7 @@ function createUsageOverlayWithSteps(steps) {
     var left = canvasRect.left + r.x1 * scaleX;
     var top = canvasRect.top + r.y1 * scaleY;
     var width = (r.x2 - r.x1) * scaleX;
-    var height = (r.y2 - r.y1) * scaleX;
+    var height = (r.y2 - r.y1) * scaleY;
 
     var pad = 6;
     left -= pad;
@@ -4341,7 +4356,7 @@ function createUsageOverlayWithSteps(steps) {
       detailPanel.style.display = 'none';
     }
 
-    var bubbleWidth = 320;
+    var bubbleWidth = Math.min(320, vw - 32);
     var margin = 18;
     var bubbleRect = bubble.getBoundingClientRect();
     var bubbleHeight = Math.max(bubbleRect.height, 120);

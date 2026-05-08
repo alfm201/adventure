@@ -6,8 +6,44 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&display=swap" rel="stylesheet">
     <style>
+        html,
         body {
+            width: 100%;
+            min-height: 100%;
             margin: 0;
+            background: #ffffff;
+        }
+        body {
+            min-height: 100vh;
+            min-height: 100dvh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+        #game_screen {
+            display: block;
+            width: min(100vw, 177.81vh);
+            width: min(100dvw, 177.81dvh);
+            height: min(100vh, 56.24vw);
+            height: min(100dvh, 56.24dvw);
+            touch-action: none;
+        }
+        #temp_canvas {
+            display: none;
+        }
+        #adventure-compute-modal {
+            box-sizing: border-box;
+            padding: 16px;
+        }
+        #adventure-compute-modal *,
+        #adventure-usage-root * {
+            box-sizing: border-box;
+        }
+        @media (max-width: 640px) {
+            #compute-engine-options {
+                grid-template-columns: 1fr !important;
+            }
         }
         #adventure-loading {
             position: fixed;
@@ -113,7 +149,7 @@
             </div>
         </div>
     </div>
-    <canvas id="temp_canvas" width="1234" height="694" style="display:none"></canvas>
+    <canvas id="temp_canvas" width="1234" height="694"></canvas>
     <canvas id="game_screen" width="1234" height="694"></canvas>
     <script src="./js/stageName.js"></script>
     <script src="./js/stage.js"></script>
