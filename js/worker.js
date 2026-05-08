@@ -1,4 +1,4 @@
-importScripts('https://alfm201.github.io/adventure/js/board.js');
+importScripts('https://alfm201.github.io/adventure/js/board.js?v=20260509051442377682');
 
 let idx, stage, cardInfo;
 
