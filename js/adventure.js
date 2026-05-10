@@ -32,6 +32,7 @@ let lastCanvasPointer = null;
 let regionCurrentCharacter = { x1: 0, y1: 0, x2: 0, y2: 0 };
 let computeSettings = {
   engine: 'gpu',
+  cpuPolicy: 'fast',
   cpuIteration: 10000,
   cpuWorkers: null,
   cpuUsage: 'medium',
@@ -2458,109 +2459,258 @@ class Board {
   }
 
   chooseAction() {
+    return Board.rolloutPolicy === 'quality' ? this.chooseActionQuality() : this.chooseActionFast();
+  }
+
+  chooseActionFast() {
     let len = this.cards.length;
-    if (len === 0) {
-      return 0;
-    }
+    if (len === 0) return 0;
 
     for (let i = 0; i < len; i++) {
-      // 칸수 행운카드 사용시 1칸 이상 점프하여 행운카드 획득
       const targetIndex = this.cards[i][1] === 1 ? this.getMoveCardTargetIndex(this.cards[i]) : null;
       const jump = targetIndex === null ? 0 : stage[targetIndex][4];
       const jumpTargetIndex = targetIndex === null ? null : targetIndex + jump;
-      if (targetIndex !== null && jump > 0 && jumpTargetIndex >= 0 && jumpTargetIndex < 2898 && stage[jumpTargetIndex][5] === 2) {
-        return i + 1;
-      }
+      if (targetIndex !== null && jump > 0 && jumpTargetIndex >= 0 && jumpTargetIndex < 2898 && stage[jumpTargetIndex][5] === 2) return i + 1;
     }
 
     for (let i = 0; i < len; i++) {
-      // 칸수 행운카드 사용시 행운카드 획득
       const targetIndex = this.cards[i][1] === 1 ? this.getMoveCardTargetIndex(this.cards[i]) : null;
-      if (targetIndex !== null && stage[targetIndex][5] === 2) {
-        return i + 1;
-      }
+      if (targetIndex !== null && stage[targetIndex][5] === 2) return i + 1;
     }
 
     for (let i = 0; i < len; i++) {
-      // 칸수 행운카드 사용시 29칸 이상 점프
       const targetIndex = this.cards[i][1] === 1 ? this.getMoveCardTargetIndex(this.cards[i]) : null;
-      if (targetIndex !== null && stage[targetIndex][4] >= 29) {
-        return i + 1;
-      }
+      if (targetIndex !== null && stage[targetIndex][4] >= 29) return i + 1;
     }
 
     for (let i = this.score, end = Math.min(2897, this.score + 8); i < end; i++) {
-      // +8칸 내에 stop 이벤트 존재하면
       if (stage[i][5] === 6 || stage[i][5] === 9) {
-        // 배수 행운카드 사용
         for (let j = 0; j < len; j++) {
-          if (this.cards[j][1] == 2) {
-            return j + 1;
-          }
+          if (this.cards[j][1] === 2) return j + 1;
         }
       }
     }
 
     let cnt = 0;
     for (let i = Math.min(2897, this.score + 1), end = Math.min(2897, this.score + 50); i < end; i++) {
-      if (stage[i][1] === stage[this.score - 1][1]) {
-        cnt++;
-      }
+      if (stage[i][1] === stage[this.score - 1][1]) cnt++;
     }
 
     for (let i = 0; i < len; i++) {
-      // 스테이지 행운카드 사용하여 26칸 이상 이동
-      if (this.cards[i][1] === 3 && cnt >= 26) {
-        return i + 1;
-      }
+      if (this.cards[i][1] === 3 && cnt >= 31) return i + 1;
     }
 
     if (len === 5 || this.diceUse + len >= 100) {
-      // 카드 보유수가 5개이거나 주사위 사용횟수 + 카드 보유수가 100 이상일 경우
       for (let i = 0; i < len; i++) {
-        // 스테이지 행운카드 사용하여 20칸 이상 이동
-        if (this.cards[i][1] === 3 && cnt >= 20) {
-          return i + 1;
-        }
+        if (this.cards[i][1] === 3 && cnt >= 16) return i + 1;
       }
 
       for (let i = 0; i < len; i++) {
-        // 배수 행운카드 사용
-        if (this.cards[i][1] === 2) {
-          return i + 1;
-        }
+        if (this.cards[i][1] === 2) return i + 1;
       }
 
       for (let i = 0; i < len; i++) {
         for (let j = 0; j < len; j++) {
-          // 칸수 행운카드 2개 사용하여 행운카드 획득
           const firstTargetIndex = this.cards[i][1] === 1 ? this.getMoveCardTargetIndex(this.cards[i]) : null;
           const combinedTargetIndex = (this.cards[i][1] === 1 && this.cards[j][1] === 1) ? this.getMoveCardTargetIndex(this.cards[i], this.cards[j][2]) : null;
           if (i !== j && firstTargetIndex !== null && combinedTargetIndex !== null &&
-            (stage[firstTargetIndex][4] > 0 && stage[combinedTargetIndex][5] === 2)) {
+            stage[firstTargetIndex][4] > 0 && stage[combinedTargetIndex][5] === 2) {
             return i + 1;
           }
         }
       }
 
-      // 없으면 칸수 행운카드 사용
       for (let i = 0; i < len; i++) {
         const targetIndex = this.cards[i][1] === 1 ? this.getMoveCardTargetIndex(this.cards[i]) : null;
-        if (targetIndex !== null && Math.sign(stage[targetIndex][4]) !== -1) {
-          return i + 1;
-        }
+        if (targetIndex !== null && Math.sign(stage[targetIndex][4]) !== -1) return i + 1;
       }
 
-      // 없으면 배수 or 다음 스테이지 행운카드 사용
       for (let i = 0; i < len; i++) {
-        if (this.cards[i][1] !== 1) {
-          return i + 1;
-        }
+        if (this.cards[i][1] !== 1) return i + 1;
       }
     }
 
-    // 모두 미해당시 주사위 굴리기
     return 0;
+  }
+
+  chooseActionQuality() {
+    const handCount = this.cards.length;
+    const score = this.score;
+    const diceUse = this.diceUse;
+
+    const stageIdAt = index => index < 0 || index >= 2898 ? 0 : Number(stage[index][1] || 0);
+    const stageMoveAt = index => index < 0 || index >= 2898 ? 0 : Number(stage[index][4] || 0);
+    const stageEventAt = index => index < 0 || index >= 2898 ? 0 : Number(stage[index][5] || 0);
+
+    const diceSumWeight = sum => {
+      if (sum === 2 || sum === 12) return 1;
+      if (sum === 3 || sum === 11) return 2;
+      if (sum === 4 || sum === 10) return 3;
+      if (sum === 5 || sum === 9) return 4;
+      if (sum === 6 || sum === 8) return 5;
+      if (sum === 7) return 6;
+      return 0;
+    };
+
+    const rawLandingAfterMove = (fromScore, rawValue, stop) => {
+      let value = rawValue;
+      if (stop) {
+        const endIndex = Math.min(2897, fromScore + value - 1);
+        for (let i = fromScore; i < endIndex; i++) {
+          const eventType = stageEventAt(i);
+          if (eventType === 6 || eventType === 9) {
+            value = i - fromScore + 1;
+            break;
+          }
+        }
+      }
+      return Math.min(2898, Math.max(1, fromScore + value));
+    };
+
+    const projectedScoreAfterMove = (fromScore, rawValue, stop) => {
+      let projected = rawLandingAfterMove(fromScore, rawValue, stop);
+      for (let guard = 0; guard < 16; guard++) {
+        const eventType = stageEventAt(projected - 1);
+        if (eventType === 4) {
+          projected = Math.min(2898, projected + stageMoveAt(projected - 1));
+          continue;
+        }
+        break;
+      }
+      return projected;
+    };
+
+    const stageCardMove = cValue => {
+      const targetStage = stageIdAt(score - 1) + cValue;
+      let value = targetStage;
+      for (let i = score; i < 2897; i++) {
+        if (stageIdAt(i) === targetStage) {
+          value = i - score + 1;
+          break;
+        }
+      }
+      return value;
+    };
+
+    const sameStageCount50 = () => {
+      let count = 0;
+      for (let pos = Math.min(2897, score + 1); pos < Math.min(2897, score + 50); pos++) {
+        if (stageIdAt(pos) === stageIdAt(score - 1)) count++;
+      }
+      return count;
+    };
+
+    const cardOrJumpCardOption = (landing, projected) => {
+      const eventType = stageEventAt(landing - 1);
+      if (eventType === 2) return true;
+      return eventType === 4 && projected >= 1 && projected <= 2898 && stageEventAt(projected - 1) === 2;
+    };
+
+    const moveChainCardOption = action => {
+      if (action === 0 || action > handCount) return false;
+      const card = this.cards[action - 1];
+      if (!card || card[1] !== 1) return false;
+      const firstValue = card[2];
+      const firstLanding = rawLandingAfterMove(score, firstValue, false);
+      const firstProjected = projectedScoreAfterMove(score, firstValue, false);
+      if (stageEventAt(firstLanding - 1) === 4 && cardOrJumpCardOption(firstLanding, firstProjected)) return true;
+      for (let i = 0; i < handCount; i++) {
+        if (i === action - 1) continue;
+        const nextCard = this.cards[i];
+        if (nextCard && nextCard[1] === 1) {
+          const secondLanding = rawLandingAfterMove(firstProjected, nextCard[2], false);
+          const secondProjected = projectedScoreAfterMove(firstProjected, nextCard[2], false);
+          if (cardOrJumpCardOption(secondLanding, secondProjected)) return true;
+        }
+      }
+      return false;
+    };
+
+    const rollValueX36 = () => {
+      const canGainCard = handCount < 5;
+      let total = 0;
+      for (let diceSum = 2; diceSum <= 12; diceSum++) {
+        const landing = rawLandingAfterMove(score, diceSum, true);
+        const eventType = stageEventAt(landing - 1);
+        let value = 0;
+        if (eventType === 2 && canGainCard) {
+          value += 179;
+        } else if (eventType === 4) {
+          value += Math.max(0, stageMoveAt(landing - 1)) * 2;
+          if (canGainCard) {
+            const projected = projectedScoreAfterMove(score, diceSum, true);
+            if (projected >= 1 && projected <= 2898 && stageEventAt(projected - 1) === 2) value += 299;
+          }
+        }
+        total += diceSumWeight(diceSum) * value;
+      }
+      return total;
+    };
+
+    const cardPostX36 = () => {
+      let value = 0;
+      if (handCount === 5 || diceUse + handCount >= 100) value += 98 * 36;
+      if (diceUse >= 70) value += 3 * 36;
+      return value;
+    };
+
+    const moveValueX36 = (action, cValue) => {
+      const landing = rawLandingAfterMove(score, cValue, false);
+      const eventType = stageEventAt(landing - 1);
+      let total = cardPostX36() - 80 * 36;
+      if (eventType === 2) {
+        total += 139 * 36;
+      } else if (eventType === 4) {
+        total += Math.max(0, stageMoveAt(landing - 1)) * 2 * 36;
+        const projected = projectedScoreAfterMove(score, cValue, false);
+        if (projected >= 1 && projected <= 2898 && stageEventAt(projected - 1) === 2) total += 101 * 36;
+      }
+      if (moveChainCardOption(action)) total += 37 * 36;
+      return total;
+    };
+
+    const multValueX36 = cValue => {
+      let total = cardPostX36() - 20 * 36;
+      for (let diceSum = 2; diceSum <= 12; diceSum++) {
+        const rawValue = diceSum * cValue;
+        const landing = rawLandingAfterMove(score, rawValue, false);
+        const eventType = stageEventAt(landing - 1);
+        let value = 0;
+        if (eventType === 2) {
+          value += 142;
+        } else if (eventType === 4) {
+          value += Math.max(0, stageMoveAt(landing - 1)) * 2;
+          const projected = projectedScoreAfterMove(score, rawValue, false);
+          if (projected >= 1 && projected <= 2898 && stageEventAt(projected - 1) === 2) value += 141;
+        }
+        total += diceSumWeight(diceSum) * value;
+      }
+      return total;
+    };
+
+    const stageValueX36 = cValue => {
+      const rawValue = stageCardMove(cValue);
+      const landing = rawLandingAfterMove(score, rawValue, false);
+      let total = cardPostX36() - 2 * 36 + sameStageCount50() * 36;
+      if (stageEventAt(landing - 1) === 4) total += Math.max(0, stageMoveAt(landing - 1)) * 2 * 36;
+      return total;
+    };
+
+    let bestAction = 0;
+    let bestValue = rollValueX36();
+    for (let action = 1; action <= handCount; action++) {
+      const card = this.cards[action - 1];
+      if (!card) continue;
+      let value = -2147483648;
+      if (card[1] === 1) value = moveValueX36(action, card[2]);
+      else if (card[1] === 2) value = multValueX36(card[2]);
+      else if (card[1] === 3) value = stageValueX36(card[2]);
+      if (value > bestValue) {
+        bestValue = value;
+        bestAction = action;
+      }
+    }
+    return bestAction;
   }
 
   copy() {
@@ -2580,6 +2730,7 @@ onmessage = function (e) {
   stage = e.data.stage;
   cardInfo = e.data.cardInfo;
   state = e.data.state;
+  Board.rolloutPolicy = e.data.cpuPolicy === 'quality' ? 'quality' : 'fast';
   let res = simulation(e.data.iteration, state, e.data.route);
   postMessage({
     res: res,
@@ -3702,6 +3853,7 @@ function runCpuInferenceForState(simulationState, cpuWorkers, options = {}) {
           state: simulationState,
           stage: stage,
           cardInfo: cardInfo,
+          cpuPolicy: options.cpuPolicy === 'quality' ? 'quality' : 'fast',
           route: [job.action],
         });
       }
@@ -3833,6 +3985,7 @@ async function measureComputePerfOptions(gpuAvailable, cpuWorkerCandidates) {
         let startedAt = performance.now();
         await runCpuInferenceForState(benchmarkState, workerTotal, {
           maxPct: PERF_BENCHMARK_MAX_PCT,
+          cpuPolicy: 'fast',
           disableConfidenceStop: true,
           disablePrune: true,
           isCancelled: () => !isBenchmarkActive(),
@@ -4517,6 +4670,7 @@ function calcEx(r = [0, 1, 2, 3, 4, 5]) {
         state: simulationState,
         stage: stage,
         cardInfo: cardInfo,
+        cpuPolicy: computeSettings.cpuPolicy === 'quality' ? 'quality' : 'fast',
         route: [job.action],
       });
     }
@@ -4650,9 +4804,10 @@ function showComputeModeModal(onDone) {
     cpuWorkerCandidates.push(selectedCpuWorkers);
     cpuWorkerCandidates.sort((a, b) => a - b);
   }
+  let selectedCpuPolicy = computeSettings.cpuPolicy === 'quality' ? 'quality' : 'fast';
   let selectedGpuUsage = computeSettings.gpuUsage || 'medium';
   let gpuCardDetail = gpuAvailable
-    ? 'WebGPU로 rollout batch를 계산합니다. 브라우저/GPU 지원이 필요하지만 추론 시간과 응답 속도 면에서 유리합니다.'
+    ? '브라우저/GPU 지원이 필요하지만 점수 기대와 응답 속도를 함께 가져가기 좋습니다.'
     : '호환되지 않는 GPU로 감지되어 이 기기에서는 GPU 엔진을 사용할 수 없습니다.';
   let gpuCardBadge = gpuAvailable
     ? '<span data-engine-recommend-badge style="display:none;align-items:center;border-radius:999px;background:#16a34a;color:white;font-size:11px;font-weight:700;padding:2px 7px;">추천</span>'
@@ -4682,6 +4837,17 @@ function showComputeModeModal(onDone) {
         </div>
       </label>`;
   }).join('');
+  let cpuPolicyCards = [
+    { key: 'fast', label: 'Fast', detail: 'stage31p16 chooseAction 기반. CPU 기본값이며 반응성이 가장 좋습니다.' },
+    { key: 'quality', label: 'Quality', detail: '점수 기대를 더 보는 판단입니다. CPU에서는 계산 시간이 크게 늘 수 있습니다.' },
+  ].map(option => `
+      <label style="display:block;border:1px solid #cbd5e1;border-radius:8px;padding:10px;cursor:pointer;background:#f8fafc;">
+        <div style="display:flex;align-items:center;gap:7px;margin-bottom:5px;">
+          <input type="radio" name="cpu-policy" value="${option.key}"${option.key === selectedCpuPolicy ? ' checked' : ''}>
+          <strong>${option.label}</strong>
+        </div>
+        <div style="font-size:12px;line-height:1.4;color:#334155;">${option.detail}</div>
+      </label>`).join('');
   let gpuUsageCards = [
     { key: 'low', label: '낮음', detail: '다른 작업 우선', defaultText: '' },
     { key: 'medium', label: '보통', detail: '균형', defaultText: ' (기본값)' },
@@ -4705,7 +4871,7 @@ function showComputeModeModal(onDone) {
   card.innerHTML = `
     <div style="font-size:20px;font-weight:700;color:#0f172a;margin-bottom:6px;">계산 방식 선택</div>
     <div style="font-size:13px;line-height:1.55;color:#475569;margin-bottom:16px;">
-      GPU는 계산 비용과 응답 속도에서 유리합니다. 판단 품질은 유지됩니다. 선택은 주로 실행 비용과 대기 시간을 기준으로 하면 됩니다.
+      GPU는 점수 기대와 응답 속도를 함께 가져가기 좋은 기본 선택지입니다. CPU는 호환성이 좋고, 필요하면 빠른 판단과 품질 판단 중 선택할 수 있습니다.
     </div>
     <div id="compute-engine-options" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
       <label id="compute-gpu-card" style="${gpuCardStyle}">
@@ -4726,7 +4892,7 @@ function showComputeModeModal(onDone) {
           </span>
           <span data-engine-recommend-badge style="display:none;align-items:center;border-radius:999px;background:#16a34a;color:white;font-size:11px;font-weight:700;padding:2px 7px;">추천</span>
         </div>
-        <div style="font-size:12px;line-height:1.45;color:#334155;">기존 worker 계산입니다. 호환성은 좋지만 추론 시간이 길어질 수 있습니다.</div>
+        <div style="font-size:12px;line-height:1.45;color:#334155;">worker 기반 계산입니다. 호환성은 좋고, CPU 안에서 빠른 판단 또는 품질 판단을 선택합니다.</div>
       </label>
     </div>
     <div id="gpu-settings" style="margin-bottom:14px;">
@@ -4736,10 +4902,15 @@ function showComputeModeModal(onDone) {
       </div>
     </div>
     <div id="cpu-settings" style="margin-bottom:16px;">
-      <div style="font-weight:700;color:#0f172a;margin-bottom:6px;">CPU 사용량</div>
+      <div style="font-weight:700;color:#0f172a;margin-bottom:6px;">CPU 판단 로직</div>
+      <div id="cpu-policy-options" style="display:grid;grid-template-columns:1fr;gap:8px;margin-bottom:12px;">
+        ${cpuPolicyCards}
+      </div>
+      <div style="font-weight:700;color:#0f172a;margin-bottom:6px;">CPU worker 수</div>
       <div id="cpu-worker-options" style="display:grid;grid-template-columns:1fr;gap:8px;">
         ${cpuWorkerCards}
       </div>
+      <div style="font-size:12px;line-height:1.45;color:#64748b;margin-top:8px;">추론시간 측정과 추천 표시는 CPU Fast 기준입니다.</div>
     </div>
     <div data-overall-perf-progress style="display:none;margin:0 0 14px 0;padding:10px;border:1px solid #e2e8f0;border-radius:8px;background:#f8fafc;">
       <div data-overall-perf-text style="font-size:12px;line-height:1.4;color:#475569;margin-bottom:7px;">추천 항목 계산중입니다. [0%]</div>
@@ -4769,9 +4940,17 @@ function showComputeModeModal(onDone) {
     return Math.max(1, Math.min(maxWorkerCount, Number(card.querySelector('input[name="cpu-workers"]:checked')?.value) || defaultCpuWorkers));
   }
 
+  function getSelectedCpuPolicy() {
+    return card.querySelector('input[name="cpu-policy"]:checked')?.value === 'quality' ? 'quality' : 'fast';
+  }
+
   function applyGpuUsage(value) {
     applyGpuUsageSettings(value);
     updateComputeOptionCards('gpu');
+  }
+
+  function updateCpuPolicyHelp() {
+    computeSettings.cpuPolicy = getSelectedCpuPolicy();
   }
 
   function updateCpuWorkersHelp() {
@@ -4800,12 +4979,16 @@ function showComputeModeModal(onDone) {
   card.querySelectorAll('input[name="cpu-workers"]').forEach(input => {
     input.addEventListener('change', updateCpuWorkersHelp);
   });
+  card.querySelectorAll('input[name="cpu-policy"]').forEach(input => {
+    input.addEventListener('change', updateCpuPolicyHelp);
+  });
   startButton.addEventListener('click', async () => {
     startButton.disabled = true;
     startButton.style.opacity = '0.7';
     cancelComputePerfBenchmark();
     let selected = card.querySelector('input[name="compute-engine"]:checked')?.value || 'cpu';
     computeSettings.engine = selected === 'gpu' && gpuAvailable ? 'gpu' : 'cpu';
+    computeSettings.cpuPolicy = getSelectedCpuPolicy();
     computeSettings.cpuIteration = 10000;
     computeSettings.cpuWorkers = getSelectedCpuWorkers();
     computeSettings.cpuMaxPct = getCpuMaxPctForWorkers(computeSettings.cpuWorkers);
@@ -4822,6 +5005,7 @@ function showComputeModeModal(onDone) {
   });
 
   applyGpuUsage(getSelectedGpuUsage());
+  updateCpuPolicyHelp();
   updateCpuWorkersHelp();
   updateCards();
   updateComputeEngineCards();

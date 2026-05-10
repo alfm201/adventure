@@ -1,4 +1,4 @@
-importScripts('https://alfm201.github.io/adventure/js/board.js?v=20260509051442377682');
+importScripts('./board.js?v=20260509051442377682');
 
 let idx, stage, cardInfo;
 
@@ -7,6 +7,7 @@ onmessage = function (e) {
   stage = e.data.stage;
   cardInfo = e.data.cardInfo;
   state = e.data.state;
+  Board.rolloutPolicy = e.data.cpuPolicy === 'quality' ? 'quality' : 'fast';
   let res = simulation(e.data.iteration, state, e.data.route);
   postMessage({
     res: res,
