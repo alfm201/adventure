@@ -81,6 +81,7 @@ fn draw_card(
   obtained: ptr<function, u32>,
   rng: ptr<function, u32>,
 ) {
+  if ((*handCount) >= 5) { return; }
   var remaining = 0u;
   for (var i = 0u; i < 30u; i = i + 1u) {
     if (((*obtained) & (1u << i)) == 0u) {

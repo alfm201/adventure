@@ -40,6 +40,7 @@ class Board {
   }
 
   getCard(index, pushYN = true) {
+    if (pushYN && this.cards.length >= 5) return;
     if (index === undefined) {
       if (!this.autoProcess) return;
       var rnd = Math.floor(Math.random() * this.cardIndex.length);
