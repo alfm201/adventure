@@ -2850,6 +2850,7 @@ const ADAPTIVE_HIGHLIGHT_Z = 1.96;
 const ADAPTIVE_SAMPLE_LIMIT = 2;
 const PERF_BENCHMARK_MAX_PCT = 200;
 const PERF_BENCHMARK_COOLDOWN_MS = 500;
+const CPU_PERF_BENCHMARK_SCALE_FACTOR = 10;
 const PERF_GPU_WARMUP_ROLLOUTS = 4096;
 const PERF_GPU_SETTLE_MAX_PCT = 50;
 const PERF_GPU_CALIBRATION_SMALL_ROLLOUTS = 8192;
@@ -3102,8 +3103,9 @@ function waitGpuYield(ms) {
 function recordComputePerf(engine, key, elapsedMs, options = {}) {
   if (!computePerfStats[engine]) computePerfStats[engine] = {};
   let previous = computePerfStats[engine][key];
-  if (!previous || options.replace) {
-    computePerfStats[engine][key] = { count: 1, avgMs: elapsedMs, lastMs: elapsedMs, running: false };
+  let estimated = options.estimated === true;
+  if (!previous || options.replace || (previous.estimated && !estimated)) {
+    computePerfStats[engine][key] = { count: 1, avgMs: elapsedMs, lastMs: elapsedMs, running: false, estimated };
     updateComputePerfHelpUI(engine, key);
     updateComputeOverallProgressUI();
     return;
@@ -3114,6 +3116,7 @@ function recordComputePerf(engine, key, elapsedMs, options = {}) {
     avgMs: previous.avgMs + (elapsedMs - previous.avgMs) / count,
     lastMs: elapsedMs,
     running: false,
+    estimated: previous.estimated && estimated,
   };
   updateComputePerfHelpUI(engine, key);
   updateComputeOverallProgressUI();
@@ -3174,13 +3177,15 @@ function getComputePerfText(engine, key) {
   if (stat && stat.running) return `계산중입니다. [${getComputePerfProgressPct(engine, key)}%]`;
   if (stat && stat.error) return '이 기기에서 측정하지 못했습니다.';
   if (!stat) return '이 기기에서 첫 계산 후 추론 시간을 표시합니다.';
-  return `이 기기에서 측정한 추론 시간은 약 ${Math.round(stat.avgMs)}ms/회입니다.`;
+  let label = stat.estimated ? '예상 추론 시간' : '측정한 추론 시간';
+  return `이 기기에서 ${label}은 약 ${Math.round(stat.avgMs)}ms/회입니다.`;
 }
 
 function getComputePerfHtml(engine, key) {
   let stat = computePerfStats[engine] && computePerfStats[engine][key];
   if (!stat || stat.running || stat.error || stat.count <= 0) return getComputePerfText(engine, key);
-  return `이 기기에서 측정한 추론 시간은 약 <strong style="color:#0f172a;font-weight:800;">${Math.round(stat.avgMs)}ms/회</strong>입니다.`;
+  let label = stat.estimated ? '예상 추론 시간' : '측정한 추론 시간';
+  return `이 기기에서 ${label}은 약 <strong style="color:#0f172a;font-weight:800;">${Math.round(stat.avgMs)}ms/회</strong>입니다.`;
 }
 
 function getComputePerfProgressPct(engine, key) {
@@ -3863,6 +3868,7 @@ function runCpuInferenceForState(simulationState, cpuWorkers, options = {}) {
       if (cancel()) return;
       localRunnings[workerIndex] = false;
       pendingJobs--;
+      reportProgress();
       if (pendingJobs === 0) {
         finishBatch();
       } else {
@@ -3943,8 +3949,6 @@ async function measureComputePerfOptions(gpuAvailable, cpuWorkerCandidates) {
     updateComputeOptionCards('gpu');
     updateComputeOptionCards('cpu');
 
-    gpuOptions.forEach(option => setComputePerfRunning('gpu', option, 0));
-    cpuOptions.forEach(option => setComputePerfRunning('cpu', option, 0));
     if (gpuOptions.length > 0) {
       try {
         await warmUpGpuInferenceForState(benchmarkState, { isCancelled: () => !isBenchmarkActive() });
@@ -3983,8 +3987,9 @@ async function measureComputePerfOptions(gpuAvailable, cpuWorkerCandidates) {
       try {
         let workerTotal = Math.max(1, Math.min(maxWorkerCount, Number(option) || maxWorkerCount));
         let startedAt = performance.now();
+        let cpuBenchmarkMaxPct = Math.max(1, PERF_BENCHMARK_MAX_PCT / CPU_PERF_BENCHMARK_SCALE_FACTOR);
         await runCpuInferenceForState(benchmarkState, workerTotal, {
-          maxPct: PERF_BENCHMARK_MAX_PCT,
+          maxPct: cpuBenchmarkMaxPct,
           cpuPolicy: 'fast',
           disableConfidenceStop: true,
           disablePrune: true,
@@ -3994,7 +3999,7 @@ async function measureComputePerfOptions(gpuAvailable, cpuWorkerCandidates) {
           },
         });
         if (!isBenchmarkActive()) return;
-        recordComputePerf('cpu', option, performance.now() - startedAt, { replace: true });
+        recordComputePerf('cpu', option, (performance.now() - startedAt) * CPU_PERF_BENCHMARK_SCALE_FACTOR, { replace: true, estimated: true });
       } catch (error) {
         if (!isBenchmarkActive()) return;
         console.warn('CPU perf measurement failed.', option, error);
@@ -4838,7 +4843,7 @@ function showComputeModeModal(onDone) {
       </label>`;
   }).join('');
   let cpuPolicyCards = [
-    { key: 'fast', label: 'Fast', detail: 'stage31p16 chooseAction 기반. CPU 기본값이며 반응성이 가장 좋습니다.' },
+    { key: 'fast', label: 'Fast', detail: '빠른 판단 기반입니다. CPU 기본값이며 반응성이 가장 좋습니다.' },
     { key: 'quality', label: 'Quality', detail: '점수 기대를 더 보는 판단입니다. CPU에서는 계산 시간이 크게 늘 수 있습니다.' },
   ].map(option => `
       <label style="display:block;border:1px solid #cbd5e1;border-radius:8px;padding:10px;cursor:pointer;background:#f8fafc;">
@@ -4910,7 +4915,7 @@ function showComputeModeModal(onDone) {
       <div id="cpu-worker-options" style="display:grid;grid-template-columns:1fr;gap:8px;">
         ${cpuWorkerCards}
       </div>
-      <div style="font-size:12px;line-height:1.45;color:#64748b;margin-top:8px;">추론시간 측정과 추천 표시는 CPU Fast 기준입니다.</div>
+      <div style="font-size:12px;line-height:1.45;color:#64748b;margin-top:8px;">추론시간 추천 표시는 CPU Fast 기준이며, CPU는 축소 측정 후 예상 시간으로 환산합니다.</div>
     </div>
     <div data-overall-perf-progress style="display:none;margin:0 0 14px 0;padding:10px;border:1px solid #e2e8f0;border-radius:8px;background:#f8fafc;">
       <div data-overall-perf-text style="font-size:12px;line-height:1.4;color:#475569;margin-bottom:7px;">추천 항목 계산중입니다. [0%]</div>
