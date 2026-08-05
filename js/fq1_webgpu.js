@@ -1141,7 +1141,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
       this.laneCapacity = clampInt(
         this.options.laneCapacity ?? new URLSearchParams(location.search).get('fq1Batch') ?? DEFAULT_LANES,
         16,
-        256,
+        8192,
       );
       this.checkInterval = clampInt(
         this.options.checkInterval ?? new URLSearchParams(location.search).get('fq1Check') ?? DEFAULT_CHECK_INTERVAL,
@@ -1535,7 +1535,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
         );
         result.set(chunk, completed);
         completed += count;
-        options.onProgress?.(completed, total);
+        options.onProgress?.(completed, total, chunk);
       }
       return result;
     }
