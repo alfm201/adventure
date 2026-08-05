@@ -288,16 +288,18 @@
           env.exValues.status[action] = `FQ1 GPU ${actionStats[action].count}/${maxIteration}`;
           updateBoard();
 
-          const scores = await engine.run(simulationState, action, count, sharedSeed, {
+          await engine.run(simulationState, action, count, sharedSeed, {
             isCancelled: () => !isCurrent(),
-            onProgress: completed => {
+            onProgress: (completed, total, chunk) => {
               if (!isCurrent()) return;
-              env.exValues.status[action] = `FQ1 GPU ${actionStats[action].count + completed}/${maxIteration}`;
+              addScores(actionStats[action], chunk);
+              const decision = getAdaptiveDecision(actionStats, activeActions);
+              applyDecision(decision);
+              env.exValues.status[action] = `FQ1 GPU ${actionStats[action].count}/${maxIteration}`;
               updateBoard();
             },
           });
           if (!isCurrent()) return false;
-          addScores(actionStats[action], scores);
           const decision = getAdaptiveDecision(actionStats, activeActions);
           applyDecision(decision);
           updateBoard();
