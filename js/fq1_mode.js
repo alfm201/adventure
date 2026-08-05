@@ -5,11 +5,14 @@
   if ((query.get('model') || '').toUpperCase() !== 'FQ1') return;
 
   const MAX_ROLLOUTS = 8192;
-  const ENGINE_URL = new URL('./js/fq1_webgpu.js?v=20260806080000000000', window.location.href).href;
-  const POLICY_URL = new URL('./fq1.js', window.location.href).href;
+  const currentScriptUrl = document.currentScript?.src
+    ? new URL(document.currentScript.src, window.location.href)
+    : null;
+  const BUILD_ID = currentScriptUrl?.searchParams.get('build') || String(Date.now());
+  const ENGINE_URL = new URL(`./js/fq1_webgpu.js?build=${encodeURIComponent(BUILD_ID)}`, window.location.href).href;
+  const POLICY_URL = new URL(`./fq1.js?build=${encodeURIComponent(BUILD_ID)}`, window.location.href).href;
   const WEIGHTS_URL = new URL('./fq1_weights.bin', window.location.href).href;
 
-  const legacyCalcEx = calcEx;
   const scriptLoads = new Map();
   let policy = null;
   let gpuEngine = null;
@@ -81,12 +84,15 @@
   async function ensureGpuEngine(onStatus) {
     if (gpuEngine) return gpuEngine;
     if (gpuEnginePromise) return gpuEnginePromise;
+    if (!navigator.gpu) throw new Error('이 FQ1 테스트 모드는 WebGPU가 필요합니다.');
+
     gpuEnginePromise = (async () => {
       onStatus?.('FQ1 가중치를 읽는 중...');
       const loadedPolicy = await ensurePolicy();
       onStatus?.('raw WebGPU compute pipeline을 컴파일하는 중...');
       await loadScriptOnce(ENGINE_URL);
       if (!window.FQ1WebGPUEngine) throw new Error('FQ1 WebGPU 엔진을 불러오지 못했습니다.');
+
       const engine = await window.FQ1WebGPUEngine.create(loadedPolicy, {
         stage,
         laneCapacity: query.get('fq1Batch') || undefined,
@@ -95,11 +101,13 @@
       onStatus?.('CPU 기준 구현과 WebGPU 행동 parity를 검사하는 중...');
       await engine.verifyParity(parityStates(), { allowedNearTieMargin: 0.05 });
       gpuEngine = engine;
+
       const diagnostics = engine.diagnostics();
       console.log('FQ1 raw WebGPU engine ready.', diagnostics);
       window.__adventureFq1Mode = {
         active: true,
         backend: 'raw-webgpu',
+        buildId: BUILD_ID,
         maxRollouts: MAX_ROLLOUTS,
         modelId: loadedPolicy.header?.model_id || 'FQ1',
         diagnostics: () => gpuEngine?.diagnostics() || null,
@@ -170,7 +178,7 @@
     });
   }
 
-  async function calcExRawWebGpu(route = [0, 1, 2, 3, 4, 5]) {
+  async function calcExFq1WebGpu(route = [0, 1, 2, 3, 4, 5]) {
     if (!computeModeReady) {
       pendingInitialCalc = true;
       return;
@@ -236,8 +244,11 @@
           const gap = best.avg - summary.avg;
           const combinedSe = Math.sqrt(best.se * best.se + summary.se * summary.se);
           env.exValues.gap[action] = Number(gap.toFixed(3));
-          env.exValues.z[action] = combinedSe > 0 && Number.isFinite(combinedSe) ? Number((gap / combinedSe).toFixed(3)) : 0;
-          env.exHighlights[action] = action === decision.bestAction || gap <= calcHighlightMargin(maxUsed(), best, summary);
+          env.exValues.z[action] = combinedSe > 0 && Number.isFinite(combinedSe)
+            ? Number((gap / combinedSe).toFixed(3))
+            : 0;
+          env.exHighlights[action] = action === decision.bestAction ||
+            gap <= calcHighlightMargin(maxUsed(), best, summary);
         });
       }
 
@@ -250,6 +261,7 @@
           if (count <= 0) continue;
           env.exValues.status[action] = `FQ1 GPU ${actionStats[action].count}/${maxIteration}`;
           updateBoard();
+
           const scores = await engine.run(simulationState, action, count, sharedSeed, {
             isCancelled: () => !isCurrent(),
             onProgress: completed => {
@@ -277,7 +289,11 @@
         applyDecision(decision);
         updateBoard();
         if (shouldStopAdaptive(decision, actionStats, activeActions, maxIteration)) {
-          console.log(`FQ1-U8K raw WebGPU adaptive used ${maxUsed()}/${MAX_ROLLOUTS}, elapsed=${(performance.now() - startedAt).toFixed(1)}ms`, engine.diagnostics());
+          console.log(
+            `FQ1-U8K raw WebGPU adaptive used ${maxUsed()}/${MAX_ROLLOUTS}, ` +
+            `elapsed=${(performance.now() - startedAt).toFixed(1)}ms`,
+            engine.diagnostics(),
+          );
           return;
         }
         if (!isAdaptiveEarlyStopDisabled()) activeActions = pruneAdaptiveActions(actionStats, activeActions);
@@ -302,57 +318,40 @@
     }
   }
 
-  function calcExPatched(route) {
-    if (computeSettings.engine === 'cpu') return legacyCalcEx(route);
-    return calcExRawWebGpu(route);
+  function engineCard(label, value, detail, available, selected, badgeText) {
+    const badge = available && badgeText
+      ? `<span style="border-radius:999px;background:#16a34a;color:white;font-size:11px;font-weight:800;padding:3px 8px;">${badgeText}</span>`
+      : !available
+        ? '<span style="border-radius:999px;background:#e2e8f0;color:#64748b;font-size:11px;font-weight:800;padding:3px 8px;">비활성화</span>'
+        : '';
+    return `<label data-fq1-engine="${value}" style="display:block;border:1px solid ${selected ? '#2563eb' : '#cbd5e1'};border-radius:10px;padding:14px;cursor:${available ? 'pointer' : 'not-allowed'};background:${selected ? '#eff6ff' : '#f8fafc'};opacity:${available ? '1' : '.55'};"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px;"><span style="display:flex;align-items:center;gap:8px;"><input type="radio" name="fq1-engine-webgpu" value="${value}" ${selected ? 'checked' : ''} ${available ? '' : 'disabled'}><strong>${label}</strong></span>${badge}</div><div style="font-size:12px;line-height:1.55;color:#475569;">${detail}</div></label>`;
   }
 
-  function engineCard(label, value, detail, available, selected) {
-    return `<label data-fq1-engine="${value}" style="display:block;border:1px solid ${selected ? '#2563eb' : '#cbd5e1'};border-radius:10px;padding:14px;cursor:${available ? 'pointer' : 'not-allowed'};background:${selected ? '#eff6ff' : '#f8fafc'};opacity:${available ? '1' : '.58'};"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px;"><span style="display:flex;align-items:center;gap:8px;"><input type="radio" name="fq1-engine-v2" value="${value}" ${selected ? 'checked' : ''} ${available ? '' : 'disabled'}><strong>${label}</strong></span>${value === 'gpu' && available ? '<span style="border-radius:999px;background:#16a34a;color:white;font-size:11px;font-weight:800;padding:3px 8px;">권장</span>' : ''}${!available ? '<span style="border-radius:999px;background:#fee2e2;color:#991b1b;font-size:11px;font-weight:800;padding:3px 8px;">사용 불가</span>' : ''}</div><div style="font-size:12px;line-height:1.55;color:#475569;">${detail}</div></label>`;
-  }
-
-  function showRawFq1Modal(onDone) {
+  function showFq1WebGpuModal(onDone) {
     hideLoadingOverlay();
     document.getElementById('adventure-compute-modal')?.remove();
     const gpuAvailable = Boolean(navigator.gpu);
-    let selected = gpuAvailable ? 'gpu' : 'cpu';
+    const selected = 'gpu';
     const root = document.createElement('div');
     root.id = 'adventure-compute-modal';
     root.style.cssText = 'position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;background:rgba(15,23,42,.68);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;padding:16px;box-sizing:border-box;';
-    root.innerHTML = `<div data-compute-card="true" style="width:min(580px,100%);max-height:calc(100dvh - 32px);overflow:auto;border-radius:12px;background:#fff;box-shadow:0 24px 70px rgba(15,23,42,.38);border:1px solid rgba(15,23,42,.12);padding:22px;box-sizing:border-box;"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><h2 style="margin:0;font-size:21px;color:#0f172a;">FQ1-U8K 테스트 모델</h2><span style="border-radius:999px;background:#fef3c7;color:#92400e;font-size:11px;font-weight:900;padding:3px 8px;">실험용</span><span style="border-radius:999px;background:#dbeafe;color:#1d4ed8;font-size:11px;font-weight:900;padding:3px 8px;">raw WebGPU</span></div><p style="margin:9px 0 0;color:#475569;font-size:13px;line-height:1.6;">기존 adaptive root의 조기종료·후보 제거 로직은 유지하고 continuation만 FQ1으로 실행합니다. GPU 모드는 TFJS를 사용하지 않으며 상태, feature, Transformer, 환경 transition을 고정 WebGPU 버퍼에서 처리합니다.</p><div style="margin:14px 0;padding:11px 12px;border-radius:9px;background:#f8fafc;border:1px solid #e2e8f0;color:#334155;font-size:12px;line-height:1.65;"><strong>고정 설정</strong> · 행동별 최대 8,192 rollout · horizon 512<br><strong>메모리 안전</strong> · 고정 lane chunk와 재사용 버퍼 · decision 중 GPU→CPU 상태 readback 없음 · 최종 점수만 readback</div><div style="font-size:13px;font-weight:800;color:#0f172a;margin-bottom:8px;">계산 엔진</div><div id="fq1-v2-engine-options" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;">${engineCard('GPU','gpu','전용 WGSL compute pipeline입니다. 기존 X36 GPU 엔진처럼 rollout 상태를 GPU에 유지합니다.',gpuAvailable,selected === 'gpu')}${engineCard('CPU','cpu','기존 CPU 경로입니다. FQ1 WebGPU 검증 실패 시 비교용으로만 사용하세요.',true,selected === 'cpu')}</div><div id="fq1-v2-status" style="min-height:36px;margin-top:13px;color:#64748b;font-size:12px;line-height:1.55;"></div><button id="fq1-v2-start" type="button" style="width:100%;border:0;border-radius:9px;background:#2563eb;color:#fff;font-size:14px;font-weight:850;padding:12px 14px;cursor:pointer;">FQ1 테스트 시작</button><div style="margin-top:10px;color:#94a3b8;font-size:11px;line-height:1.45;text-align:center;">일반 URL의 X36 운영 정책에는 영향을 주지 않습니다.</div></div>`;
+    root.innerHTML = `<div data-compute-card="true" style="width:min(580px,100%);max-height:calc(100dvh - 32px);overflow:auto;border-radius:12px;background:#fff;box-shadow:0 24px 70px rgba(15,23,42,.38);border:1px solid rgba(15,23,42,.12);padding:22px;box-sizing:border-box;"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><h2 style="margin:0;font-size:21px;color:#0f172a;">FQ1-U8K 테스트 모델</h2><span style="border-radius:999px;background:#fef3c7;color:#92400e;font-size:11px;font-weight:900;padding:3px 8px;">실험용</span><span style="border-radius:999px;background:#dbeafe;color:#1d4ed8;font-size:11px;font-weight:900;padding:3px 8px;">raw WebGPU 전용</span></div><p style="margin:9px 0 0;color:#475569;font-size:13px;line-height:1.6;">기존 adaptive root의 조기종료·후보 제거 로직은 유지하고 continuation만 FQ1으로 실행합니다. 상태, feature, Transformer, 환경 transition을 고정 WebGPU 버퍼에서 처리합니다.</p><div style="margin:14px 0;padding:11px 12px;border-radius:9px;background:#f8fafc;border:1px solid #e2e8f0;color:#334155;font-size:12px;line-height:1.65;"><strong>고정 설정</strong> · 행동별 최대 8,192 rollout · horizon 512<br><strong>메모리 안전</strong> · 고정 lane chunk와 재사용 버퍼 · decision 중 GPU→CPU 상태 readback 없음 · 최종 점수만 readback</div><div style="font-size:13px;font-weight:800;color:#0f172a;margin-bottom:8px;">계산 엔진</div><div id="fq1-engine-options" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;">${engineCard('GPU','gpu','전용 WGSL compute pipeline입니다. 기존 X36 GPU 엔진처럼 rollout 상태를 GPU에 유지합니다.',gpuAvailable,gpuAvailable,'사용 가능')}${engineCard('CPU','cpu','현재 FQ1-U8K continuation의 CPU rollout 엔진은 제공하지 않습니다.',false,false,'')}</div><div id="fq1-status" style="min-height:36px;margin-top:13px;color:${gpuAvailable ? '#64748b' : '#b91c1c'};font-size:12px;line-height:1.55;">${gpuAvailable ? '' : '이 브라우저 또는 기기에서는 WebGPU를 사용할 수 없어 FQ1 테스트를 시작할 수 없습니다.'}</div><button id="fq1-start" type="button" ${gpuAvailable ? '' : 'disabled'} style="width:100%;border:0;border-radius:9px;background:${gpuAvailable ? '#2563eb' : '#94a3b8'};color:#fff;font-size:14px;font-weight:850;padding:12px 14px;cursor:${gpuAvailable ? 'pointer' : 'not-allowed'};">FQ1 GPU 테스트 시작</button><div style="margin-top:10px;color:#94a3b8;font-size:11px;line-height:1.45;text-align:center;">주소에 v 파라미터를 붙이지 않아도 최신 FQ1 모드와 WebGPU 엔진을 불러옵니다.</div></div>`;
     document.body.appendChild(root);
-    const cards = Array.from(root.querySelectorAll('[data-fq1-engine]'));
-    function refresh() {
-      cards.forEach(card => {
-        const active = card.dataset.fq1Engine === selected;
-        card.style.borderColor = active ? '#2563eb' : '#cbd5e1';
-        card.style.background = active ? '#eff6ff' : '#f8fafc';
-        const input = card.querySelector('input');
-        if (input && !input.disabled) input.checked = active;
-      });
-    }
-    cards.forEach(card => card.addEventListener('click', () => {
-      const input = card.querySelector('input');
-      if (!input || input.disabled) return;
-      selected = card.dataset.fq1Engine;
-      refresh();
-    }));
-    const button = root.querySelector('#fq1-v2-start');
-    const status = root.querySelector('#fq1-v2-status');
+
+    const button = root.querySelector('#fq1-start');
+    const status = root.querySelector('#fq1-status');
+    if (!gpuAvailable) return;
+
     button.addEventListener('click', async () => {
       button.disabled = true;
       button.style.opacity = '.65';
       button.style.cursor = 'wait';
       status.style.color = '#2563eb';
       try {
-        if (selected === 'gpu') {
-          const engine = await ensureGpuEngine(message => { status.textContent = message; });
-          const info = engine.diagnostics();
-          status.textContent = `초기화 완료 · 고정 GPU 버퍼 ${info.allocatedMiB.toFixed(1)} MiB · lane chunk ${info.laneCapacity} · 종료 확인 ${info.checkInterval} step`;
-        } else {
-          status.textContent = 'CPU 비교 경로를 선택했습니다.';
-        }
-        computeSettings.engine = selected;
+        const engine = await ensureGpuEngine(message => { status.textContent = message; });
+        const info = engine.diagnostics();
+        status.textContent = `초기화 완료 · 고정 GPU 버퍼 ${info.allocatedMiB.toFixed(1)} MiB · lane chunk ${info.laneCapacity} · 종료 확인 ${info.checkInterval} step`;
+        computeSettings.engine = 'gpu';
         computeSettings.cpuIteration = MAX_ROLLOUTS;
         computeSettings.cpuMaxPct = 100;
         computeSettings.gpuIteration = MAX_ROLLOUTS;
@@ -372,12 +371,14 @@
     });
   }
 
-  prepareGpuReadbackModeOnLoad = async function prepareFq1RawWebGpuMode() {
+  prepareGpuReadbackModeOnLoad = async function prepareFq1WebGpuMode() {
     gpuDisabledReason = navigator.gpu ? '' : 'WebGPU is unavailable for FQ1 mode.';
   };
-  isGpuAvailable = function isFq1RawGpuAvailable() { return Boolean(navigator.gpu); };
-  showComputeModeModal = showRawFq1Modal;
-  calcEx = calcExPatched;
+  isGpuAvailable = function isFq1GpuAvailable() { return Boolean(navigator.gpu); };
+  showComputeModeModal = showFq1WebGpuModal;
+  calcEx = calcExFq1WebGpu;
+  computeSettings.engine = 'gpu';
+  computeSettings.cpuPolicy = 'fq1-unavailable';
   computeSettings.cpuIteration = MAX_ROLLOUTS;
   computeSettings.cpuMaxPct = 100;
   computeSettings.gpuIteration = MAX_ROLLOUTS;
