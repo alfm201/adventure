@@ -8,10 +8,38 @@
   const currentScriptUrl = document.currentScript?.src
     ? new URL(document.currentScript.src, window.location.href)
     : null;
-  const BUILD_ID = currentScriptUrl?.searchParams.get('build') || String(Date.now());
-  const ENGINE_URL = new URL(`./js/fq1_webgpu.js?build=${encodeURIComponent(BUILD_ID)}`, window.location.href).href;
-  const POLICY_URL = new URL(`./fq1.js?build=${encodeURIComponent(BUILD_ID)}`, window.location.href).href;
+  const ASSET_VERSION = currentScriptUrl?.searchParams.get('v') || String(Date.now());
+  const ENGINE_URL = new URL(`./js/fq1_webgpu.js?v=${encodeURIComponent(ASSET_VERSION)}`, window.location.href).href;
+  const POLICY_URL = new URL(`./fq1.js?v=${encodeURIComponent(ASSET_VERSION)}`, window.location.href).href;
   const WEIGHTS_URL = new URL('./fq1_weights.bin', window.location.href).href;
+
+  // GPUQueue.writeBuffer()의 dataOffset/size는 TypedArray 입력일 때 바이트가
+  // 아니라 요소 개수다. 초기 raw-WebGPU 엔진의 count * 4 호출만 안전하게 보정한다.
+  const queuePrototype = globalThis.GPUQueue?.prototype;
+  if (queuePrototype && !queuePrototype.__fq1TypedArraySizeFix) {
+    const nativeWriteBuffer = queuePrototype.writeBuffer;
+    Object.defineProperty(queuePrototype, '__fq1TypedArraySizeFix', {
+      value: true,
+      configurable: false,
+      enumerable: false,
+      writable: false,
+    });
+    queuePrototype.writeBuffer = function (buffer, bufferOffset, data, dataOffset, size) {
+      if (ArrayBuffer.isView(data) && !(data instanceof DataView) && size !== undefined) {
+        const elementOffset = Number(dataOffset) || 0;
+        const remainingElements = Math.max(0, data.length - elementOffset);
+        const bytesPerElement = Number(data.BYTES_PER_ELEMENT) || 1;
+        if (
+          size > remainingElements &&
+          size % bytesPerElement === 0 &&
+          size / bytesPerElement <= remainingElements
+        ) {
+          size /= bytesPerElement;
+        }
+      }
+      return nativeWriteBuffer.call(this, buffer, bufferOffset, data, dataOffset, size);
+    };
+  }
 
   const scriptLoads = new Map();
   let policy = null;
@@ -107,7 +135,7 @@
       window.__adventureFq1Mode = {
         active: true,
         backend: 'raw-webgpu',
-        buildId: BUILD_ID,
+        assetVersion: ASSET_VERSION,
         maxRollouts: MAX_ROLLOUTS,
         modelId: loadedPolicy.header?.model_id || 'FQ1',
         diagnostics: () => gpuEngine?.diagnostics() || null,
@@ -322,7 +350,7 @@
     const badge = available && badgeText
       ? `<span style="border-radius:999px;background:#16a34a;color:white;font-size:11px;font-weight:800;padding:3px 8px;">${badgeText}</span>`
       : !available
-        ? '<span style="border-radius:999px;background:#e2e8f0;color:#64748b;font-size:11px;font-weight:800;padding:3px 8px;">비활성화</span>'
+        ? '<span style="border-radius:999px;background:#fee2e2;color:#991b1b;font-size:11px;font-weight:800;padding:3px 8px;">사용 불가</span>'
         : '';
     return `<label data-fq1-engine="${value}" style="display:block;border:1px solid ${selected ? '#2563eb' : '#cbd5e1'};border-radius:10px;padding:14px;cursor:${available ? 'pointer' : 'not-allowed'};background:${selected ? '#eff6ff' : '#f8fafc'};opacity:${available ? '1' : '.55'};"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px;"><span style="display:flex;align-items:center;gap:8px;"><input type="radio" name="fq1-engine-webgpu" value="${value}" ${selected ? 'checked' : ''} ${available ? '' : 'disabled'}><strong>${label}</strong></span>${badge}</div><div style="font-size:12px;line-height:1.55;color:#475569;">${detail}</div></label>`;
   }
@@ -331,11 +359,10 @@
     hideLoadingOverlay();
     document.getElementById('adventure-compute-modal')?.remove();
     const gpuAvailable = Boolean(navigator.gpu);
-    const selected = 'gpu';
     const root = document.createElement('div');
     root.id = 'adventure-compute-modal';
     root.style.cssText = 'position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;background:rgba(15,23,42,.68);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;padding:16px;box-sizing:border-box;';
-    root.innerHTML = `<div data-compute-card="true" style="width:min(580px,100%);max-height:calc(100dvh - 32px);overflow:auto;border-radius:12px;background:#fff;box-shadow:0 24px 70px rgba(15,23,42,.38);border:1px solid rgba(15,23,42,.12);padding:22px;box-sizing:border-box;"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><h2 style="margin:0;font-size:21px;color:#0f172a;">FQ1-U8K 테스트 모델</h2><span style="border-radius:999px;background:#fef3c7;color:#92400e;font-size:11px;font-weight:900;padding:3px 8px;">실험용</span><span style="border-radius:999px;background:#dbeafe;color:#1d4ed8;font-size:11px;font-weight:900;padding:3px 8px;">raw WebGPU 전용</span></div><p style="margin:9px 0 0;color:#475569;font-size:13px;line-height:1.6;">기존 adaptive root의 조기종료·후보 제거 로직은 유지하고 continuation만 FQ1으로 실행합니다. 상태, feature, Transformer, 환경 transition을 고정 WebGPU 버퍼에서 처리합니다.</p><div style="margin:14px 0;padding:11px 12px;border-radius:9px;background:#f8fafc;border:1px solid #e2e8f0;color:#334155;font-size:12px;line-height:1.65;"><strong>고정 설정</strong> · 행동별 최대 8,192 rollout · horizon 512<br><strong>메모리 안전</strong> · 고정 lane chunk와 재사용 버퍼 · decision 중 GPU→CPU 상태 readback 없음 · 최종 점수만 readback</div><div style="font-size:13px;font-weight:800;color:#0f172a;margin-bottom:8px;">계산 엔진</div><div id="fq1-engine-options" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;">${engineCard('GPU','gpu','전용 WGSL compute pipeline입니다. 기존 X36 GPU 엔진처럼 rollout 상태를 GPU에 유지합니다.',gpuAvailable,gpuAvailable,'사용 가능')}${engineCard('CPU','cpu','현재 FQ1-U8K continuation의 CPU rollout 엔진은 제공하지 않습니다.',false,false,'')}</div><div id="fq1-status" style="min-height:36px;margin-top:13px;color:${gpuAvailable ? '#64748b' : '#b91c1c'};font-size:12px;line-height:1.55;">${gpuAvailable ? '' : '이 브라우저 또는 기기에서는 WebGPU를 사용할 수 없어 FQ1 테스트를 시작할 수 없습니다.'}</div><button id="fq1-start" type="button" ${gpuAvailable ? '' : 'disabled'} style="width:100%;border:0;border-radius:9px;background:${gpuAvailable ? '#2563eb' : '#94a3b8'};color:#fff;font-size:14px;font-weight:850;padding:12px 14px;cursor:${gpuAvailable ? 'pointer' : 'not-allowed'};">FQ1 GPU 테스트 시작</button><div style="margin-top:10px;color:#94a3b8;font-size:11px;line-height:1.45;text-align:center;">주소에 v 파라미터를 붙이지 않아도 최신 FQ1 모드와 WebGPU 엔진을 불러옵니다.</div></div>`;
+    root.innerHTML = `<div data-compute-card="true" style="width:min(580px,100%);max-height:calc(100dvh - 32px);overflow:auto;border-radius:12px;background:#fff;box-shadow:0 24px 70px rgba(15,23,42,.38);border:1px solid rgba(15,23,42,.12);padding:22px;box-sizing:border-box;"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><h2 style="margin:0;font-size:21px;color:#0f172a;">FQ1-U8K 테스트 모델</h2><span style="border-radius:999px;background:#fef3c7;color:#92400e;font-size:11px;font-weight:900;padding:3px 8px;">실험용</span><span style="border-radius:999px;background:#dbeafe;color:#1d4ed8;font-size:11px;font-weight:900;padding:3px 8px;">raw WebGPU 전용</span></div><p style="margin:9px 0 0;color:#475569;font-size:13px;line-height:1.6;">기존 adaptive root의 조기종료·후보 제거 로직은 유지하고 continuation만 FQ1으로 실행합니다. 상태, feature, Transformer, 환경 transition을 고정 WebGPU 버퍼에서 처리합니다.</p><div style="margin:14px 0;padding:11px 12px;border-radius:9px;background:#f8fafc;border:1px solid #e2e8f0;color:#334155;font-size:12px;line-height:1.65;"><strong>고정 설정</strong> · 행동별 최대 8,192 rollout · horizon 512<br><strong>메모리 안전</strong> · 고정 lane chunk와 재사용 버퍼 · decision 중 GPU→CPU 상태 readback 없음 · 최종 점수만 readback</div><div style="font-size:13px;font-weight:800;color:#0f172a;margin-bottom:8px;">계산 엔진</div><div id="fq1-engine-options" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;">${engineCard('GPU','gpu','전용 WGSL compute pipeline입니다. 기존 X36 GPU 엔진처럼 rollout 상태를 GPU에 유지합니다.',gpuAvailable,gpuAvailable,'사용 가능')}${engineCard('CPU','cpu','현재 FQ1-U8K continuation의 CPU rollout 엔진은 제공하지 않습니다.',false,false,'')}</div><div id="fq1-status" style="min-height:36px;margin-top:13px;color:${gpuAvailable ? '#64748b' : '#b91c1c'};font-size:12px;line-height:1.55;">${gpuAvailable ? '' : '이 브라우저 또는 기기에서는 WebGPU를 사용할 수 없어 FQ1 테스트를 시작할 수 없습니다.'}</div><button id="fq1-start" type="button" ${gpuAvailable ? '' : 'disabled'} style="width:100%;border:0;border-radius:9px;background:${gpuAvailable ? '#2563eb' : '#94a3b8'};color:#fff;font-size:14px;font-weight:850;padding:12px 14px;cursor:${gpuAvailable ? 'pointer' : 'not-allowed'};">FQ1 GPU 테스트 시작</button><div style="margin-top:10px;color:#94a3b8;font-size:11px;line-height:1.45;text-align:center;">일반 URL의 X36 운영 정책에는 영향을 주지 않습니다.</div></div>`;
     document.body.appendChild(root);
 
     const button = root.querySelector('#fq1-start');
