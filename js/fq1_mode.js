@@ -13,8 +13,6 @@
   const POLICY_URL = new URL(`./fq1.js?v=${encodeURIComponent(ASSET_VERSION)}`, window.location.href).href;
   const WEIGHTS_URL = new URL('./fq1_weights.bin', window.location.href).href;
 
-  // GPUQueue.writeBuffer()의 dataOffset/size는 TypedArray 입력일 때 바이트가
-  // 아니라 요소 개수다. 초기 raw-WebGPU 엔진의 count * 4 호출만 안전하게 보정한다.
   const queuePrototype = globalThis.GPUQueue?.prototype;
   if (queuePrototype && !queuePrototype.__fq1TypedArraySizeFix) {
     const nativeWriteBuffer = queuePrototype.writeBuffer;
@@ -295,6 +293,7 @@
             onProgress: completed => {
               if (!isCurrent()) return;
               env.exValues.status[action] = `FQ1 GPU ${actionStats[action].count + completed}/${maxIteration}`;
+              updateBoard();
             },
           });
           if (!isCurrent()) return false;
