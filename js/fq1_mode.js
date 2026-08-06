@@ -280,30 +280,41 @@
 
       async function sampleActions(actions, iteration) {
         const sharedSeed = randomSeed();
-        for (const action of actions) {
-          if (!isCurrent()) return false;
-          const remaining = maxIteration - actionStats[action].count;
-          const count = Math.min(iteration, remaining);
-          if (count <= 0) continue;
-          env.exValues.status[action] = `FQ1 GPU ${actionStats[action].count}/${maxIteration}`;
-          updateBoard();
+        const targetCounts = new Map();
+        const completedCounts = new Map();
 
-          await engine.run(simulationState, action, count, sharedSeed, {
-            isCancelled: () => !isCurrent(),
-            onProgress: (completed, total, chunk) => {
-              if (!isCurrent()) return;
-              addScores(actionStats[action], chunk);
-              const decision = getAdaptiveDecision(actionStats, activeActions);
-              applyDecision(decision);
-              env.exValues.status[action] = `FQ1 GPU ${actionStats[action].count}/${maxIteration}`;
-              updateBoard();
-            },
-          });
-          if (!isCurrent()) return false;
-          const decision = getAdaptiveDecision(actionStats, activeActions);
-          applyDecision(decision);
-          updateBoard();
-          await new Promise(resolve => setTimeout(resolve, 0));
+        for (const action of actions) {
+          const remaining = maxIteration - actionStats[action].count;
+          targetCounts.set(action, Math.min(iteration, remaining));
+          completedCounts.set(action, 0);
+        }
+
+        while (actions.some(action => completedCounts.get(action) < targetCounts.get(action))) {
+          for (const action of actions) {
+            if (!isCurrent()) return false;
+            const completed = completedCounts.get(action);
+            const count = Math.min(engine.laneCapacity, targetCounts.get(action) - completed);
+            if (count <= 0) continue;
+            env.exValues.status[action] = `FQ1 GPU ${actionStats[action].count}/${maxIteration}`;
+            updateBoard();
+
+            const chunk = await engine.runChunk(
+              simulationState,
+              action,
+              count,
+              sharedSeed,
+              completed,
+              { isCancelled: () => !isCurrent() },
+            );
+            if (!isCurrent()) return false;
+            completedCounts.set(action, completed + count);
+            addScores(actionStats[action], chunk);
+            const decision = getAdaptiveDecision(actionStats, activeActions);
+            applyDecision(decision);
+            env.exValues.status[action] = `FQ1 GPU ${actionStats[action].count}/${maxIteration}`;
+            updateBoard();
+            await new Promise(resolve => setTimeout(resolve, 0));
+          }
         }
         return true;
       }
