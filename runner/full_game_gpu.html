@@ -1,0 +1,1389 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>GPU Full Game Benchmark</title>
+</head>
+<body>
+  <pre id="log" style="white-space: nowrap; overflow-x: auto; margin: 0;">running</pre>
+  <script src="../lib/keyed_rng.js"></script>
+  <script src="../../tests/adventure_rollout_policy/js/stage.js"></script>
+  <script src="../../tests/adventure_rollout_policy/js/cardInfo.js"></script>
+  <script src="../../tests/adventure_rollout_policy/js/board.js"></script>
+  <script src="../../tests/adventure_rollout_policy/js/gpu_engine.js"></script>
+  <script>
+    window.NEURAL_POLICY_MODEL_BASE = '../../tests/adventure_rollout_policy/js';
+  </script>
+  <script src="../../tests/adventure_rollout_policy/js/neural_policy_selector.js"></script>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const EPISODES = Number(params.get('episodes') || 30);
+    const DEFAULT_SEED_BASE = Number.isFinite(EPISODES) && EPISODES > 0 ? EPISODES : 1;
+    const paramSeedBase = Number(params.get('seedBase'));
+    const SEED_BASE = Number.isFinite(paramSeedBase) ? (paramSeedBase >>> 0) : DEFAULT_SEED_BASE;
+    const REPLICATE_ID = Number(params.get('replicateId') || 0);
+    const POLICY_SET = params.get('policySet') || 'operational_vs_i50k';
+    const TRACE_DECISIONS = params.get('traceDecisions') === '1';
+    const TRACE_OVERRIDES = params.get('traceOverrides') === '1';
+    const TRACE_CHUNKED = params.get('traceChunked') === '1';
+    const ROLLOUT_COUNT_OVERRIDE = Number(params.get('rolloutCount') || params.get('rollouts') || NaN);
+    const MAX_STEPS_OVERRIDE = Number(params.get('maxSteps') || NaN);
+    const BOUND_Z = 1.8;
+    const SAMPLE_LIMIT = 2;
+    const I50K_PRE36_POLICY = {
+      id: 'i50k_b50_max100_rollout_chooseAction_v1',
+      policy: 'i50k_b50_max100_rollout_chooseAction_v1',
+      label: 'i50k b50 max100 chooseAction_v1',
+      modelVersion: '운영',
+      computeEngine: 'gpu',
+      iteration: 50000,
+      batchPct: 50,
+      maxPct: 100,
+      rolloutPolicy: { mode: 'legacy_pre36_pre_stage31p16' },
+      batchDispatch: 'separate',
+      source: 'bak/sync_latest_20260511_044809/board.js pre-stage31p16 chooseAction_v1 ported to GPU rollout',
+    };
+    const OPERATIONAL_X36_POLICY = {
+      id: 'i100k_b200_max100_rollout_x36_distribution_v1',
+      policy: 'i100k_b200_max100_rollout_x36_distribution_v1',
+      label: 'i100k b200 max100 rollout_x36_distribution_v1',
+      modelVersion: '운영',
+      computeEngine: 'gpu',
+      iteration: 100000,
+      batchPct: 200,
+      maxPct: 100,
+      rolloutPolicy: { mode: 'baseline' },
+      batchDispatch: 'separate',
+      source: 'adventure_test synced from current adventure/js; GPU x36 rollout; high batchPct=200 maxPct=100',
+    };
+    const OPERATIONAL_X36_STAGE_COST6_POLICY = {
+      ...OPERATIONAL_X36_POLICY,
+      id: 'i100k_b200_max100_rollout_x36_distribution_stageCost6_v1',
+      policy: 'i100k_b200_max100_rollout_x36_distribution_stageCost6_v1',
+      label: 'i100k b200 max100 rollout_x36_distribution_stageCost6_v1',
+      x36StageCost: 6,
+      source: 'operational GPU x36 rollout with tuned stage-card x36 penalty 6; otherwise same i100k b200 max100 adaptive policy',
+    };
+    const CPU_FAST_FIXED_I10K_POLICY = {
+      id: 'i10k_rollout_chooseAction_v2',
+      policy: 'i10k_rollout_chooseAction_v2',
+      label: 'i10k rollout_chooseAction_v2 fixed all actions',
+      modelVersion: '운영',
+      computeEngine: 'gpu',
+      iteration: 10000,
+      batchPct: 0,
+      maxPct: 100,
+      rolloutPolicy: { mode: 'chooseActionFast_v2' },
+      batchDispatch: 'all_actions_fixed',
+      decisionMode: 'fixedAllActions',
+      source: 'current CPU Fast chooseActionFast logic ported to GPU rollout; fixed 10k per action; no confidence stop/prune',
+    };
+    const CPU_FAST_ADAPTIVE_I50K_POLICY = {
+      id: 'i50k_b50_max100_rollout_chooseAction_v2',
+      policy: 'i50k_b50_max100_rollout_chooseAction_v2',
+      label: 'i50k b50 max100 rollout_chooseAction_v2',
+      modelVersion: '운영',
+      computeEngine: 'gpu',
+      iteration: 50000,
+      batchPct: 50,
+      maxPct: 100,
+      rolloutPolicy: { mode: 'chooseActionFast_v2' },
+      batchDispatch: 'separate',
+      source: 'current CPU Fast chooseActionFast logic ported to GPU rollout; adaptive i50k b50 max100',
+    };
+    const CPU_FAST_DIRECT_I0K_POLICY = {
+      id: 'i0_rollout_chooseAction_v2',
+      policy: 'i0_rollout_chooseAction_v2',
+      label: 'i0 rollout_chooseAction_v2 direct',
+      modelVersion: '운영',
+      computeEngine: 'cpu',
+      iteration: 0,
+      batchPct: 0,
+      maxPct: 0,
+      rolloutPolicy: { mode: 'chooseActionFast_v2' },
+      batchDispatch: 'none',
+      decisionMode: 'directChooseActionFast',
+      source: 'current CPU Fast chooseActionFast direct decision; no root rollout',
+    };
+    const NEURAL_DYNAMIC_POLICIES = [
+      {
+        id: 'i50k_b50_max100_rollout_policy_p_dynamic_v1',
+        policy: 'i50k_b50_max100_rollout_policy_p_dynamic_v1',
+        label: 'i50k b50 max100 rollout_policy_p_dynamic_v1',
+        modelVersion: '테스트',
+        computeEngine: 'gpu',
+        iteration: 50000,
+        batchPct: 50,
+        maxPct: 100,
+        rolloutPolicy: { mode: 'baseline' },
+        batchDispatch: 'subset',
+        candidatePolicy: 'neuralDynamic',
+        candidateTopK: 3,
+        dynamicTop1Prob: 0.70,
+        dynamicTop3CumProb: 0.88,
+        dynamicTop3Top4Gap: 0.45,
+        source: 'tests/neural_mcts_policy deprecated_mlp_policy_value_20260511094134 P head candidate filter, original dynamic threshold',
+      },
+      {
+        id: 'i50k_b50_max100_rollout_policy_p_dynamic_conservative_v1',
+        policy: 'i50k_b50_max100_rollout_policy_p_dynamic_conservative_v1',
+        label: 'i50k b50 max100 rollout_policy_p_dynamic_conservative_v1',
+        modelVersion: '테스트',
+        computeEngine: 'gpu',
+        iteration: 50000,
+        batchPct: 50,
+        maxPct: 100,
+        rolloutPolicy: { mode: 'baseline' },
+        batchDispatch: 'subset',
+        candidatePolicy: 'neuralDynamic',
+        candidateTopK: 3,
+        dynamicTop1Prob: 0.85,
+        dynamicTop3CumProb: 0.90,
+        dynamicTop3Top4Gap: 0.45,
+        source: 'tests/neural_mcts_policy deprecated_mlp_policy_value_20260511094134 P head candidate filter, conservative dynamic threshold',
+      },
+      {
+        id: 'i0_rollout_policy_value_mcts_v1',
+        policy: 'i0_rollout_policy_value_mcts_v1',
+        label: 'i0 rollout_policy_value_mcts_v1',
+        modelVersion: '테스트',
+        computeEngine: 'gpu',
+        iteration: 0,
+        batchPct: 0,
+        maxPct: 0,
+        rolloutPolicy: { mode: 'networkMctsVisit', c: 8, simulations: 16 },
+        batchDispatch: 'none',
+        decisionMode: 'networkMctsVisit',
+        source: 'tests/neural_mcts_policy deprecated_mlp_policy_value_20260511094134 joint P/V model; P priors + V leaf evaluation; c=8 sims=16',
+      },
+    ];
+    const POLICY_VALUE_MCTS_V2_3 = {
+      id: 'i0_rollout_policy_value_mcts_v2_3',
+      policy: 'i0_rollout_policy_value_mcts_v2_3',
+      label: 'i0 rollout_policy_value_mcts_v2.3',
+      modelVersion: '테스트',
+      computeEngine: 'gpu',
+      iteration: 0,
+      batchPct: 0,
+      maxPct: 0,
+      rolloutPolicy: { mode: 'networkMctsVisit', c: 8, simulations: 16 },
+      batchDispatch: 'none',
+      decisionMode: 'networkMctsVisit',
+      source: 'tests/neural_mcts_policy deprecated_mlp_policy_value_20260511234804; v2 fine-tuned with hard GPU Q-label anchors; c=8 sims=16',
+    };
+    const Q_HARD_POLICIES = [
+      {
+        id: 'i0_rollout_action_q_hard_v1',
+        policy: 'i0_rollout_action_q_hard_v1',
+        label: 'i0 rollout_action_q_hard_v1 direct',
+        modelVersion: '테스트',
+        computeEngine: 'gpu',
+        iteration: 0,
+        batchPct: 0,
+        maxPct: 0,
+        rolloutPolicy: { mode: 'baseline' },
+        batchDispatch: 'none',
+        decisionMode: 'directQ',
+        source: 'tests/neural_mcts_policy deprecated_action_q_mlp_20260511235936; hard GPU Q-label direct action selection',
+      },
+      {
+        id: 'i50k_b50_max100_rollout_action_q_hard_top3_v1',
+        policy: 'i50k_b50_max100_rollout_action_q_hard_top3_v1',
+        label: 'i50k b50 max100 rollout_action_q_hard_top3_v1',
+        modelVersion: '테스트',
+        computeEngine: 'gpu',
+        iteration: 50000,
+        batchPct: 50,
+        maxPct: 100,
+        rolloutPolicy: { mode: 'baseline' },
+        batchDispatch: 'subset',
+        candidatePolicy: 'qTopK',
+        candidateTopK: 3,
+        source: 'tests/neural_mcts_policy deprecated_action_q_mlp_20260511235936; hard GPU Q-label top3 candidate filter then i50k rollout',
+      },
+    ];
+    const ACTION_Q_ADVANTAGE_V1_1_POLICY = {
+      id: 'i0_rollout_action_q_advantage_v1_1',
+      policy: 'i0_rollout_action_q_advantage_v1_1',
+      label: 'i0 rollout_action_q_advantage_v1.1 direct',
+      modelVersion: '테스트',
+      computeEngine: 'gpu',
+      iteration: 0,
+      batchPct: 0,
+      maxPct: 0,
+      rolloutPolicy: { mode: 'baseline' },
+      batchDispatch: 'none',
+      decisionMode: 'directQ',
+      source: 'tests/neural_mcts_policy qActionAdvantageEncoder_v1.1; fixed parser + acquired flags + deck summary + card-aware action features; legal mean-centered advantage target; rollout-free direct Q',
+    };
+    const ACTION_Q_ADVANTAGE_V1_2_POLICY = {
+      ...ACTION_Q_ADVANTAGE_V1_1_POLICY,
+      id: 'i0_rollout_action_q_advantage_v1_2',
+      policy: 'i0_rollout_action_q_advantage_v1_2',
+      label: 'i0 rollout_action_q_advantage_v1.2 direct',
+      source: 'tests/neural_mcts_policy qActionAdvantageEncoder_v1.2; v1.1 warm-start + active online-state relabel 1024x10k with top 256x50k; rollout-free direct Q',
+    };
+    const ACTION_Q_ADVANTAGE_V1_3_SAFE_POLICY = {
+      ...ACTION_Q_ADVANTAGE_V1_1_POLICY,
+      id: 'i0_rollout_action_q_advantage_v1_3_safe',
+      policy: 'i0_rollout_action_q_advantage_v1_3_safe',
+      label: 'i0 rollout_action_q_advantage_v1.3_safe direct',
+      source: 'tests/neural_mcts_policy qActionAdvantageEncoder_v1.3_safe_improve_probe; v1.1 warm-start + safe-improvement target that preserves baseline on low-confidence teacher margins; rollout-free direct Q',
+    };
+    const ACTION_Q_ADVANTAGE_V1_5_ONPOLICY_POLICY = {
+      ...ACTION_Q_ADVANTAGE_V1_1_POLICY,
+      id: 'i0_rollout_action_q_advantage_v1_5_onpolicy_qdirect',
+      policy: 'i0_rollout_action_q_advantage_v1_5_onpolicy_qdirect',
+      label: 'i0 rollout_action_q_advantage_v1.5_onpolicy_qdirect direct',
+      source: 'tests/neural_mcts_policy qActionAdvantageEncoder_v1.5_onpolicy_qdirect; v1.1 warm-start + qDirect on-policy 2048x10k relabel appended to prior teacher set; rollout-free direct Q',
+    };
+    const OUTCOME_LISTWISE_Q_V1_POLICY = {
+      id: 'i0_rollout_outcome_listwise_q_v1',
+      policy: 'i0_rollout_outcome_listwise_q_v1',
+      label: 'i0 rollout_outcome_listwise_q_v1 direct',
+      modelVersion: '테스트',
+      computeEngine: 'gpu',
+      iteration: 0,
+      batchPct: 0,
+      maxPct: 0,
+      rolloutPolicy: { mode: 'baseline' },
+      batchDispatch: 'none',
+      decisionMode: 'directOutcomeListwiseQ',
+      source: 'tests/neural_mcts_policy qOutcomeListwiseAdvantageEncoder_v1_anchor6656_conservative; 6656 10k-rollout teacher states; one-step outcome features + all-action listwise ranker; rollout-free direct Q',
+    };
+    const OUTCOME_LISTWISE_TOP2_RISK_POLICIES = [
+      {
+        ...OUTCOME_LISTWISE_Q_V1_POLICY,
+        id: 'i0_rollout_outcome_listwise_top2risk_v1_p0_90_r0_10',
+        policy: 'i0_rollout_outcome_listwise_top2risk_v1_p0_90_r0_10',
+        label: 'i0 rollout_outcome_listwise_top2risk_v1 p0.90 r0.10',
+        decisionMode: 'directOutcomeListwiseTop2ContextRisk',
+        contextRiskBetterThreshold: 0.90,
+        contextRiskRiskThreshold: 0.10,
+        source: 'tests/neural_mcts_policy outcome listwise anchor + 3-seed top2 context-risk reranker ensemble; flip top2 only when p>=0.90 and risk<=0.10; rollout-free',
+      },
+      {
+        ...OUTCOME_LISTWISE_Q_V1_POLICY,
+        id: 'i0_rollout_outcome_listwise_top2risk_v1_p0_85_r0_075',
+        policy: 'i0_rollout_outcome_listwise_top2risk_v1_p0_85_r0_075',
+        label: 'i0 rollout_outcome_listwise_top2risk_v1 p0.85 r0.075',
+        decisionMode: 'directOutcomeListwiseTop2ContextRisk',
+        contextRiskBetterThreshold: 0.85,
+        contextRiskRiskThreshold: 0.075,
+        source: 'tests/neural_mcts_policy outcome listwise anchor + 3-seed top2 context-risk reranker ensemble; flip top2 only when p>=0.85 and risk<=0.075; rollout-free',
+      },
+    ];
+    const OUTCOME_LISTWISE_TOP2_RISK_STUDENT_POLICIES = [
+      {
+        ...OUTCOME_LISTWISE_Q_V1_POLICY,
+        id: 'i0_rollout_outcome_listwise_top2risk_student_v1_p0_90_r0_03',
+        policy: 'i0_rollout_outcome_listwise_top2risk_student_v1_p0_90_r0_03',
+        label: 'i0 rollout_outcome_listwise_top2risk_student_v1 p0.90 r0.03',
+        decisionMode: 'directOutcomeListwiseTop2ContextRisk',
+        contextRiskBetterThreshold: 0.90,
+        contextRiskRiskThreshold: 0.03,
+        source: 'tests/neural_mcts_policy contextRiskTop2Student_v1_compact96; compact flat-feature student distilled from 3-seed top2 context-risk ensemble; rollout-free',
+      },
+      {
+        ...OUTCOME_LISTWISE_Q_V1_POLICY,
+        id: 'i0_rollout_outcome_listwise_top2risk_student_v1_p0_95_r0_05',
+        policy: 'i0_rollout_outcome_listwise_top2risk_student_v1_p0_95_r0_05',
+        label: 'i0 rollout_outcome_listwise_top2risk_student_v1 p0.95 r0.05',
+        decisionMode: 'directOutcomeListwiseTop2ContextRisk',
+        contextRiskBetterThreshold: 0.95,
+        contextRiskRiskThreshold: 0.05,
+        source: 'tests/neural_mcts_policy contextRiskTop2Student_v1_compact96; compact flat-feature student distilled from 3-seed top2 context-risk ensemble; rollout-free',
+      },
+    ];
+    const OUTCOME_LISTWISE_INTEGRATED_RISK_POLICIES = [
+      {
+        ...OUTCOME_LISTWISE_Q_V1_POLICY,
+        id: 'i0_rollout_outcome_listwise_integrated_risk_v1_p0_75_r0_20',
+        policy: 'i0_rollout_outcome_listwise_integrated_risk_v1_p0_75_r0_20',
+        label: 'i0 rollout_outcome_listwise_integrated_risk_v1 p0.75 r0.20',
+        decisionMode: 'directOutcomeListwiseTop2IntegratedRisk',
+        contextRiskBetterThreshold: 0.75,
+        contextRiskRiskThreshold: 0.20,
+        source: 'tests/neural_mcts_policy qOutcomeListwiseRiskGate_v1; anchor-preserving outcome listwise model with integrated top2 risk gate; rollout-free',
+      },
+      {
+        ...OUTCOME_LISTWISE_Q_V1_POLICY,
+        id: 'i0_rollout_outcome_listwise_integrated_risk_v1_p0_80_r0_15',
+        policy: 'i0_rollout_outcome_listwise_integrated_risk_v1_p0_80_r0_15',
+        label: 'i0 rollout_outcome_listwise_integrated_risk_v1 p0.80 r0.15',
+        decisionMode: 'directOutcomeListwiseTop2IntegratedRisk',
+        contextRiskBetterThreshold: 0.80,
+        contextRiskRiskThreshold: 0.15,
+        source: 'tests/neural_mcts_policy qOutcomeListwiseRiskGate_v1; anchor-preserving outcome listwise model with integrated top2 risk gate; rollout-free',
+      },
+    ];
+    const TEACHER_GREEDY_10K_POLICY = {
+      id: 'i10k_rollout_teacher_greedy_oracle_v1',
+      policy: 'i10k_rollout_teacher_greedy_oracle_v1',
+      label: 'i10k rollout_teacherGreedy_oracle_v1',
+      modelVersion: '진단',
+      computeEngine: 'gpu',
+      iteration: 10000,
+      batchPct: 0,
+      maxPct: 100,
+      rolloutPolicy: { mode: 'baseline' },
+      batchDispatch: 'all_actions_fixed',
+      decisionMode: 'teacherGreedy',
+      leaderboardEligible: false,
+      source: 'diagnostic teacher oracle: each decision evaluates all legal actions with 10k GPU rollouts and chooses max mean',
+    };
+    const SAFE_TEACHER_GREEDY_10K_POLICY = {
+      ...TEACHER_GREEDY_10K_POLICY,
+      id: 'i10k_rollout_safe_teacher_greedy_oracle_v1',
+      policy: 'i10k_rollout_safe_teacher_greedy_oracle_v1',
+      label: 'i10k rollout_safeTeacherGreedy_oracle_v1',
+      decisionMode: 'safeTeacherGreedy',
+      safeMarginZ: 2,
+      source: 'diagnostic safe teacher oracle: use 10k teacher best only when best-second margin > 2 combined SE; otherwise fallback to chooseActionFast',
+    };
+    const SAFE_TEACHER_GREEDY_THRESHOLD_POLICIES = [1.5, 2, 2.5].map(threshold => ({
+      ...SAFE_TEACHER_GREEDY_10K_POLICY,
+      id: `i10k_rollout_safe_teacher_greedy_z${String(threshold).replace('.', '_')}_oracle_v1`,
+      policy: `i10k_rollout_safe_teacher_greedy_z${String(threshold).replace('.', '_')}_oracle_v1`,
+      label: `i10k rollout_safeTeacherGreedy_z${threshold}_oracle_v1`,
+      safeMarginZ: threshold,
+      source: `diagnostic safe teacher oracle threshold sweep: use 10k teacher best only when margin > ${threshold} combined SE; otherwise fallback to chooseActionFast`,
+    }));
+    const ACTION_Q_SAFE_OVERRIDE_POLICIES = [0.01, 0.02, 0.03, 0.05].map(gap => ({
+      ...ACTION_Q_ADVANTAGE_V1_1_POLICY,
+      id: `i0_rollout_action_q_advantage_safe_override_gap${String(gap).replace('.', '_')}`,
+      policy: `i0_rollout_action_q_advantage_safe_override_gap${String(gap).replace('.', '_')}`,
+      label: `i0 rollout_action_q_advantage safeOverride gap${gap}`,
+      decisionMode: 'directQSafeOverride',
+      qOverrideGap: gap,
+      source: `tests/neural_mcts_policy qActionAdvantageEncoder runtime model; chooseActionFast baseline unless direct Q top action exceeds baseline action by ${gap} normalized advantage; rollout-free`,
+    }));
+    const EXPECTED_VALUE_POLICY = {
+      id: 'i0_rollout_expected_value_exact_card_v1',
+      policy: 'i0_rollout_expected_value_exact_card_v1',
+      label: 'i0 rollout_expected_value_exact_card_v1',
+      modelVersion: '테스트',
+      computeEngine: 'gpu',
+      iteration: 0,
+      batchPct: 0,
+      maxPct: 0,
+      rolloutPolicy: { mode: 'baseline' },
+      batchDispatch: 'none',
+      decisionMode: 'expectedValueExactCard',
+      source: 'tests/neural_mcts_policy v2.3 leaf V; exact dice and exact drawable-card distribution; argmax E[V(S_next)]',
+    };
+    const POLICIES = POLICY_SET === 'neural_dynamic_rating_test'
+      ? NEURAL_DYNAMIC_POLICIES
+      : POLICY_SET === 'policy_value_mcts_test'
+        ? [NEURAL_DYNAMIC_POLICIES[2]]
+      : POLICY_SET === 'policy_value_mcts_v2_3_test'
+        ? [POLICY_VALUE_MCTS_V2_3]
+      : POLICY_SET === 'q_hard_test'
+        ? Q_HARD_POLICIES
+      : POLICY_SET === 'action_q_advantage_v1_1_test'
+        ? [ACTION_Q_ADVANTAGE_V1_1_POLICY]
+      : POLICY_SET === 'action_q_advantage_v1_2_test'
+        ? [ACTION_Q_ADVANTAGE_V1_2_POLICY]
+      : POLICY_SET === 'action_q_advantage_v1_3_safe_test'
+        ? [ACTION_Q_ADVANTAGE_V1_3_SAFE_POLICY]
+      : POLICY_SET === 'action_q_advantage_v1_5_onpolicy_test'
+        ? [ACTION_Q_ADVANTAGE_V1_5_ONPOLICY_POLICY]
+      : POLICY_SET === 'outcome_listwise_q_v1_test'
+        ? [OUTCOME_LISTWISE_Q_V1_POLICY]
+      : POLICY_SET === 'outcome_listwise_top2risk_v1_test'
+        ? OUTCOME_LISTWISE_TOP2_RISK_POLICIES
+      : POLICY_SET === 'outcome_listwise_top2risk_v1_p0_90_test'
+        ? [OUTCOME_LISTWISE_TOP2_RISK_POLICIES[0]]
+      : POLICY_SET === 'outcome_listwise_top2risk_v1_p0_85_test'
+        ? [OUTCOME_LISTWISE_TOP2_RISK_POLICIES[1]]
+      : POLICY_SET === 'outcome_listwise_top2risk_student_v1_test'
+        ? OUTCOME_LISTWISE_TOP2_RISK_STUDENT_POLICIES
+      : POLICY_SET === 'outcome_listwise_top2risk_student_v1_p0_90_test'
+        ? [OUTCOME_LISTWISE_TOP2_RISK_STUDENT_POLICIES[0]]
+      : POLICY_SET === 'outcome_listwise_top2risk_student_v1_p0_95_test'
+        ? [OUTCOME_LISTWISE_TOP2_RISK_STUDENT_POLICIES[1]]
+      : POLICY_SET === 'outcome_listwise_integrated_risk_v1_test'
+        ? OUTCOME_LISTWISE_INTEGRATED_RISK_POLICIES
+      : POLICY_SET === 'outcome_listwise_integrated_risk_v1_p0_75_test'
+        ? [OUTCOME_LISTWISE_INTEGRATED_RISK_POLICIES[0]]
+      : POLICY_SET === 'outcome_listwise_integrated_risk_v1_p0_80_test'
+        ? [OUTCOME_LISTWISE_INTEGRATED_RISK_POLICIES[1]]
+      : POLICY_SET === 'outcome_listwise_integrated_risk_v1_p0_90_test'
+        ? [OUTCOME_LISTWISE_INTEGRATED_RISK_POLICIES[0]]
+      : POLICY_SET === 'outcome_listwise_integrated_risk_v1_p0_95_test'
+        ? [OUTCOME_LISTWISE_INTEGRATED_RISK_POLICIES[1]]
+      : POLICY_SET === 'action_q_safe_override_threshold_test'
+        ? ACTION_Q_SAFE_OVERRIDE_POLICIES
+      : POLICY_SET === 'action_q_safe_override_gap0_01_0_02_test'
+        ? [ACTION_Q_SAFE_OVERRIDE_POLICIES[0], ACTION_Q_SAFE_OVERRIDE_POLICIES[1]]
+      : POLICY_SET === 'action_q_safe_override_gap0_01_test'
+        ? [ACTION_Q_SAFE_OVERRIDE_POLICIES[0]]
+      : POLICY_SET === 'action_q_safe_override_gap0_03_test'
+        ? [ACTION_Q_SAFE_OVERRIDE_POLICIES[2]]
+      : POLICY_SET === 'teacher_oracle_closed_loop_10k'
+        ? [CPU_FAST_DIRECT_I0K_POLICY, ACTION_Q_ADVANTAGE_V1_1_POLICY, TEACHER_GREEDY_10K_POLICY, SAFE_TEACHER_GREEDY_10K_POLICY]
+      : POLICY_SET === 'teacher_oracle_safe_threshold_10k'
+        ? SAFE_TEACHER_GREEDY_THRESHOLD_POLICIES
+      : POLICY_SET === 'expected_value_exact_card_test'
+        ? [EXPECTED_VALUE_POLICY]
+      : POLICY_SET === 'operational_x36_stageCost6_test'
+        ? [OPERATIONAL_X36_STAGE_COST6_POLICY]
+      : POLICY_SET === 'cpu_fast_fixed_i10k'
+        ? [CPU_FAST_FIXED_I10K_POLICY]
+        : POLICY_SET === 'cpu_fast_adaptive_i50k'
+          ? [CPU_FAST_ADAPTIVE_I50K_POLICY]
+        : POLICY_SET === 'cpu_fast_direct_i0k'
+          ? [CPU_FAST_DIRECT_I0K_POLICY]
+          : POLICY_SET === 'cpu_fast_v2_i0_i10'
+            ? [CPU_FAST_FIXED_I10K_POLICY, CPU_FAST_DIRECT_I0K_POLICY]
+        : [OPERATIONAL_X36_POLICY, I50K_PRE36_POLICY];
+    if (POLICY_SET === 'network_mcts_test' || POLICY_SET === 'operational_vs_i50k_network_mcts_test') {
+      POLICIES.push({
+        id: 'i0_rollout_deprecated_networkMctsVisit_v1',
+        policy: 'i0_rollout_deprecated_networkMctsVisit_v1',
+        label: 'i0 rollout_deprecated_networkMctsVisit_v1',
+        modelVersion: '테스트',
+        computeEngine: 'gpu',
+        iteration: 0,
+        batchPct: 0,
+        maxPct: 0,
+        rolloutPolicy: { mode: 'networkMctsVisit', c: 8, simulations: 16 },
+        batchDispatch: 'none',
+        decisionMode: 'networkMctsVisit',
+        source: 'tests/neural_mcts_policy regenerated current chooseActionQuality basis; deprecated_policy_direct_mlp_20260511051703 + deprecated_leaf_value_mlp_20260511051919; c=8 sims=16',
+      });
+    }
+    if (Number.isFinite(ROLLOUT_COUNT_OVERRIDE) && ROLLOUT_COUNT_OVERRIDE > 0) {
+      for (const policy of POLICIES) {
+        if (policy.decisionMode === 'fixedAllActions' || policy.decisionMode === 'teacherGreedy' || policy.decisionMode === 'safeTeacherGreedy') {
+          policy.iteration = Math.floor(ROLLOUT_COUNT_OVERRIDE);
+          policy.rolloutCountOverride = Math.floor(ROLLOUT_COUNT_OVERRIDE);
+        }
+      }
+    }
+
+    Board.rolloutPolicy = 'quality';
+
+    function configureGpuConstants(policy) {
+      const nextStageCost = Math.max(0, Math.round(Number(policy.x36StageCost ?? 2) || 0));
+      if (window.GPU_X36_STAGE_COST !== nextStageCost) {
+        window.GPU_X36_STAGE_COST = nextStageCost;
+        window.gpuRolloutWorkbench?.resetGpuContext?.();
+      }
+    }
+
+    function log(message) {
+      document.getElementById('log').textContent = message;
+      console.log(message);
+    }
+
+    function formatClock(ms) {
+      let seconds = Math.max(0, Math.round(ms / 1000));
+      const hours = Math.floor(seconds / 3600);
+      seconds -= hours * 3600;
+      const minutes = Math.floor(seconds / 60);
+      seconds -= minutes * 60;
+      const pad = value => String(value).padStart(2, '0');
+      return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+    }
+
+    function progressBar(percent, width = 40) {
+      const filled = Math.max(0, Math.min(width, Math.round((percent / 100) * width)));
+      return `[${'#'.repeat(filled)}${'-'.repeat(width - filled)}]`;
+    }
+
+    function reportProgress(done, total, elapsedMs, etaMs) {
+      const percent = total > 0 ? (done / total) * 100 : 0;
+      const line = `episode: ${done}/${total} | ${percent.toFixed(1)}% | elapsed: ${formatClock(elapsedMs)} | ETA: ${formatClock(etaMs)}`;
+      const bar = progressBar(percent);
+      document.getElementById('log').textContent = `${line}\n${bar}`;
+      console.log(`__ADVENTURE_PROGRESS__${JSON.stringify({ done, total, percent, elapsedMs, etaMs })}`);
+    }
+
+    async function postTraceChunk(chunk) {
+      if (!TRACE_CHUNKED) return;
+      const response = await fetch('/trace-chunk', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(chunk),
+      });
+      if (!response.ok) {
+        throw new Error(`trace chunk write failed: ${response.status}`);
+      }
+    }
+
+    function mean(values) {
+      return values.reduce((sum, value) => sum + value, 0) / Math.max(1, values.length);
+    }
+
+    function stdev(values) {
+      if (values.length <= 1) return 0;
+      const avg = mean(values);
+      return Math.sqrt(values.reduce((sum, value) => sum + (value - avg) ** 2, 0) / (values.length - 1));
+    }
+
+    function percentile(values, p) {
+      const sorted = [...values].sort((a, b) => a - b);
+      const rank = (p / 100) * (sorted.length - 1);
+      const lo = Math.floor(rank);
+      const hi = Math.ceil(rank);
+      const t = rank - lo;
+      return sorted[lo] * (1 - t) + sorted[hi] * t;
+    }
+
+    function buildGpuTables() {
+      return {
+        stageId: stage.map(row => Number(row[1] || 0)),
+        stageMove: stage.map(row => Number(row[4] || 0)),
+        stageEvent: stage.map(row => Number(row[5] || 0)),
+        cardType: [0, ...cardInfo.map(row => Number(row[1] || 0))],
+        cardValue: [0, ...cardInfo.map(row => Number(row[2] || 0))],
+      };
+    }
+
+    function createActionStats() {
+      return { count: 0, sum: 0, sumSq: 0, min: Infinity, max: -Infinity };
+    }
+
+    function mergeGpuSummary(acc, summary) {
+      if (!summary || summary.count <= 0) return;
+      const variance = summary.std * summary.std;
+      acc.count += summary.count;
+      acc.sum += summary.mean * summary.count;
+      acc.sumSq += (variance + summary.mean * summary.mean) * summary.count;
+      acc.min = Math.min(acc.min, summary.min);
+      acc.max = Math.max(acc.max, summary.max);
+    }
+
+    function getActionSummary(acc) {
+      if (acc.count === 0) return { count: 0, avg: 0, min: 0, max: 0, std: 0, se: Infinity };
+      const avg = acc.sum / acc.count;
+      const variance = Math.max(0, acc.sumSq / acc.count - avg * avg);
+      const std = Math.sqrt(variance);
+      return { count: acc.count, avg, min: acc.min, max: acc.max, std, se: Math.sqrt(variance / acc.count) };
+    }
+
+    function getAdaptiveDecision(actionStats, activeActions) {
+      const summaries = actionStats.map(getActionSummary);
+      const candidates = activeActions
+        .filter(action => actionStats[action].count > 0)
+        .map(action => ({ action, ...summaries[action] }))
+        .sort((a, b) => b.avg - a.avg);
+      if (candidates.length <= 1) {
+        return { stop: true, summaries, bestAction: candidates.length > 0 ? candidates[0].action : 0, gap: Infinity, z: Infinity };
+      }
+      const best = candidates[0];
+      const second = candidates[1];
+      const gap = best.avg - second.avg;
+      const combinedSe = Math.sqrt(best.se * best.se + second.se * second.se);
+      const bestLcb = best.avg - BOUND_Z * best.se;
+      const maxOtherUcb = Math.max(...candidates.slice(1).map(candidate => candidate.avg + BOUND_Z * candidate.se));
+      return { stop: bestLcb > maxOtherUcb, summaries, bestAction: best.action, gap, z: combinedSe > 0 ? gap / combinedSe : Infinity };
+    }
+
+    function pruneAdaptiveActions(actionStats, activeActions) {
+      if (activeActions.length <= 2) return activeActions;
+      const summaries = actionStats.map(getActionSummary);
+      const candidates = activeActions
+        .filter(action => actionStats[action].count > 0)
+        .map(action => ({ action, ...summaries[action] }))
+        .sort((a, b) => b.avg - a.avg);
+      if (candidates.length <= 2) return activeActions;
+      const best = candidates[0];
+      const bestLcb = best.avg - BOUND_Z * best.se;
+      const keep = new Set([best.action]);
+      candidates.slice(1).forEach(candidate => {
+        if (candidate.avg + BOUND_Z * candidate.se >= bestLcb) keep.add(candidate.action);
+      });
+      return activeActions.filter(action => keep.has(action));
+    }
+
+    function getAdaptiveSampleActions(actionStats, activeActions, maxIteration) {
+      const summaries = actionStats.map(getActionSummary);
+      const candidates = activeActions
+        .filter(action => actionStats[action].count > 0 && actionStats[action].count < maxIteration)
+        .map(action => ({ action, ...summaries[action] }))
+        .sort((a, b) => b.avg - a.avg);
+      if (candidates.length <= 1) return candidates.map(candidate => candidate.action);
+      const best = candidates[0];
+      const bestLcb = best.avg - BOUND_Z * best.se;
+      const sample = candidates
+        .filter(candidate => candidate.action === best.action || candidate.avg + BOUND_Z * candidate.se >= bestLcb)
+        .map(candidate => candidate.action)
+        .sort((a, b) => actionStats[a].count - actionStats[b].count)
+        .slice(0, SAMPLE_LIMIT);
+      if (actionStats[best.action].count < maxIteration && !sample.includes(best.action)) sample.push(best.action);
+      return sample;
+    }
+
+    function getDynamicCandidateActions(candidateInfo, actionCount, policy) {
+      const ranked = candidateInfo?.ranked || [];
+      if (ranked.length <= 2) return ranked.map(row => row.action);
+      const top1 = ranked[0];
+      const top2 = ranked[1];
+      const top3 = ranked[2];
+      const top4 = ranked[3];
+      const top3Cum = ranked.slice(0, 3).reduce((sum, row) => sum + (row.prob || 0), 0);
+      const top1Gap = (top1.logit || 0) - (top2.logit || 0);
+      const top3Top4Gap = top4 ? (top3.logit || 0) - (top4.logit || 0) : Infinity;
+      if ((top1.prob || 0) >= policy.dynamicTop1Prob && top1Gap >= policy.dynamicTop3Top4Gap) {
+        return ranked.slice(0, Math.min(2, actionCount)).map(row => row.action);
+      }
+      if (top3Cum >= policy.dynamicTop3CumProb && top3Top4Gap >= policy.dynamicTop3Top4Gap) {
+        return ranked.slice(0, Math.min(3, actionCount)).map(row => row.action);
+      }
+      if (top4 && top3Top4Gap < policy.dynamicTop3Top4Gap) {
+        return ranked.slice(0, Math.min(4, actionCount)).map(row => row.action);
+      }
+      return ranked.slice(0, Math.min(3, actionCount)).map(row => row.action);
+    }
+
+    function stateDigest(state) {
+      return AdventureKeyedRng.randomUint32(SEED_BASE, 'Benchmark.stateDigest', state.join(',')).toString(16);
+    }
+
+    function gpuSeed(policy, scenarioId, replicateId, decisionIndex, state, extra) {
+      const eventKey = [
+        `scenario=${scenarioId}`,
+        `replicate=${replicateId}`,
+        `decision=${decisionIndex}`,
+        `state=${stateDigest(state)}`,
+        extra,
+      ].join('|');
+      return AdventureKeyedRng.randomUint32(SEED_BASE, 'Gpu.rolloutSeed', eventKey);
+    }
+
+    async function runGpuAll(tables, sample, rolloutCount, seed, policy) {
+      return window.gpuRolloutWorkbench.runGpuAllActions({
+        tables,
+        sample,
+        rolloutCount,
+        seed,
+        policy: policy.rolloutPolicy,
+        maxSteps: Number.isFinite(MAX_STEPS_OVERRIDE) && MAX_STEPS_OVERRIDE > 0 ? Math.floor(MAX_STEPS_OVERRIDE) : undefined,
+      });
+    }
+
+    function chooseActionFastFromState(state) {
+      const env = new Board();
+      env.setState(state);
+      return env.chooseActionFast();
+    }
+
+    function getTeacherRankedActions(summaries, actionCount) {
+      return summaries
+        .slice(0, actionCount)
+        .map((summary, action) => ({
+          action,
+          avg: summary.mean,
+          count: summary.count,
+          std: summary.std,
+          se: summary.count > 0 ? summary.std / Math.sqrt(summary.count) : Infinity,
+          min: summary.min,
+          max: summary.max,
+        }))
+        .sort((a, b) => b.avg - a.avg);
+    }
+
+    function cardTraceInfo(cardId) {
+      const id = Number(cardId || 0);
+      if (!id) return null;
+      const row = cardInfo[id - 1];
+      if (!row) return { id, type: 0, value: 0, typeName: 'unknown' };
+      const type = Number(row[1] || 0);
+      const typeName = type === 1 ? 'move' : type === 2 ? 'mult' : type === 3 ? 'stage' : 'unknown';
+      return { id, type, value: Number(row[2] || 0), typeName };
+    }
+
+    function actionTraceInfo(state, action) {
+      if (action === 0) return { action, typeName: 'roll', card: null };
+      const card = cardTraceInfo(state[6 + action]);
+      return { action, typeName: card?.typeName || 'unknown', card };
+    }
+
+    function compactRankedRows(rows) {
+      if (!Array.isArray(rows)) return null;
+      return rows.map(row => ({
+        action: row.action,
+        count: Number.isFinite(row.count) ? row.count : undefined,
+        q: Number.isFinite(row.q) ? row.q : undefined,
+        value: Number.isFinite(row.value) ? row.value : undefined,
+        avg: Number.isFinite(row.avg) ? row.avg : undefined,
+        mean: Number.isFinite(row.mean) ? row.mean : undefined,
+        std: Number.isFinite(row.std) ? row.std : undefined,
+        se: Number.isFinite(row.se) ? row.se : undefined,
+        min: Number.isFinite(row.min) ? row.min : undefined,
+        max: Number.isFinite(row.max) ? row.max : undefined,
+        logit: Number.isFinite(row.logit) ? row.logit : undefined,
+        prob: Number.isFinite(row.prob) ? row.prob : undefined,
+        visits: Number.isFinite(row.visits) ? row.visits : undefined,
+        prior: Number.isFinite(row.prior) ? row.prior : undefined,
+      }));
+    }
+
+    function compactActionSummaries(actionStats) {
+      if (!Array.isArray(actionStats)) return null;
+      return actionStats
+        .map((stat, action) => ({ action, ...getActionSummary(stat) }))
+        .filter(row => row.count > 0)
+        .map(row => ({
+          action: row.action,
+          count: row.count,
+          avg: row.avg,
+          mean: row.avg,
+          std: row.std,
+          se: row.se,
+          min: row.min,
+          max: row.max,
+        }));
+    }
+
+    async function chooseActionGpu(tables, state, actionCount, policy, scenarioId, replicateId, decisionIndex) {
+      if (actionCount <= 1) return { action: 0, totalIterations: 0, maxActionIterations: 0, elapsedMs: 0 };
+      if (policy.decisionMode === 'networkMctsVisit') {
+        const startedAt = performance.now();
+        const info = await window.neuralPolicySelector.selectNetworkMctsAction(
+          state,
+          actionCount,
+          policy.rolloutPolicy.simulations || 16,
+          policy.rolloutPolicy.c || 8,
+          { finalByVisits: true },
+        );
+        return {
+          action: info.action,
+          totalIterations: 0,
+          maxActionIterations: 0,
+          elapsedMs: performance.now() - startedAt,
+          candidateActions: [info.action],
+          candidateRanked: info.ranked || null,
+        };
+      }
+      if (policy.decisionMode === 'directChooseActionFast') {
+        const startedAt = performance.now();
+        return {
+          action: chooseActionFastFromState(state),
+          totalIterations: 0,
+          maxActionIterations: 0,
+          elapsedMs: performance.now() - startedAt,
+          candidateActions: Array.from({ length: actionCount }, (_, index) => index),
+          candidateRanked: null,
+        };
+      }
+      if (policy.decisionMode === 'directQ') {
+        const startedAt = performance.now();
+        const info = await window.neuralPolicySelector.selectDirectQAction(state, actionCount);
+        return {
+          action: info.action,
+          totalIterations: 0,
+          maxActionIterations: 0,
+          elapsedMs: performance.now() - startedAt,
+          candidateActions: [info.action],
+          candidateRanked: info.ranked || null,
+        };
+      }
+      if (policy.decisionMode === 'directOutcomeListwiseQ') {
+        const startedAt = performance.now();
+        const info = await window.neuralPolicySelector.selectOutcomeListwiseQAction(state, actionCount);
+        return {
+          action: info.action,
+          totalIterations: 0,
+          maxActionIterations: 0,
+          elapsedMs: performance.now() - startedAt,
+          candidateActions: [info.action],
+          candidateRanked: info.ranked || null,
+        };
+      }
+      if (policy.decisionMode === 'directOutcomeListwiseTop2ContextRisk') {
+        const startedAt = performance.now();
+        const info = await window.neuralPolicySelector.selectOutcomeListwiseTop2ContextRiskAction(state, actionCount, {
+          betterThreshold: policy.contextRiskBetterThreshold,
+          riskThreshold: policy.contextRiskRiskThreshold,
+        });
+        return {
+          action: info.action,
+          totalIterations: 0,
+          maxActionIterations: 0,
+          elapsedMs: performance.now() - startedAt,
+          candidateActions: [info.action],
+          candidateRanked: info.ranked || null,
+          contextRiskUsed: info.rerank?.useCandidate === true,
+          contextRiskOldAction: Number.isFinite(info.rerank?.oldAction) ? info.rerank.oldAction : null,
+          contextRiskCandidateAction: Number.isFinite(info.rerank?.candidateAction) ? info.rerank.candidateAction : null,
+          contextRiskBetter: Number(info.rerank?.better ?? NaN),
+          contextRiskRisk: Number(info.rerank?.risk ?? NaN),
+          contextRiskDelta: Number(info.rerank?.delta ?? NaN),
+        };
+      }
+      if (policy.decisionMode === 'directOutcomeListwiseTop2IntegratedRisk') {
+        const startedAt = performance.now();
+        const info = await window.neuralPolicySelector.selectOutcomeListwiseTop2IntegratedRiskAction(state, actionCount, {
+          betterThreshold: policy.contextRiskBetterThreshold,
+          riskThreshold: policy.contextRiskRiskThreshold,
+        });
+        return {
+          action: info.action,
+          totalIterations: 0,
+          maxActionIterations: 0,
+          elapsedMs: performance.now() - startedAt,
+          candidateActions: [info.action],
+          candidateRanked: info.ranked || null,
+          contextRiskUsed: info.gate?.useCandidate === true,
+          contextRiskOldAction: Number.isFinite(info.gate?.oldAction) ? info.gate.oldAction : null,
+          contextRiskCandidateAction: Number.isFinite(info.gate?.candidateAction) ? info.gate.candidateAction : null,
+          contextRiskBetter: Number(info.gate?.better ?? NaN),
+          contextRiskRisk: Number(info.gate?.risk ?? NaN),
+          contextRiskDelta: Number(info.gate?.delta ?? NaN),
+        };
+      }
+      if (policy.decisionMode === 'directQSafeOverride') {
+        const startedAt = performance.now();
+        const fallbackAction = chooseActionFastFromState(state);
+        const info = await window.neuralPolicySelector.selectQCandidates(state, actionCount, actionCount, false);
+        const top = info.ranked?.[0] || { action: fallbackAction, q: -Infinity };
+        const fallbackRow = (info.ranked || []).find(row => row.action === fallbackAction) || { action: fallbackAction, q: -Infinity };
+        const gap = Number(top.q) - Number(fallbackRow.q);
+        const threshold = Number(policy.qOverrideGap || 0);
+        const useModel = top.action !== fallbackAction && Number.isFinite(gap) && gap > threshold;
+        return {
+          action: useModel ? top.action : fallbackAction,
+          totalIterations: 0,
+          maxActionIterations: 0,
+          elapsedMs: performance.now() - startedAt,
+          candidateActions: [useModel ? top.action : fallbackAction],
+          candidateRanked: info.ranked || null,
+          qOverrideGap: gap,
+          qOverrideUsed: useModel,
+          qOverrideFallbackAction: fallbackAction,
+          qOverrideTopAction: top.action,
+          qOverrideTopQ: Number(top.q),
+          qOverrideFallbackQ: Number(fallbackRow.q),
+        };
+      }
+      if (policy.decisionMode === 'expectedValueExactCard') {
+        const startedAt = performance.now();
+        const info = await window.neuralPolicySelector.selectExpectedValueAction(state, actionCount);
+        return {
+          action: info.action,
+          totalIterations: 0,
+          maxActionIterations: 0,
+          elapsedMs: performance.now() - startedAt,
+          candidateActions: [info.action],
+          candidateRanked: info.ranked || null,
+          uniqueLeafStates: info.uniqueLeafStates,
+          totalLeafStates: info.totalLeafStates,
+        };
+      }
+      if (policy.decisionMode === 'teacherGreedy' || policy.decisionMode === 'safeTeacherGreedy') {
+        const startedAt = performance.now();
+        const sample = { state, actionCount };
+        const rolloutCount = Math.max(1, Math.floor(policy.iteration || 10000));
+        const result = await runGpuAll(
+          tables,
+          sample,
+          rolloutCount,
+          gpuSeed(policy, scenarioId, replicateId, decisionIndex, state, `method=runGpuAllActions|phase=${policy.decisionMode}`),
+          policy,
+        );
+        const ranked = getTeacherRankedActions(result.summaries, actionCount);
+        const best = ranked[0];
+        const second = ranked[1] || ranked[0];
+        const margin = best.avg - second.avg;
+        const combinedSe = Math.sqrt(best.se * best.se + second.se * second.se);
+        const threshold = (policy.safeMarginZ || 2) * combinedSe;
+        let action = best.action;
+        let fallbackAction = null;
+        let safeUsedTeacher = true;
+        if (policy.decisionMode === 'safeTeacherGreedy' && !(margin > threshold)) {
+          fallbackAction = chooseActionFastFromState(state);
+          action = fallbackAction;
+          safeUsedTeacher = false;
+        }
+        return {
+          action,
+          totalIterations: rolloutCount * actionCount,
+          maxActionIterations: rolloutCount,
+          elapsedMs: performance.now() - startedAt,
+          candidateActions: ranked.map(row => row.action),
+          candidateRanked: ranked,
+          teacherBestAction: best.action,
+          teacherSecondAction: second.action,
+          teacherMargin: margin,
+          teacherCombinedSe: combinedSe,
+          teacherThreshold: threshold,
+          safeUsedTeacher,
+          fallbackAction,
+        };
+      }
+      if (policy.decisionMode === 'fixedAllActions') {
+        const startedAt = performance.now();
+        const sample = { state, actionCount };
+        const rolloutCount = Math.max(1, Math.floor(policy.iteration));
+        const result = await runGpuAll(
+          tables,
+          sample,
+          rolloutCount,
+          gpuSeed(policy, scenarioId, replicateId, decisionIndex, state, 'method=runGpuAllActions|phase=fixedAllActions'),
+          policy,
+        );
+        const summaries = result.summaries
+          .slice(0, actionCount)
+          .map((summary, action) => ({
+            action,
+            avg: summary.mean,
+            mean: summary.mean,
+            count: summary.count,
+            std: summary.std,
+            se: summary.count > 0 ? summary.std / Math.sqrt(summary.count) : Infinity,
+            min: summary.min,
+            max: summary.max,
+          }));
+        const best = summaries.reduce((winner, row) => row.avg > winner.avg ? row : winner, summaries[0]);
+        return {
+          action: best.action,
+          bestAction: best.action,
+          totalIterations: rolloutCount * actionCount,
+          maxActionIterations: rolloutCount,
+          elapsedMs: performance.now() - startedAt,
+          candidateActions: summaries.map(row => row.action),
+          candidateRanked: summaries.slice().sort((a, b) => b.avg - a.avg),
+          actionSummaries: summaries.map(row => ({ ...row })),
+        };
+      }
+      const initialIteration = Math.max(1, Math.floor(policy.iteration * 0.1));
+      const batchIteration = Math.max(1, Math.floor(policy.iteration * policy.batchPct / 100));
+      const maxIteration = Math.max(1, Math.floor(policy.iteration * policy.maxPct / 100));
+      let activeActions = Array.from({ length: actionCount }, (_, index) => index);
+      let candidateInfo = null;
+      if (policy.candidatePolicy === 'neuralDynamic' && window.neuralPolicySelector) {
+        candidateInfo = await window.neuralPolicySelector.selectCandidates(state, actionCount, policy.candidateTopK || 3);
+        activeActions = getDynamicCandidateActions(candidateInfo, actionCount, policy)
+          .filter(action => action >= 0 && action < actionCount);
+        if (activeActions.length === 0) activeActions = [0];
+      } else if (policy.candidatePolicy === 'qTopK' && window.neuralPolicySelector) {
+        candidateInfo = await window.neuralPolicySelector.selectQCandidates(state, actionCount, policy.candidateTopK || 3, false);
+        activeActions = (candidateInfo.actions || [])
+          .filter(action => action >= 0 && action < actionCount);
+        if (activeActions.length === 0) activeActions = [0];
+      }
+      const actionStats = Array.from({ length: 6 }, () => createActionStats());
+      const sample = { state, actionCount };
+      const startedAt = performance.now();
+
+      const initialAllActions = activeActions.length === actionCount && activeActions.every((action, index) => action === index);
+      if (initialAllActions) {
+        const initial = await runGpuAll(
+          tables,
+          sample,
+          initialIteration,
+          gpuSeed(policy, scenarioId, replicateId, decisionIndex, state, 'method=runGpuAllActions|phase=initial'),
+          policy,
+        );
+        activeActions.forEach(action => mergeGpuSummary(actionStats[action], initial.summaries[action]));
+      } else {
+        for (const action of activeActions) {
+          const summary = await window.gpuRolloutWorkbench.runGpu({
+            tables,
+            sample,
+            action,
+            rolloutCount: initialIteration,
+            seed: gpuSeed(policy, scenarioId, replicateId, decisionIndex, state, `method=runGpu|action=${action}|phase=initial`),
+            policy: policy.rolloutPolicy,
+          });
+          mergeGpuSummary(actionStats[action], { action, count: initialIteration, ...summary });
+        }
+      }
+
+      while (true) {
+        let decision = getAdaptiveDecision(actionStats, activeActions);
+        if (activeActions.every(action => actionStats[action].count >= maxIteration) || decision.stop) {
+          return {
+            action: decision.bestAction,
+            bestAction: decision.bestAction,
+            totalIterations: actionStats.reduce((sum, stat) => sum + stat.count, 0),
+            maxActionIterations: Math.max(...actionStats.map(stat => stat.count)),
+            elapsedMs: performance.now() - startedAt,
+            candidateActions: activeActions.slice(),
+            candidateRanked: candidateInfo?.ranked || null,
+            actionSummaries: compactActionSummaries(actionStats),
+          };
+        }
+
+        activeActions = pruneAdaptiveActions(actionStats, activeActions);
+        decision = getAdaptiveDecision(actionStats, activeActions);
+        if (activeActions.length <= 1) {
+          return {
+            action: decision.bestAction,
+            bestAction: decision.bestAction,
+            totalIterations: actionStats.reduce((sum, stat) => sum + stat.count, 0),
+            maxActionIterations: Math.max(...actionStats.map(stat => stat.count)),
+            elapsedMs: performance.now() - startedAt,
+            candidateActions: activeActions.slice(),
+            candidateRanked: candidateInfo?.ranked || null,
+            actionSummaries: compactActionSummaries(actionStats),
+          };
+        }
+
+        const sampleActions = getAdaptiveSampleActions(actionStats, activeActions, maxIteration);
+        if (sampleActions.length === 0) {
+          return {
+            action: decision.bestAction,
+            bestAction: decision.bestAction,
+            totalIterations: actionStats.reduce((sum, stat) => sum + stat.count, 0),
+            maxActionIterations: Math.max(...actionStats.map(stat => stat.count)),
+            elapsedMs: performance.now() - startedAt,
+            candidateActions: activeActions.slice(),
+            candidateRanked: candidateInfo?.ranked || null,
+            actionSummaries: compactActionSummaries(actionStats),
+          };
+        }
+
+        for (const action of sampleActions) {
+          const rolloutCount = Math.min(batchIteration, maxIteration - actionStats[action].count);
+          if (rolloutCount <= 0) continue;
+          const summary = await window.gpuRolloutWorkbench.runGpu({
+            tables,
+            sample,
+            action,
+            rolloutCount,
+            seed: gpuSeed(policy, scenarioId, replicateId, decisionIndex, state, `method=runGpu|action=${action}|count=${actionStats[action].count}`),
+            policy: policy.rolloutPolicy,
+          });
+          mergeGpuSummary(actionStats[action], { action, count: rolloutCount, ...summary });
+        }
+      }
+    }
+
+    async function runEpisode(tables, policy, scenarioId, replicateId) {
+      const env = new Board();
+      env.autoProcess = true;
+      env.setRandomContext({ seed: SEED_BASE, scenarioId, replicateId, decisionIndex: 0 });
+      let done = false;
+      let decisions = 0;
+      let usedActionIterations = 0;
+      let maxActionIterations = 0;
+      let gpuDecisionMs = 0;
+      let candidateActionSelections = 0;
+      let teacherDecisions = 0;
+      let teacherFallbacks = 0;
+      let teacherMarginSum = 0;
+      let teacherCombinedSeSum = 0;
+      let qOverrideDecisions = 0;
+      let qOverrideUsed = 0;
+      let qOverrideGapSum = 0;
+      let contextRiskDecisions = 0;
+      let contextRiskUsed = 0;
+      let contextRiskBetterSum = 0;
+      let contextRiskRiskSum = 0;
+      const startedAt = performance.now();
+      const trace = TRACE_DECISIONS ? [] : null;
+      const overrideTrace = TRACE_OVERRIDES ? [] : null;
+
+      while (!done) {
+        const state = env.getState();
+        const actionCount = env.cards.length + 1;
+        const decision = await chooseActionGpu(tables, state, actionCount, policy, scenarioId, replicateId, decisions);
+        const traceRow = trace ? {
+          decision: decisions,
+          state: state.slice(),
+          actionCount,
+          action: decision.action,
+          selectedAction: decision.action,
+          bestAction: Number.isFinite(decision.bestAction) ? decision.bestAction : decision.action,
+          actionInfo: actionTraceInfo(state, decision.action),
+          scoreBefore: Number(state[2] || 0),
+          stageIdBefore: Number(state[3] || 0),
+          spaceIdBefore: Number(state[4] || 0),
+          diceUseBefore: Number(state[5] || 0),
+          isDoubleBefore: Number(state[6] || 0) === 1,
+          handBefore: state.slice(7, 12).filter(Boolean).map(cardTraceInfo),
+          ranked: compactRankedRows(decision.candidateRanked),
+          candidateActions: Array.isArray(decision.candidateActions) ? decision.candidateActions.slice() : null,
+          actionSummaries: compactRankedRows(decision.actionSummaries),
+          totalIterations: decision.totalIterations,
+          maxActionIterations: decision.maxActionIterations,
+          qOverrideGap: Number.isFinite(decision.qOverrideGap) ? decision.qOverrideGap : null,
+          qOverrideUsed: decision.qOverrideUsed === true,
+          qOverrideFallbackAction: Number.isFinite(decision.qOverrideFallbackAction) ? decision.qOverrideFallbackAction : null,
+          qOverrideTopAction: Number.isFinite(decision.qOverrideTopAction) ? decision.qOverrideTopAction : null,
+          qOverrideTopQ: Number.isFinite(decision.qOverrideTopQ) ? decision.qOverrideTopQ : null,
+          qOverrideFallbackQ: Number.isFinite(decision.qOverrideFallbackQ) ? decision.qOverrideFallbackQ : null,
+          contextRiskUsed: decision.contextRiskUsed === true,
+          contextRiskOldAction: Number.isFinite(decision.contextRiskOldAction) ? decision.contextRiskOldAction : null,
+          contextRiskCandidateAction: Number.isFinite(decision.contextRiskCandidateAction) ? decision.contextRiskCandidateAction : null,
+          contextRiskBetter: Number.isFinite(decision.contextRiskBetter) ? decision.contextRiskBetter : null,
+          contextRiskRisk: Number.isFinite(decision.contextRiskRisk) ? decision.contextRiskRisk : null,
+          contextRiskDelta: Number.isFinite(decision.contextRiskDelta) ? decision.contextRiskDelta : null,
+          elapsedMs: decision.elapsedMs,
+        } : null;
+        usedActionIterations += decision.totalIterations;
+        maxActionIterations = Math.max(maxActionIterations, decision.maxActionIterations);
+        gpuDecisionMs += decision.elapsedMs;
+        candidateActionSelections += Array.isArray(decision.candidateActions) ? decision.candidateActions.length : actionCount;
+        if (Number.isFinite(decision.teacherMargin)) {
+          teacherDecisions += 1;
+          teacherMarginSum += decision.teacherMargin;
+          teacherCombinedSeSum += Number.isFinite(decision.teacherCombinedSe) ? decision.teacherCombinedSe : 0;
+          if (decision.safeUsedTeacher === false) teacherFallbacks += 1;
+        }
+        if (Number.isFinite(decision.qOverrideGap)) {
+          qOverrideDecisions += 1;
+          qOverrideGapSum += decision.qOverrideGap;
+          if (decision.qOverrideUsed) qOverrideUsed += 1;
+        }
+        if (Number.isFinite(decision.contextRiskBetter)) {
+          contextRiskDecisions += 1;
+          contextRiskBetterSum += decision.contextRiskBetter;
+          contextRiskRiskSum += Number.isFinite(decision.contextRiskRisk) ? decision.contextRiskRisk : 0;
+          if (decision.contextRiskUsed) contextRiskUsed += 1;
+        }
+        env.setRandomContext({ seed: SEED_BASE, scenarioId, replicateId, decisionIndex: decisions, action: decision.action });
+        done = env.step(decision.action);
+        if (traceRow) {
+          traceRow.scoreAfter = env.score;
+          traceRow.diceUseAfter = env.diceUse;
+          traceRow.isDoubleAfter = env.isDouble;
+          traceRow.done = done;
+          trace.push(traceRow);
+        }
+        if (overrideTrace && decision.qOverrideUsed === true) {
+          overrideTrace.push({
+            decision: decisions,
+            state: state.slice(),
+            actionCount,
+            action: decision.action,
+            baselineAction: decision.qOverrideFallbackAction,
+            topAction: decision.qOverrideTopAction,
+            actionInfo: actionTraceInfo(state, decision.action),
+            baselineActionInfo: actionTraceInfo(state, decision.qOverrideFallbackAction),
+            scoreBefore: Number(state[2] || 0),
+            stageIdBefore: Number(state[3] || 0),
+            spaceIdBefore: Number(state[4] || 0),
+            diceUseBefore: Number(state[5] || 0),
+            isDoubleBefore: Number(state[6] || 0) === 1,
+            handBefore: state.slice(7, 12).filter(Boolean).map(cardTraceInfo),
+            ranked: compactRankedRows(decision.candidateRanked),
+            qOverrideGap: Number.isFinite(decision.qOverrideGap) ? decision.qOverrideGap : null,
+            qOverrideTopQ: Number.isFinite(decision.qOverrideTopQ) ? decision.qOverrideTopQ : null,
+            qOverrideFallbackQ: Number.isFinite(decision.qOverrideFallbackQ) ? decision.qOverrideFallbackQ : null,
+            scoreAfter: env.score,
+            diceUseAfter: env.diceUse,
+            isDoubleAfter: env.isDouble,
+            done,
+          });
+        }
+        decisions += 1;
+      }
+
+      const episode = {
+        scenario_id: scenarioId,
+        replicate_id: replicateId,
+        policy: policy.policy,
+        policyId: policy.id,
+        index: scenarioId,
+        seed: SEED_BASE,
+        score: env.score,
+        finalScore: env.score,
+        decisions,
+        usedActionIterations,
+        maxActionIterations,
+        gpuDecisionMs,
+        candidateActionSelections,
+        meanCandidateActions: candidateActionSelections / Math.max(1, decisions),
+        teacherDecisions,
+        teacherFallbacks,
+        teacherFallbackRate: teacherFallbacks / Math.max(1, teacherDecisions),
+        meanTeacherMargin: teacherMarginSum / Math.max(1, teacherDecisions),
+        meanTeacherCombinedSe: teacherCombinedSeSum / Math.max(1, teacherDecisions),
+        qOverrideDecisions,
+        qOverrideUsed,
+        qOverrideRate: qOverrideUsed / Math.max(1, qOverrideDecisions),
+        meanQOverrideGap: qOverrideGapSum / Math.max(1, qOverrideDecisions),
+        contextRiskDecisions,
+        contextRiskUsed,
+        contextRiskRate: contextRiskUsed / Math.max(1, contextRiskDecisions),
+        meanContextRiskBetter: contextRiskBetterSum / Math.max(1, contextRiskDecisions),
+        meanContextRiskRisk: contextRiskRiskSum / Math.max(1, contextRiskDecisions),
+        elapsedMs: performance.now() - startedAt,
+      };
+      if (TRACE_CHUNKED && (trace || overrideTrace)) {
+        await postTraceChunk({
+          kind: 'episodeTrace',
+          policy: policy.policy,
+          policyId: policy.id,
+          scenario_id: scenarioId,
+          replicate_id: REPLICATE_ID,
+          seed: SEED_BASE,
+          score: episode.score,
+          decisions,
+          trace: trace || undefined,
+          overrideTrace: overrideTrace || undefined,
+        });
+        if (trace) episode.traceRows = trace.length;
+        if (overrideTrace) episode.overrideTraceRows = overrideTrace.length;
+      } else {
+        if (trace) episode.trace = trace;
+        if (overrideTrace) episode.overrideTrace = overrideTrace;
+      }
+      return episode;
+    }
+
+    function summarizePolicy(policy, episodes, elapsedMs) {
+      const scores = episodes.map(episode => episode.score);
+      const totalDecisions = episodes.reduce((sum, episode) => sum + episode.decisions, 0);
+      const gpuDecisionMs = episodes.reduce((sum, episode) => sum + episode.gpuDecisionMs, 0);
+      const totalUsedActionIterations = episodes.reduce((sum, episode) => sum + episode.usedActionIterations, 0);
+      const totalCandidateActionSelections = episodes.reduce((sum, episode) => sum + (episode.candidateActionSelections || 0), 0);
+      const teacherDecisions = episodes.reduce((sum, episode) => sum + (episode.teacherDecisions || 0), 0);
+      const teacherFallbacks = episodes.reduce((sum, episode) => sum + (episode.teacherFallbacks || 0), 0);
+      const teacherMarginWeightedSum = episodes.reduce((sum, episode) => sum + (episode.meanTeacherMargin || 0) * (episode.teacherDecisions || 0), 0);
+      const teacherCombinedSeWeightedSum = episodes.reduce((sum, episode) => sum + (episode.meanTeacherCombinedSe || 0) * (episode.teacherDecisions || 0), 0);
+      const qOverrideDecisions = episodes.reduce((sum, episode) => sum + (episode.qOverrideDecisions || 0), 0);
+      const qOverrideUsed = episodes.reduce((sum, episode) => sum + (episode.qOverrideUsed || 0), 0);
+      const qOverrideGapWeightedSum = episodes.reduce((sum, episode) => sum + (episode.meanQOverrideGap || 0) * (episode.qOverrideDecisions || 0), 0);
+      const contextRiskDecisions = episodes.reduce((sum, episode) => sum + (episode.contextRiskDecisions || 0), 0);
+      const contextRiskUsed = episodes.reduce((sum, episode) => sum + (episode.contextRiskUsed || 0), 0);
+      const contextRiskBetterWeightedSum = episodes.reduce((sum, episode) => sum + (episode.meanContextRiskBetter || 0) * (episode.contextRiskDecisions || 0), 0);
+      const contextRiskRiskWeightedSum = episodes.reduce((sum, episode) => sum + (episode.meanContextRiskRisk || 0) * (episode.contextRiskDecisions || 0), 0);
+      return {
+        policy: policy.policy,
+        policyId: policy.id,
+        label: policy.label,
+        modelVersion: policy.modelVersion || '운영',
+        computeEngine: policy.computeEngine,
+        source: policy.source,
+        leaderboardEligible: policy.leaderboardEligible ?? true,
+        x36StageCost: Math.max(0, Math.round(Number(policy.x36StageCost ?? 2) || 0)),
+        episodes,
+        scores,
+        iteration: policy.iteration,
+        batchPct: policy.batchPct,
+        maxPct: policy.maxPct,
+        actual: {
+          initialIteration: Math.max(1, Math.floor(policy.iteration * 0.1)),
+          batchIteration: Math.max(1, Math.floor(policy.iteration * policy.batchPct / 100)),
+          maxIteration: Math.max(1, Math.floor(policy.iteration * policy.maxPct / 100)),
+        },
+        gpuPolicy: {
+          mode: policy.decisionMode === 'fixedAllActions' ? 'fixed_all_actions' : 'adaptive_prune',
+          initialPct: policy.decisionMode === 'fixedAllActions' ? null : 10,
+          batchPct: policy.batchPct,
+          maxPct: policy.maxPct,
+          boundZ: BOUND_Z,
+          sampleLimit: SAMPLE_LIMIT,
+          rolloutPolicy: policy.rolloutPolicy,
+          x36StageCost: Math.max(0, Math.round(Number(policy.x36StageCost ?? 2) || 0)),
+          batchDispatch: policy.batchDispatch,
+          decisionMode: policy.decisionMode || null,
+          candidatePolicy: policy.candidatePolicy || null,
+          candidateTopK: policy.candidateTopK || null,
+          dynamicTop1Prob: policy.dynamicTop1Prob || null,
+          dynamicTop3CumProb: policy.dynamicTop3CumProb || null,
+          dynamicTop3Top4Gap: policy.dynamicTop3Top4Gap || null,
+        },
+        randomMode: false,
+        rngMode: 'keyed',
+        seedBase: SEED_BASE,
+        elapsedMs,
+        elapsedSec: elapsedMs / 1000,
+        gpuDecisionMs,
+        meanScore: mean(scores),
+        stdScore: stdev(scores),
+        standardError: stdev(scores) / Math.sqrt(scores.length),
+        minScore: Math.min(...scores),
+        p25Score: percentile(scores, 25),
+        p50Score: percentile(scores, 50),
+        p75Score: percentile(scores, 75),
+        maxScore: Math.max(...scores),
+        totalDecisions,
+        meanDecisions: totalDecisions / Math.max(1, episodes.length),
+        meanDecisionMs: elapsedMs / Math.max(1, totalDecisions),
+        meanGpuDecisionMs: gpuDecisionMs / Math.max(1, totalDecisions),
+        totalUsedActionIterations,
+        meanUsedActionIterations: totalUsedActionIterations / Math.max(1, totalDecisions),
+        totalCandidateActionSelections,
+        meanCandidateActions: totalCandidateActionSelections / Math.max(1, totalDecisions),
+        teacherDiagnostics: {
+          decisions: teacherDecisions,
+          fallbackCount: teacherFallbacks,
+          fallbackRate: teacherFallbacks / Math.max(1, teacherDecisions),
+          meanMargin: teacherMarginWeightedSum / Math.max(1, teacherDecisions),
+          meanCombinedSe: teacherCombinedSeWeightedSum / Math.max(1, teacherDecisions),
+        },
+        qOverrideDiagnostics: {
+          decisions: qOverrideDecisions,
+          overrideCount: qOverrideUsed,
+          overrideRate: qOverrideUsed / Math.max(1, qOverrideDecisions),
+          meanGap: qOverrideGapWeightedSum / Math.max(1, qOverrideDecisions),
+        },
+        contextRiskDiagnostics: {
+          decisions: contextRiskDecisions,
+          flipCount: contextRiskUsed,
+          flipRate: contextRiskUsed / Math.max(1, contextRiskDecisions),
+          meanBetter: contextRiskBetterWeightedSum / Math.max(1, contextRiskDecisions),
+          meanRisk: contextRiskRiskWeightedSum / Math.max(1, contextRiskDecisions),
+        },
+      };
+    }
+
+    async function main() {
+      const tables = buildGpuTables();
+      configureGpuConstants(POLICIES[0]);
+      await runGpuAll(
+        tables,
+        { state: new Board().getState(), actionCount: 1 },
+        64,
+        AdventureKeyedRng.randomUint32(SEED_BASE, 'Gpu.rolloutSeed', 'warmup'),
+        POLICIES[0],
+      );
+
+      const policyResults = [];
+      const benchmarkStartedAt = performance.now();
+      for (const policy of POLICIES) {
+        configureGpuConstants(policy);
+        log(`policy: ${policy.policy}`);
+        const startedAt = performance.now();
+        const episodes = [];
+        for (let scenarioId = 0; scenarioId < EPISODES; scenarioId += 1) {
+          episodes.push(await runEpisode(tables, policy, scenarioId, REPLICATE_ID));
+          const elapsedMs = performance.now() - startedAt;
+          const done = scenarioId + 1;
+          const meanMs = elapsedMs / done;
+          const etaMs = (EPISODES - done) * meanMs;
+          reportProgress(done, EPISODES, elapsedMs, etaMs);
+        }
+        policyResults.push(summarizePolicy(policy, episodes, performance.now() - startedAt));
+      }
+
+      window.__fullGameBenchmarkResult = {
+        benchmark: 'keyed_full_game',
+        generatedAt: new Date().toISOString(),
+        source: 'benchmarks/scripts/run_full_game_gpu_browser.js',
+        episodes: EPISODES,
+        seedBase: SEED_BASE,
+        replicate_id: REPLICATE_ID,
+        policySet: POLICY_SET,
+        traceDecisions: TRACE_DECISIONS,
+        traceOverrides: TRACE_OVERRIDES,
+        traceChunked: TRACE_CHUNKED,
+        rolloutCountOverride: Number.isFinite(ROLLOUT_COUNT_OVERRIDE) && ROLLOUT_COUNT_OVERRIDE > 0 ? Math.floor(ROLLOUT_COUNT_OVERRIDE) : null,
+        maxStepsOverride: Number.isFinite(MAX_STEPS_OVERRIDE) && MAX_STEPS_OVERRIDE > 0 ? Math.floor(MAX_STEPS_OVERRIDE) : null,
+        rng: {
+          mode: 'keyed',
+          function: 'random01(seed, streamName, eventKey)',
+          streams: ['Board.getRandom.val1', 'Board.getRandom.val2', 'Board.getCard.index', 'Gpu.rolloutSeed'],
+        },
+        policies: POLICIES,
+        policyResults,
+        elapsedMs: performance.now() - benchmarkStartedAt,
+      };
+      log('done');
+    }
+
+    main().catch(error => {
+      window.__fullGameBenchmarkError = String(error && error.stack || error);
+      log(window.__fullGameBenchmarkError);
+    });
+  </script>
+</body>
+</html>
+
