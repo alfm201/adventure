@@ -225,6 +225,34 @@ fn next_rand(rng: ptr<function, u32>) -> u32 {
   return r ^ (r >> 14u);
 }
 
+var<private> boundedWord: u32;
+var<private> boundedBits: u32;
+
+fn bounded_bits_for(bound: u32) -> u32 {
+  if (bound <= 1u) { return 0u; }
+  if (bound <= 2u) { return 1u; }
+  if (bound <= 4u) { return 2u; }
+  if (bound <= 8u) { return 3u; }
+  if (bound <= 16u) { return 4u; }
+  return 5u;
+}
+
+fn next_bounded(rng: ptr<function, u32>, bound: u32) -> u32 {
+  if (bound <= 1u) { return 0u; }
+  let bits = bounded_bits_for(bound);
+  let mask = (1u << bits) - 1u;
+  loop {
+    if (boundedBits < bits) {
+      boundedWord = next_rand(rng);
+      boundedBits = 32u;
+    }
+    let candidate = boundedWord & mask;
+    boundedWord = boundedWord >> bits;
+    boundedBits = boundedBits - bits;
+    if (candidate < bound) { return candidate; }
+  }
+}
+
 fn stage_id_at(index: i32) -> i32 {
   if (index < 0 || index >= 2898) { return 0; }
   return stageId[u32(index)];
@@ -298,8 +326,8 @@ fn roll_dice(
   isDouble: ptr<function, i32>,
   rng: ptr<function, u32>,
 ) -> i32 {
-  let val1 = i32(next_rand(rng) % 6u) + 1;
-  let val2 = i32(next_rand(rng) % 6u) + 1;
+  let val1 = i32(next_bounded(rng, 6u)) + 1;
+  let val2 = i32(next_bounded(rng, 6u)) + 1;
   if ((*isDouble) != 0) {
     (*isDouble) = 0;
   } else {
@@ -327,7 +355,7 @@ fn draw_card(
     remaining = 30u;
   }
 
-  let pickedOffset = next_rand(rng) % remaining;
+  let pickedOffset = next_bounded(rng, remaining);
   var seen = 0u;
   var picked = 0u;
   for (var i = 0u; i < 30u; i = i + 1u) {
@@ -698,6 +726,8 @@ fn main(
   let actionIndex = select(params.action, workgroupId.y, params.mode == 1u);
 
   var rng = params.seed + rolloutIndex * 747796405u + actionIndex * 9173u + 2891336453u;
+  boundedWord = 0u;
+  boundedBits = 0u;
   var score = inputState[2];
   var diceUse = inputState[5];
   var isDouble = inputState[6];
