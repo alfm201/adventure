@@ -449,8 +449,8 @@ fn main(@builtin(global_invocation_id) globalId: vec3<u32>) {
     let eventType = stage_event_at(score - 1);
     if (eventType == 2) { break; }
     if (eventType == 4) {
-      let move = stage_move_at(score - 1);
-      score = min(2898, score + move);
+      let jumpMoveValue = stage_move_at(score - 1);
+      score = min(2898, score + jumpMoveValue);
       jumpCount = jumpCount + 1;
       if (jumpCount == 1) {
         afterFirstJump = score;
