@@ -1,61 +1,546 @@
 (() => {
-  const q = new URLSearchParams(location.search);
-  if (q.get('mode') !== 'test') return;
-  const T0 = performance.now(), logLines = [];
-  const BASE = 0x6a09e667, WG = 64, PST = 5;
-  const FULL_N = qi('fullRollouts', 32768, 4096, 131072);
-  const FULL_R = qi('fullRepeats', 3, 1, 6);
-  const CPU_N = qi('cpuEpisodes', 512, 128, 4096);
-  const CPU_R = qi('cpuRepeats', 3, 1, 6);
-  let ui, pre, running = false;
+  const qs = new URLSearchParams(location.search);
+  if (qs.get('mode') !== 'test') return;
 
-  function qi(name, d, lo, hi) { const x=q.get(name); if(x==null||x==='') return d; const n=Math.trunc(Number(x)); return Number.isFinite(n)?Math.max(lo,Math.min(hi,n)):d; }
-  const u32 = x => Number(x) >>> 0;
-  const hx = x => `0x${u32(x).toString(16).padStart(8,'0')}`;
-  const med = a => { const b=[...a].sort((x,y)=>x-y),m=b.length>>1; return b.length%2?b[m]:(b[m-1]+b[m])/2; };
-  const avg = a => a.reduce((s,x)=>s+x,0)/Math.max(1,a.length);
-  const et = e => e instanceof Error ? `${e.name}: ${e.message}` : String(e);
-  function ensureUi(){ if(ui)return; ui=document.createElement('div');ui.style.cssText='position:fixed;z-index:30000;left:8px;right:8px;bottom:8px;max-height:72vh;padding:10px;background:rgba(15,23,42,.97);color:#e2e8f0;border:1px solid #475569;border-radius:8px;font:12px/1.45 ui-monospace,SFMono-Regular,Consolas,monospace;display:flex;flex-direction:column;gap:6px';const h=document.createElement('div');h.style.cssText='display:flex;justify-content:space-between';const t=document.createElement('strong');t.textContent='RNG full-rollout 진단 · production 중지';const b=document.createElement('button');b.textContent='전체 복사';b.onclick=()=>navigator.clipboard?.writeText(logLines.join('\n'));pre=document.createElement('pre');pre.style.cssText='margin:0;overflow:auto;white-space:pre-wrap;word-break:break-word';h.append(t,b);ui.append(h,pre);document.body.appendChild(ui); }
-  function log(tag,msg,data){ensureUi();logLines.push(`[+${(performance.now()-T0).toFixed(1).padStart(7,' ')}ms] ${tag} ${msg}${data===undefined?'':` · ${JSON.stringify(data)}`}`);pre.textContent=logLines.join('\n');pre.scrollTop=pre.scrollHeight;console.log('[GPU TEST]',tag,msg,data??'');}
-  function wrap(obj,name,f){if(!obj||typeof obj[name]!=='function')return false;const orig=obj[name].bind(obj),w=f(orig);try{Object.defineProperty(obj,name,{configurable:true,writable:true,value:w});return true}catch{try{obj[name]=w;return obj[name]===w}catch{return false}}}
-  function stopService(){const blocked=[];if(typeof window.prepareGpuReadbackModeOnLoad==='function'){wrap(window,'prepareGpuReadbackModeOnLoad',()=>async()=>log('T0 SERVICE STOP','production GPU init 차단'));blocked.push('prepareGpuReadbackModeOnLoad')}if(typeof window.verifyGpuEngineOnLoad==='function'){wrap(window,'verifyGpuEngineOnLoad',()=>async()=>({ok:true,skipped:true}));blocked.push('verifyGpuEngineOnLoad')}if(typeof window.calcEx==='function'){wrap(window,'calcEx',()=>async()=>log('T0 SERVICE STOP','production calcEx 차단'));blocked.push('calcEx')}if(typeof window.showComputeModeModal==='function'){wrap(window,'showComputeModeModal',()=>cb=>{log('T0 SERVICE STOP','production modal/benchmark 차단');if(typeof cb==='function')cb()});blocked.push('showComputeModeModal')}const wb=window.gpuRolloutWorkbench;if(wb)for(const n of ['prepareGpuReadbackMode','runGpu','runGpuAllActions'])if(typeof wb[n]==='function'){wrap(wb,n,()=>async()=>{throw new Error(`mode=test production ${n} disabled`)});blocked.push(`gpuRolloutWorkbench.${n}`)}log('T0 SERVICE STOP','기존 서비스 실측 차단 완료',{blocked});}
+  const startedAt = performance.now();
+  const lines = [];
+  const BASE_SEED = 0x6a09e667;
+  const WORKGROUP_SIZE = 64;
+  const PARTIAL_STRIDE = 5;
+  const FULL_ROLLOUTS = queryInt('fullRollouts', 65536, 4096, 131072);
+  const FULL_REPEATS = queryInt('fullRepeats', 5, 1, 8);
+  let root;
+  let pre;
+  let running = false;
 
-  function nextRand(h){const t=u32(h.v+0x6D2B79F5);h.v=t;let r=u32(Math.imul(u32(t^(t>>>15)),u32(1|t)));r=u32(r^u32(r+Math.imul(u32(r^(r>>>7)),61)));return u32(r^(r>>>14));}
-  function bits(n){return n<=1?0:n<=2?1:n<=4?2:n<=8?3:n<=16?4:5;}
-  function reservoir(seed){return{r:{v:u32(seed)},w:0,b:0,c:0,j:0};}
-  function rb(s,n){if(n<=1)return 0;const k=bits(n),m=(1<<k)-1;for(;;){if(s.b<k){s.w=nextRand(s.r);s.b=32;s.c++}const x=s.w&m;s.w>>>=k;s.b-=k;if(x<n)return x;s.j++}}
-  function fb(r,n,c){if(n<=1)return 0;const k=bits(n),m=(1<<k)-1;for(;;){const x=nextRand(r)&m;c.c++;if(x<n)return x;c.j++}}
+  function queryInt(name, fallback, min, max) {
+    const raw = qs.get(name);
+    if (raw === null || raw === '') return fallback;
+    const value = Math.trunc(Number(raw));
+    return Number.isFinite(value) ? Math.max(min, Math.min(max, value)) : fallback;
+  }
 
-  function diagShader(){return `
-struct P{seed:u32,lanes:u32,method:u32,pad:u32,}; struct R{w:u32,b:u32,c:u32,j:u32,};
-@group(0)@binding(0)var<storage,read_write>o:array<u32>;@group(0)@binding(1)var<uniform>p:P;
-fn nr(r:ptr<function,u32>)->u32{var t=(*r)+0x6D2B79F5u;(*r)=t;var x=(t^(t>>15u))*(1u|t);x=x^(x+((x^(x>>7u))*61u));return x^(x>>14u);}
-fn bits(n:u32)->u32{if(n<=1u){return 0u;}if(n<=2u){return 1u;}if(n<=4u){return 2u;}if(n<=8u){return 3u;}if(n<=16u){return 4u;}return 5u;}
-fn fresh(r:ptr<function,u32>,n:u32)->u32{if(n<=1u){return 0u;}let k=bits(n);let m=(1u<<k)-1u;loop{let x=nr(r)&m;if(x<n){return x;}}}
-fn res(r:ptr<function,u32>,s:ptr<function,R>,n:u32)->u32{if(n<=1u){return 0u;}let k=bits(n);let m=(1u<<k)-1u;loop{if((*s).b<k){(*s).w=nr(r);(*s).b=32u;(*s).c=(*s).c+1u;}let x=(*s).w&m;(*s).w=(*s).w>>k;(*s).b=(*s).b-k;if(x<n){return x;}(*s).j=(*s).j+1u;}}
-@compute @workgroup_size(64)fn main(@builtin(global_invocation_id)g:vec3<u32>){let i=g.x;if(i>=p.lanes){return;}let z=i*100u;var r=p.seed+i*747796405u+2891336453u;var s:R;s.w=0u;s.b=0u;s.c=0u;s.j=0u;var cc=0u;var jj=0u;var cb=1u;for(var d=0u;d<96u;d=d+1u){var n=6u;if(d>=48u){n=cb;cb=cb+1u;if(cb>30u){cb=1u;}}if(p.method==1u){o[z+d]=fresh(&r,n);}else{o[z+d]=res(&r,&s,n);}}o[z+96u]=s.c;o[z+97u]=s.j;o[z+98u]=r;o[z+99u]=s.b;}
-@compute @workgroup_size(64)fn prod(@builtin(global_invocation_id)g:vec3<u32>){let i=g.x;if(i>=p.lanes){return;}let z=i*4u;var r=p.seed+i*747796405u+2891336453u;let a=i32(nr(&r)%6u)+1;let b=i32(nr(&r)%6u)+1;o[z]=bitcast<u32>(a);o[z+1u]=bitcast<u32>(b);o[z+2u]=r;o[z+3u]=select(0u,1u,a<1||a>6||b<1||b>6);}
-`;}
-  async function pipe(device,module,entry){const d={layout:'auto',compute:{module,entryPoint:entry}};return typeof device.createComputePipelineAsync==='function'?await device.createComputePipelineAsync(d):device.createComputePipeline(d)}
-  async function check(module,label){if(typeof module.getCompilationInfo!=='function')return;const x=await module.getCompilationInfo(),e=x.messages.filter(m=>m.type==='error');if(e.length)throw new Error(`${label}: ${e.map(m=>m.message).join(' | ')}`)}
-  async function readDispatch(device,pipeline,lanes,stride,data){const bytes=lanes*stride*4,o=device.createBuffer({size:bytes,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC}),r=device.createBuffer({size:bytes,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ}),u=device.createBuffer({size:16,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});device.queue.writeBuffer(u,0,data);const bg=device.createBindGroup({layout:pipeline.getBindGroupLayout(0),entries:[{binding:0,resource:{buffer:o}},{binding:1,resource:{buffer:u}}]}),e=device.createCommandEncoder(),p=e.beginComputePass();p.setPipeline(pipeline);p.setBindGroup(0,bg);p.dispatchWorkgroups(Math.ceil(lanes/WG));p.end();e.copyBufferToBuffer(o,0,r,0,bytes);device.queue.submit([e.finish()]);await r.mapAsync(GPUMapMode.READ);const v=new Uint32Array(r.getMappedRange()).slice();r.unmap();o.destroy();r.destroy();u.destroy();return v;}
-  function cpuParity(method){const rows=[];for(let i=0;i<256;i++){const seed=u32(BASE+Math.imul(i,747796405)+2891336453),r={v:seed},s=reservoir(seed),c={c:0,j:0},a=[];let cb=1;for(let d=0;d<96;d++){let n=6;if(d>=48){n=cb++;if(cb>30)cb=1}a.push(method===1?fb(r,n,c):rb(s,n))}rows.push(method===1?{a,c:c.c,j:c.j,r:r.v,b:0}:{a,c:s.c,j:s.j,r:s.r.v,b:s.b})}return rows;}
-  async function runParity(adapter){const d=await adapter.requestDevice(),m=d.createShaderModule({code:diagShader()});await check(m,'diag shader');const pp=await pipe(d,m,'prod'),sp=await pipe(d,m,'main');const pv=await readDispatch(d,pp,256,4,new Uint32Array([BASE,256,0,0]));let bad=0,inv=0,first=null;for(let i=0;i<256;i++){const seed=u32(BASE+Math.imul(i,747796405)+2891336453),r={v:seed},r1=nextRand(r),r2=nextRand(r),cpu=[r1%6+1,r2%6+1],gpu=[pv[i*4]|0,pv[i*4+1]|0];inv+=pv[i*4+3];if(cpu[0]!==gpu[0]||cpu[1]!==gpu[1]){bad++;if(!first)first={lane:i,seed:hx(seed),raw1:hx(r1),raw2:hx(r2),cpu,gpu}}}log('R4A GPU prod-mod',bad?'production modulo 오류 재현':'production modulo PASS',{mismatchedLanes:bad,invalidLanes:inv,firstMismatch:first});for(const method of [1,2]){const v=await readDispatch(d,sp,256,100,new Uint32Array([BASE,256,method,0])),rows=cpuParity(method);let mm=0,f=null;for(let i=0;i<256;i++){const z=i*100,row=rows[i];for(let k=0;k<96;k++)if(v[z+k]!==row.a[k]){mm++;if(!f)f={lane:i,draw:k,cpu:row.a[k],gpu:v[z+k]}}const meta=[row.c,row.j,row.r,row.b];for(let k=0;k<4;k++)if(v[z+96+k]!==u32(meta[k])){mm++;if(!f)f={lane:i,meta:k,cpu:u32(meta[k]),gpu:v[z+96+k]}}}log('R4 GPU parity',`${method===1?'fresh-mask':'bit-reservoir'} ${mm?'FAIL':'exact PASS'}`,{comparedValues:25600,mismatches:mm,firstMismatch:f})}return{bad,inv};}
+  const u32 = value => Number(value) >>> 0;
+  const hex32 = value => `0x${u32(value).toString(16).padStart(8, '0')}`;
+  const errText = error => error instanceof Error ? `${error.name}: ${error.message}` : String(error);
 
-  function inject(kind){const c=`\nfn diag_bits(n:u32)->u32{if(n<=1u){return 0u;}if(n<=2u){return 1u;}if(n<=4u){return 2u;}if(n<=8u){return 3u;}if(n<=16u){return 4u;}return 5u;}\n`;if(kind==='fresh')return c+`fn diag_sample(r:ptr<function,u32>,n:u32)->u32{if(n<=1u){return 0u;}let k=diag_bits(n);let m=(1u<<k)-1u;loop{let x=next_rand(r)&m;if(x<n){return x;}}}\n`;return c+`var<private> diag_w:u32;var<private> diag_b:u32;fn diag_sample(r:ptr<function,u32>,n:u32)->u32{if(n<=1u){return 0u;}let k=diag_bits(n);let m=(1u<<k)-1u;loop{if(diag_b<k){diag_w=next_rand(r);diag_b=32u;}let x=diag_w&m;diag_w=diag_w>>k;diag_b=diag_b-k;if(x<n){return x;}}}\n`;}
-  function variant(tables,kind){let s=window.shaderSource(tables);const d=(s.match(/next_rand\(rng\) % 6u/g)||[]).length,c=(s.match(/next_rand\(rng\) % remaining/g)||[]).length;if(d!==2||c!==1)throw new Error(`sampler 위치 불일치 d=${d} c=${c}`);s=s.replaceAll('next_rand(rng) % 6u','diag_sample(rng, 6u)').replaceAll('next_rand(rng) % remaining','diag_sample(rng, remaining)');const mark='fn stage_id_at(index: i32) -> i32 {',i=s.indexOf(mark);if(i<0)throw new Error('injection marker 없음');return s.slice(0,i)+inject(kind)+s.slice(i);}
-  function storage(d,a){const b=d.createBuffer({size:Math.max(4,a.byteLength),usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST});d.queue.writeBuffer(b,0,a);return b;}
-  function summ(v){let n=0,s=0,q=0,mi=Infinity,ma=-Infinity;for(let z=0;z<v.length;z+=PST){const c=v[z];if(!c)continue;n+=c;s+=v[z+1];q+=v[z+2];mi=Math.min(mi,v[z+3]);ma=Math.max(ma,v[z+4])}const m=s/n;return{count:n,mean:m,std:Math.sqrt(Math.max(0,q/n-m*m)),min:mi,max:ma,sum:s,sumSq:q}}
-  function merge(a){const n=a.reduce((s,x)=>s+x.count,0),ss=a.reduce((s,x)=>s+x.sum,0),qq=a.reduce((s,x)=>s+x.sumSq,0),m=ss/n;return{count:n,mean:m,std:Math.sqrt(Math.max(0,qq/n-m*m)),min:Math.min(...a.map(x=>x.min)),max:Math.max(...a.map(x=>x.max))}}
-  async function runFull(adapter){if(typeof window.shaderSource!=='function'||typeof window.buildGpuTables!=='function'||typeof window.buildX36GpuLookupData!=='function')throw new Error('production GPU helper 없음');const tables=window.buildGpuTables(),d=await adapter.requestDevice(),pipes={};for(const k of ['fresh','reservoir']){const m=d.createShaderModule({code:variant(tables,k)});await check(m,`full ${k}`);pipes[k]=await pipe(d,m,'main')}const sb={a:storage(d,window.buildX36GpuLookupData(tables)),b:storage(d,new Int32Array(tables.stageMove)),c:storage(d,new Int32Array(tables.stageEvent)),e:storage(d,new Int32Array(tables.cardType)),f:storage(d,new Int32Array(tables.cardValue))};async function one(k,state,n,seed){const input=storage(d,new Int32Array(state)),rec=Math.ceil(n/WG),bytes=rec*PST*4,out=d.createBuffer({size:bytes,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC}),read=d.createBuffer({size:bytes,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ}),u=d.createBuffer({size:32,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});d.queue.writeBuffer(u,0,new Uint32Array([n,0,seed>>>0,512,1,0,0,0]));const bg=d.createBindGroup({layout:pipes[k].getBindGroupLayout(0),entries:[{binding:0,resource:{buffer:sb.a}},{binding:1,resource:{buffer:sb.b}},{binding:2,resource:{buffer:sb.c}},{binding:3,resource:{buffer:sb.e}},{binding:4,resource:{buffer:sb.f}},{binding:5,resource:{buffer:input}},{binding:6,resource:{buffer:out}},{binding:7,resource:{buffer:u}}]}),enc=d.createCommandEncoder(),pass=enc.beginComputePass();pass.setPipeline(pipes[k]);pass.setBindGroup(0,bg);pass.dispatchWorkgroups(rec);pass.end();enc.copyBufferToBuffer(out,0,read,0,bytes);const t=performance.now();d.queue.submit([enc.finish()]);await read.mapAsync(GPUMapMode.READ);const ms=performance.now()-t,v=new Uint32Array(read.getMappedRange()).slice();read.unmap();input.destroy();out.destroy();read.destroy();u.destroy();return{...summ(v),elapsedMs:ms,rolloutsPerSec:n/(ms/1000)}}const init=new Board().getState().slice();init[1]=true;const dbl=init.slice();dbl[5]=100;dbl[6]=1;const sanity={};for(const k of ['fresh','reservoir'])sanity[k]=await one(k,dbl,4096,BASE^0x55555555);log('R8 GPU full sanity','double-state',{expected:{min:4,max:22},results:sanity});const all={};for(const k of ['fresh','reservoir']){await one(k,init,1024,BASE);const runs=[];for(let r=0;r<FULL_R;r++)runs.push(await one(k,init,FULL_N,u32(BASE+Math.imul(r+1,0x9e3779b1))));all[k]={runs,medianRolloutsPerSec:med(runs.map(x=>x.rolloutsPerSec)),aggregate:merge(runs)}}const ratio=all.reservoir.medianRolloutsPerSec/all.fresh.medianRolloutsPerSec,delta=all.reservoir.aggregate.mean-all.fresh.aggregate.mean;log('R9 GPU full A/B','production X36 sampler 비교',{rolloutsPerRun:FULL_N,repeats:FULL_R,fresh:all.fresh,reservoir:all.reservoir,reservoirVsFreshSpeed:ratio,aggregateMeanDelta:delta});Object.values(sb).forEach(x=>x.destroy());return{ratio,delta,all};}
+  function median(values) {
+    const sorted = [...values].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+  }
 
-  function patchCpu(){const gr=Board.prototype.getRandom,gc=Board.prototype.getCard;Board.prototype.getRandom=function(){const a=rb(this.__diagR,6)+1,b=rb(this.__diagR,6)+1;if(this.isDouble||!this.autoProcess)this.isDouble=false;else{this.isDouble=a===b;this.diceUse++}return a+b};Board.prototype.getCard=function(index,pushYN=true){if(pushYN&&this.cards.length>=5)return;let rnd;if(index===undefined){if(!this.autoProcess)return;rnd=rb(this.__diagR,this.cardIndex.length);index=this.cardIndex[rnd]}else{if(this.autoProcess)return;this.rankReg=true;rnd=this.cardIndex.indexOf(index)}if(this.cardInfo[index][3]===0)this.cardIndex.splice(rnd,1);const row=this.cardInfo[index];row[3]=1;if(this.cards.length<5&&pushYN)this.cards.push(row);if(this.cardIndex.length===0)this.resetCardInfo()};return()=>{Board.prototype.getRandom=gr;Board.prototype.getCard=gc}}
-  function cpuRun(n,policy,mode){const old=Board.rolloutPolicy;Board.rolloutPolicy=policy;const restore=mode==='reservoir'?patchCpu():null;let dec=0,sum=0;const t=performance.now();try{for(let ep=0;ep<n;ep++){const e=new Board();e.autoProcess=true;if(mode==='reservoir')e.__diagR=reservoir(u32(BASE+Math.imul(ep+1,747796405)));let done=e.step(0);dec++;while(!done){done=e.step(e.chooseAction());dec++}sum+=e.score}}finally{if(restore)restore();Board.rolloutPolicy=old}const ms=performance.now()-t;return{episodes:n,decisions:dec,elapsedMs:ms,episodesPerSec:n/(ms/1000),decisionsPerSec:dec/(ms/1000),avgScore:sum/n,avgDecisions:dec/n}}
-  async function cpuAB(){const out={};for(const pol of ['fast','quality']){cpuRun(16,pol,'current');cpuRun(16,pol,'reservoir');const a=[],b=[];for(let r=0;r<CPU_R;r++){if(r%2===0){a.push(cpuRun(CPU_N,pol,'current'));b.push(cpuRun(CPU_N,pol,'reservoir'))}else{b.push(cpuRun(CPU_N,pol,'reservoir'));a.push(cpuRun(CPU_N,pol,'current'))}await new Promise(x=>setTimeout(x,0))}const ar=med(a.map(x=>x.decisionsPerSec)),br=med(b.map(x=>x.decisionsPerSec));out[pol]={current:a,reservoir:b,currentMedianDecisionsPerSec:ar,reservoirMedianDecisionsPerSec:br,speedRatioByDecisions:br/ar,meanScoreCurrent:avg(a.map(x=>x.avgScore)),meanScoreReservoir:avg(b.map(x=>x.avgScore))};log('R10 CPU full A/B',pol,{episodesPerRun:CPU_N,repeats:CPU_R,result:out[pol]})}const rec=out.fast.speedRatioByDecisions>=1.05&&out.quality.speedRatioByDecisions>=0.97;log('R11 CPU decision',rec?'CPU reservoir 패치 후보':'CPU 현행 유지 권장',{threshold:'fast decisions/s >= +5%, quality >= -3%',fastRatio:out.fast.speedRatioByDecisions,qualityRatio:out.quality.speedRatioByDecisions,recommendPatch:rec,productionChanged:false});return{out,rec}}
+  function ensureUi() {
+    if (root) return;
+    root = document.createElement('div');
+    root.style.cssText = 'position:fixed;z-index:30000;left:8px;right:8px;bottom:8px;max-height:72vh;padding:10px;background:rgba(15,23,42,.97);color:#e2e8f0;border:1px solid #475569;border-radius:8px;font:12px/1.45 ui-monospace,SFMono-Regular,Consolas,monospace;display:flex;flex-direction:column;gap:6px';
+    const header = document.createElement('div');
+    header.style.cssText = 'display:flex;justify-content:space-between;gap:8px';
+    const title = document.createElement('strong');
+    title.textContent = 'RNG full-rollout 진단 · production 중지';
+    const copy = document.createElement('button');
+    copy.textContent = '전체 복사';
+    copy.onclick = async () => {
+      try { await navigator.clipboard.writeText(lines.join('\n')); } catch (_) {}
+    };
+    pre = document.createElement('pre');
+    pre.style.cssText = 'margin:0;overflow:auto;white-space:pre-wrap;word-break:break-word;user-select:text';
+    header.append(title, copy);
+    root.append(header, pre);
+    document.body.appendChild(root);
+  }
 
-  async function run(){if(running)return;running=true;try{log('R0 CONFIG','full-rollout 진단 시작',{fullRollouts:FULL_N,fullRepeats:FULL_R,cpuEpisodes:CPU_N,cpuRepeats:CPU_R,strongerRun:'?mode=test&fullRollouts=65536&fullRepeats=5&cpuEpisodes=1024&cpuRepeats=5',productionMeasurementsStopped:true});if(!navigator.gpu)throw new Error('navigator.gpu 없음');const ad=await navigator.gpu.requestAdapter({powerPreference:'high-performance'});if(!ad)throw new Error('adapter=null');const p=await runParity(ad);let g=null,c=null;try{g=await runFull(ad)}catch(e){log('FAIL GPU full A/B',et(e),e.stack||'')}try{c=await cpuAB()}catch(e){log('FAIL CPU full A/B',et(e),e.stack||'')}log('R12 FINAL','진단 완료',{moduloBugReproduced:p.bad>0,fullGpuReservoirVsFreshSpeed:g?.ratio??null,fullGpuMeanDelta:g?.delta??null,cpuPatchRecommended:c?.rec??null,productionChanged:false,productionMeasurementsStopped:true})}catch(e){log('FAIL diagnostic',et(e),e.stack||'')}finally{running=false}}
+  function log(stage, message, extra) {
+    ensureUi();
+    const ms = (performance.now() - startedAt).toFixed(1).padStart(7, ' ');
+    lines.push(`[+${ms}ms] ${stage} ${message}${extra === undefined ? '' : ` · ${JSON.stringify(extra)}`}`);
+    pre.textContent = lines.join('\n');
+    pre.scrollTop = pre.scrollHeight;
+    console.log('[GPU TEST]', stage, message, extra ?? '');
+  }
 
-  window.addEventListener('error',e=>log('WINDOW error',e.message||et(e.error)));
-  window.addEventListener('unhandledrejection',e=>log('WINDOW rejection',et(e.reason)));
-  ensureUi();log('S0 bootstrap','진단 시작',{href:location.href,secureContext:window.isSecureContext,userAgent:navigator.userAgent});log('S1 navigator.gpu',navigator.gpu?'존재':'없음');stopService();setTimeout(run,0);
+  function wrapMethod(target, name, makeWrapper) {
+    if (!target || typeof target[name] !== 'function') return false;
+    const original = target[name].bind(target);
+    const wrapped = makeWrapper(original);
+    try {
+      Object.defineProperty(target, name, { configurable: true, writable: true, value: wrapped });
+      return true;
+    } catch (_) {
+      try {
+        target[name] = wrapped;
+        return target[name] === wrapped;
+      } catch (_) {
+        return false;
+      }
+    }
+  }
+
+  function stopProductionMeasurements() {
+    const blocked = [];
+    if (typeof window.prepareGpuReadbackModeOnLoad === 'function') {
+      wrapMethod(window, 'prepareGpuReadbackModeOnLoad', () => async () => log('T0 SERVICE STOP', 'production GPU init 차단'));
+      blocked.push('prepareGpuReadbackModeOnLoad');
+    }
+    if (typeof window.verifyGpuEngineOnLoad === 'function') {
+      wrapMethod(window, 'verifyGpuEngineOnLoad', () => async () => ({ ok: true, skipped: true }));
+      blocked.push('verifyGpuEngineOnLoad');
+    }
+    if (typeof window.calcEx === 'function') {
+      wrapMethod(window, 'calcEx', () => async () => log('T0 SERVICE STOP', 'production calcEx 차단'));
+      blocked.push('calcEx');
+    }
+    if (typeof window.showComputeModeModal === 'function') {
+      wrapMethod(window, 'showComputeModeModal', () => callback => {
+        log('T0 SERVICE STOP', 'production modal/benchmark 차단');
+        if (typeof callback === 'function') callback();
+      });
+      blocked.push('showComputeModeModal');
+    }
+    const wb = window.gpuRolloutWorkbench;
+    if (wb) {
+      for (const name of ['prepareGpuReadbackMode', 'runGpu', 'runGpuAllActions']) {
+        if (typeof wb[name] !== 'function') continue;
+        wrapMethod(wb, name, () => async () => { throw new Error(`mode=test production ${name} disabled`); });
+        blocked.push(`gpuRolloutWorkbench.${name}`);
+      }
+    }
+    log('T0 SERVICE STOP', '기존 서비스 실측 차단 완료', { blocked });
+  }
+
+  function nextRandCpu(holder) {
+    const t = u32(holder.value + 0x6D2B79F5);
+    holder.value = t;
+    let r = u32(Math.imul(u32(t ^ (t >>> 15)), u32(1 | t)));
+    r = u32(r ^ u32(r + Math.imul(u32(r ^ (r >>> 7)), 61)));
+    return u32(r ^ (r >>> 14));
+  }
+
+  function bitsForBound(bound) {
+    if (bound <= 1) return 0;
+    if (bound <= 2) return 1;
+    if (bound <= 4) return 2;
+    if (bound <= 8) return 3;
+    if (bound <= 16) return 4;
+    return 5;
+  }
+
+  function freshCpu(rng, bound) {
+    if (bound <= 1) return 0;
+    const bits = bitsForBound(bound);
+    const mask = (1 << bits) - 1;
+    while (true) {
+      const candidate = nextRandCpu(rng) & mask;
+      if (candidate < bound) return candidate;
+    }
+  }
+
+  function reservoirState(seed) {
+    return { rng: { value: u32(seed) }, word: 0, bits: 0, calls: 0, rejects: 0 };
+  }
+
+  function reservoirCpu(state, bound) {
+    if (bound <= 1) return 0;
+    const bits = bitsForBound(bound);
+    const mask = (1 << bits) - 1;
+    while (true) {
+      if (state.bits < bits) {
+        state.word = nextRandCpu(state.rng);
+        state.bits = 32;
+        state.calls++;
+      }
+      const candidate = state.word & mask;
+      state.word >>>= bits;
+      state.bits -= bits;
+      if (candidate < bound) return candidate;
+      state.rejects++;
+    }
+  }
+
+  function diagnosticShader() {
+    return `
+struct Params { seed:u32, lanes:u32, method:u32, pad:u32, }
+struct Reservoir { word:u32, bits:u32, calls:u32, rejects:u32, }
+@group(0) @binding(0) var<storage, read_write> output: array<u32>;
+@group(0) @binding(1) var<uniform> params: Params;
+
+fn next_rand(rng: ptr<function, u32>) -> u32 {
+  var t = (*rng) + 0x6D2B79F5u;
+  (*rng) = t;
+  var r = (t ^ (t >> 15u)) * (1u | t);
+  r = r ^ (r + ((r ^ (r >> 7u)) * 61u));
+  return r ^ (r >> 14u);
+}
+fn bits_for_bound(bound:u32) -> u32 {
+  if (bound <= 1u) { return 0u; }
+  if (bound <= 2u) { return 1u; }
+  if (bound <= 4u) { return 2u; }
+  if (bound <= 8u) { return 3u; }
+  if (bound <= 16u) { return 4u; }
+  return 5u;
+}
+fn fresh(rng:ptr<function,u32>, bound:u32) -> u32 {
+  if (bound <= 1u) { return 0u; }
+  let bits = bits_for_bound(bound);
+  let mask = (1u << bits) - 1u;
+  loop {
+    let candidate = next_rand(rng) & mask;
+    if (candidate < bound) { return candidate; }
+  }
+}
+fn reservoir(rng:ptr<function,u32>, state:ptr<function,Reservoir>, bound:u32) -> u32 {
+  if (bound <= 1u) { return 0u; }
+  let bits = bits_for_bound(bound);
+  let mask = (1u << bits) - 1u;
+  loop {
+    if ((*state).bits < bits) {
+      (*state).word = next_rand(rng);
+      (*state).bits = 32u;
+      (*state).calls = (*state).calls + 1u;
+    }
+    let candidate = (*state).word & mask;
+    (*state).word = (*state).word >> bits;
+    (*state).bits = (*state).bits - bits;
+    if (candidate < bound) { return candidate; }
+    (*state).rejects = (*state).rejects + 1u;
+  }
+}
+
+@compute @workgroup_size(64)
+fn prod_mod(@builtin(global_invocation_id) gid:vec3<u32>) {
+  let lane = gid.x;
+  if (lane >= params.lanes) { return; }
+  let base = lane * 4u;
+  var rng = params.seed + lane * 747796405u + 2891336453u;
+  let a = i32(next_rand(&rng) % 6u) + 1;
+  let b = i32(next_rand(&rng) % 6u) + 1;
+  output[base] = bitcast<u32>(a);
+  output[base + 1u] = bitcast<u32>(b);
+  output[base + 2u] = rng;
+  output[base + 3u] = select(0u, 1u, a < 1 || a > 6 || b < 1 || b > 6);
+}
+
+@compute @workgroup_size(64)
+fn parity(@builtin(global_invocation_id) gid:vec3<u32>) {
+  let lane = gid.x;
+  if (lane >= params.lanes) { return; }
+  let base = lane * 100u;
+  var rng = params.seed + lane * 747796405u + 2891336453u;
+  var state:Reservoir;
+  state.word = 0u; state.bits = 0u; state.calls = 0u; state.rejects = 0u;
+  var cardBound = 1u;
+  for (var i=0u; i<96u; i=i+1u) {
+    var bound = 6u;
+    if (i >= 48u) {
+      bound = cardBound;
+      cardBound = cardBound + 1u;
+      if (cardBound > 30u) { cardBound = 1u; }
+    }
+    output[base+i] = select(reservoir(&rng,&state,bound), fresh(&rng,bound), params.method == 1u);
+  }
+  output[base+96u] = state.calls;
+  output[base+97u] = state.rejects;
+  output[base+98u] = rng;
+  output[base+99u] = state.bits;
+}
+`;
+  }
+
+  async function compilePipeline(device, module, entryPoint) {
+    const descriptor = { layout: 'auto', compute: { module, entryPoint } };
+    return typeof device.createComputePipelineAsync === 'function'
+      ? await device.createComputePipelineAsync(descriptor)
+      : device.createComputePipeline(descriptor);
+  }
+
+  async function checkShader(module, label) {
+    if (typeof module.getCompilationInfo !== 'function') return;
+    const info = await module.getCompilationInfo();
+    const errors = info.messages.filter(message => message.type === 'error');
+    if (errors.length) throw new Error(`${label}: ${errors.map(message => message.message).join(' | ')}`);
+  }
+
+  async function dispatchRead(device, pipeline, lanes, stride, paramsData) {
+    const byteLength = lanes * stride * 4;
+    const output = device.createBuffer({ size: byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
+    const read = device.createBuffer({ size: byteLength, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+    const uniform = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    device.queue.writeBuffer(uniform, 0, paramsData);
+    const bindGroup = device.createBindGroup({
+      layout: pipeline.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: { buffer: output } },
+        { binding: 1, resource: { buffer: uniform } },
+      ],
+    });
+    const encoder = device.createCommandEncoder();
+    const pass = encoder.beginComputePass();
+    pass.setPipeline(pipeline);
+    pass.setBindGroup(0, bindGroup);
+    pass.dispatchWorkgroups(Math.ceil(lanes / WORKGROUP_SIZE));
+    pass.end();
+    encoder.copyBufferToBuffer(output, 0, read, 0, byteLength);
+    device.queue.submit([encoder.finish()]);
+    await read.mapAsync(GPUMapMode.READ);
+    const values = new Uint32Array(read.getMappedRange()).slice();
+    read.unmap();
+    output.destroy(); read.destroy(); uniform.destroy();
+    return values;
+  }
+
+  async function newDiagnosticDevice() {
+    const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
+    if (!adapter) throw new Error('adapter=null');
+    return adapter.requestDevice();
+  }
+
+  async function runParity() {
+    const device = await newDiagnosticDevice();
+    const module = device.createShaderModule({ code: diagnosticShader() });
+    await checkShader(module, 'diagnostic shader');
+    const prodPipeline = await compilePipeline(device, module, 'prod_mod');
+    const parityPipeline = await compilePipeline(device, module, 'parity');
+
+    const prod = await dispatchRead(device, prodPipeline, 256, 4, new Uint32Array([BASE_SEED, 256, 0, 0]));
+    let mismatchedLanes = 0;
+    let invalidLanes = 0;
+    let firstMismatch = null;
+    for (let lane=0; lane<256; lane++) {
+      const seed = u32(BASE_SEED + Math.imul(lane, 747796405) + 2891336453);
+      const rng = { value: seed };
+      const raw1 = nextRandCpu(rng);
+      const raw2 = nextRandCpu(rng);
+      const cpu = [raw1 % 6 + 1, raw2 % 6 + 1];
+      const gpu = [prod[lane*4] | 0, prod[lane*4+1] | 0];
+      invalidLanes += prod[lane*4+3];
+      if (cpu[0] !== gpu[0] || cpu[1] !== gpu[1]) {
+        mismatchedLanes++;
+        if (!firstMismatch) firstMismatch = { lane, seed:hex32(seed), raw1:hex32(raw1), raw2:hex32(raw2), cpu, gpu };
+      }
+    }
+    log('R4A GPU prod-mod', mismatchedLanes ? 'production modulo 오류 재현' : 'production modulo PASS', { mismatchedLanes, invalidLanes, firstMismatch });
+
+    for (const method of [1, 2]) {
+      const values = await dispatchRead(device, parityPipeline, 256, 100, new Uint32Array([BASE_SEED, 256, method, 0]));
+      let mismatches = 0;
+      let first = null;
+      for (let lane=0; lane<256; lane++) {
+        const seed = u32(BASE_SEED + Math.imul(lane, 747796405) + 2891336453);
+        const rng = { value: seed };
+        const state = reservoirState(seed);
+        let cardBound = 1;
+        for (let draw=0; draw<96; draw++) {
+          let bound = 6;
+          if (draw >= 48) {
+            bound = cardBound++;
+            if (cardBound > 30) cardBound = 1;
+          }
+          const cpu = method === 1 ? freshCpu(rng, bound) : reservoirCpu(state, bound);
+          const gpu = values[lane*100 + draw];
+          if (cpu !== gpu) {
+            mismatches++;
+            if (!first) first = { lane, draw, cpu, gpu };
+          }
+        }
+        if (method === 2) {
+          const meta = [state.calls, state.rejects, state.rng.value, state.bits];
+          for (let k=0; k<4; k++) {
+            const gpu = values[lane*100 + 96 + k];
+            if (u32(meta[k]) !== gpu) {
+              mismatches++;
+              if (!first) first = { lane, meta:k, cpu:u32(meta[k]), gpu };
+            }
+          }
+        } else {
+          const gpuRng = values[lane*100 + 98];
+          if (u32(rng.value) !== gpuRng) {
+            mismatches++;
+            if (!first) first = { lane, meta:'rng', cpu:u32(rng.value), gpu:gpuRng };
+          }
+        }
+      }
+      log('R4 GPU parity', `${method === 1 ? 'fresh-mask' : 'bit-reservoir'} ${mismatches ? 'FAIL' : 'exact PASS'}`, {
+        sampleValues: 256*96,
+        mismatches,
+        firstMismatch:first,
+      });
+    }
+    return { mismatchedLanes, invalidLanes };
+  }
+
+  function samplerInjection(kind) {
+    const common = `\nfn diag_bits_for_bound(bound:u32)->u32{if(bound<=1u){return 0u;}if(bound<=2u){return 1u;}if(bound<=4u){return 2u;}if(bound<=8u){return 3u;}if(bound<=16u){return 4u;}return 5u;}\n`;
+    if (kind === 'fresh') {
+      return common + `fn diag_sample(rng:ptr<function,u32>,bound:u32)->u32{if(bound<=1u){return 0u;}let bits=diag_bits_for_bound(bound);let mask=(1u<<bits)-1u;loop{let candidate=next_rand(rng)&mask;if(candidate<bound){return candidate;}}}\n`;
+    }
+    return common + `var<private> diag_word:u32;var<private> diag_bits:u32;fn diag_sample(rng:ptr<function,u32>,bound:u32)->u32{if(bound<=1u){return 0u;}let bits=diag_bits_for_bound(bound);let mask=(1u<<bits)-1u;loop{if(diag_bits<bits){diag_word=next_rand(rng);diag_bits=32u;}let candidate=diag_word&mask;diag_word=diag_word>>bits;diag_bits=diag_bits-bits;if(candidate<bound){return candidate;}}}\n`;
+  }
+
+  function makeProductionVariant(tables, kind) {
+    let source = window.shaderSource(tables);
+    const diceUses = (source.match(/next_rand\(rng\) % 6u/g) || []).length;
+    const cardUses = (source.match(/next_rand\(rng\) % remaining/g) || []).length;
+    if (diceUses !== 2 || cardUses !== 1) throw new Error(`production sampler 위치 불일치 dice=${diceUses} card=${cardUses}`);
+    source = source.replaceAll('next_rand(rng) % 6u', 'diag_sample(rng, 6u)');
+    source = source.replaceAll('next_rand(rng) % remaining', 'diag_sample(rng, remaining)');
+    const marker = 'fn stage_id_at(index: i32) -> i32 {';
+    const index = source.indexOf(marker);
+    if (index < 0) throw new Error('WGSL injection marker 없음');
+    return source.slice(0, index) + samplerInjection(kind) + source.slice(index);
+  }
+
+  function storageBuffer(device, typedArray) {
+    const buffer = device.createBuffer({ size: Math.max(4, typedArray.byteLength), usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+    device.queue.writeBuffer(buffer, 0, typedArray);
+    return buffer;
+  }
+
+  function summarizePartials(values) {
+    let count=0, sum=0, sumSq=0, min=Infinity, max=-Infinity;
+    for (let i=0; i<values.length; i+=PARTIAL_STRIDE) {
+      const c = values[i];
+      if (!c) continue;
+      count += c;
+      sum += values[i+1];
+      sumSq += values[i+2];
+      min = Math.min(min, values[i+3]);
+      max = Math.max(max, values[i+4]);
+    }
+    const mean = sum / count;
+    const variance = Math.max(0, sumSq / count - mean * mean);
+    return { count, mean, std:Math.sqrt(variance), min, max, sum, sumSq };
+  }
+
+  function mergeRuns(runs) {
+    const count = runs.reduce((s,r)=>s+r.count,0);
+    const sum = runs.reduce((s,r)=>s+r.sum,0);
+    const sumSq = runs.reduce((s,r)=>s+r.sumSq,0);
+    const mean = sum / count;
+    const variance = Math.max(0, sumSq / count - mean * mean);
+    return { count, mean, std:Math.sqrt(variance), min:Math.min(...runs.map(r=>r.min)), max:Math.max(...runs.map(r=>r.max)), se:Math.sqrt(variance / count) };
+  }
+
+  async function runFullRolloutAB() {
+    if (typeof window.shaderSource !== 'function' || typeof window.buildGpuTables !== 'function' || typeof window.buildX36GpuLookupData !== 'function') {
+      throw new Error('production GPU helper 없음');
+    }
+    const tables = window.buildGpuTables();
+    const device = await newDiagnosticDevice();
+    const pipelines = {};
+    for (const kind of ['fresh','reservoir']) {
+      const module = device.createShaderModule({ code: makeProductionVariant(tables, kind) });
+      await checkShader(module, `full ${kind}`);
+      pipelines[kind] = await compilePipeline(device, module, 'main');
+    }
+
+    const shared = {
+      stageId: storageBuffer(device, window.buildX36GpuLookupData(tables)),
+      stageMove: storageBuffer(device, new Int32Array(tables.stageMove)),
+      stageEvent: storageBuffer(device, new Int32Array(tables.stageEvent)),
+      cardType: storageBuffer(device, new Int32Array(tables.cardType)),
+      cardValue: storageBuffer(device, new Int32Array(tables.cardValue)),
+    };
+
+    async function runOne(kind, state, rolloutCount, seed) {
+      const input = storageBuffer(device, new Int32Array(state));
+      const partialCount = Math.ceil(rolloutCount / WORKGROUP_SIZE);
+      const byteLength = partialCount * PARTIAL_STRIDE * 4;
+      const output = device.createBuffer({ size:byteLength, usage:GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
+      const read = device.createBuffer({ size:byteLength, usage:GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+      const uniform = device.createBuffer({ size:32, usage:GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+      device.queue.writeBuffer(uniform, 0, new Uint32Array([rolloutCount,0,seed>>>0,512,1,0,0,0]));
+      const bindGroup = device.createBindGroup({ layout:pipelines[kind].getBindGroupLayout(0), entries:[
+        {binding:0,resource:{buffer:shared.stageId}}, {binding:1,resource:{buffer:shared.stageMove}},
+        {binding:2,resource:{buffer:shared.stageEvent}}, {binding:3,resource:{buffer:shared.cardType}},
+        {binding:4,resource:{buffer:shared.cardValue}}, {binding:5,resource:{buffer:input}},
+        {binding:6,resource:{buffer:output}}, {binding:7,resource:{buffer:uniform}},
+      ]});
+      const encoder = device.createCommandEncoder();
+      const pass = encoder.beginComputePass();
+      pass.setPipeline(pipelines[kind]); pass.setBindGroup(0, bindGroup); pass.dispatchWorkgroups(partialCount); pass.end();
+      encoder.copyBufferToBuffer(output,0,read,0,byteLength);
+      const t0 = performance.now();
+      device.queue.submit([encoder.finish()]);
+      await read.mapAsync(GPUMapMode.READ);
+      const elapsedMs = performance.now() - t0;
+      const values = new Uint32Array(read.getMappedRange()).slice();
+      read.unmap(); input.destroy(); output.destroy(); read.destroy(); uniform.destroy();
+      return { ...summarizePartials(values), elapsedMs, rolloutsPerSec:rolloutCount/(elapsedMs/1000) };
+    }
+
+    const initial = new Board().getState().slice();
+    initial[1] = true;
+    const doubleState = initial.slice();
+    doubleState[5] = 100;
+    doubleState[6] = 1;
+    const sanity = {};
+    for (const kind of ['fresh','reservoir']) sanity[kind] = await runOne(kind,doubleState,8192,BASE_SEED ^ 0x55555555);
+    log('R8 GPU full sanity','double-state',{expected:{min:4,max:22},results:sanity});
+
+    const result = {};
+    const seeds = Array.from({length:FULL_REPEATS},(_,i)=>u32(BASE_SEED + Math.imul(i+1,0x9e3779b1)));
+    for (const kind of ['fresh','reservoir']) {
+      await runOne(kind,initial,2048,BASE_SEED);
+      const runs = [];
+      for (const seed of seeds) runs.push(await runOne(kind,initial,FULL_ROLLOUTS,seed));
+      result[kind] = {
+        runs,
+        medianRolloutsPerSec:median(runs.map(r=>r.rolloutsPerSec)),
+        aggregate:mergeRuns(runs),
+      };
+    }
+
+    const speedRatio = result.reservoir.medianRolloutsPerSec / result.fresh.medianRolloutsPerSec;
+    const meanDelta = result.reservoir.aggregate.mean - result.fresh.aggregate.mean;
+    const deltaSe = Math.sqrt(result.reservoir.aggregate.se ** 2 + result.fresh.aggregate.se ** 2);
+    const zScore = deltaSe > 0 ? meanDelta / deltaSe : 0;
+    log('R9 GPU full A/B','production X36 sampler 비교',{
+      rolloutsPerRun:FULL_ROLLOUTS,repeats:FULL_REPEATS,
+      fresh:result.fresh,reservoir:result.reservoir,
+      reservoirVsFreshSpeed:speedRatio,aggregateMeanDelta:meanDelta,deltaSe,zScore,
+    });
+
+    Object.values(shared).forEach(buffer => buffer.destroy());
+    return { speedRatio, meanDelta, deltaSe, zScore, result };
+  }
+
+  async function run() {
+    if (running) return;
+    running = true;
+    try {
+      log('R0 CONFIG','GPU full-rollout 진단 시작',{
+        fullRollouts:FULL_ROLLOUTS,fullRepeats:FULL_REPEATS,
+        totalPerSampler:FULL_ROLLOUTS*FULL_REPEATS,
+        cpuDecision:'현행 유지 (이전 full A/B에서 fast -2.47%, quality +0.14%)',
+        strongerRun:'?mode=test&fullRollouts=131072&fullRepeats=8',
+        productionMeasurementsStopped:true,
+      });
+      if (!navigator.gpu) throw new Error('navigator.gpu 없음');
+      const parity = await runParity();
+      let full = null;
+      try { full = await runFullRolloutAB(); }
+      catch (error) { log('FAIL GPU full A/B',errText(error),error?.stack || ''); }
+      log('R12 FINAL','진단 완료',{
+        moduloBugReproduced:parity.mismatchedLanes>0,
+        fullGpuReservoirVsFreshSpeed:full?.speedRatio ?? null,
+        fullGpuMeanDelta:full?.meanDelta ?? null,
+        fullGpuDeltaZ:full?.zScore ?? null,
+        cpuPatchRecommended:false,
+        productionChanged:false,
+        productionMeasurementsStopped:true,
+      });
+    } catch (error) {
+      log('FAIL diagnostic',errText(error),error?.stack || '');
+    } finally {
+      running = false;
+    }
+  }
+
+  window.addEventListener('error', event => log('WINDOW error',event.message || errText(event.error)));
+  window.addEventListener('unhandledrejection', event => log('WINDOW rejection',errText(event.reason)));
+  ensureUi();
+  log('S0 bootstrap','진단 시작',{href:location.href,secureContext:window.isSecureContext,userAgent:navigator.userAgent});
+  log('S1 navigator.gpu',navigator.gpu?'존재':'없음');
+  stopProductionMeasurements();
+  setTimeout(run,0);
 })();
