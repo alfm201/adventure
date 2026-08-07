@@ -1,3 +1,132 @@
+const X36_WEIGHTS = Object.freeze({
+  rollCard: 234.154,
+  rollJump: 2.474,
+  rollJumpCard: 187.074,
+  handPressure: 96.072,
+  lateBonus: 4.423,
+  lateThreshold: 70,
+  moveCost: 79.155,
+  moveCard: 137.845,
+  moveJump: 2.733,
+  moveJumpCard: 83.176,
+  chain: 36.783,
+  multCost: 18.355,
+  multCard: 128.161,
+  multJump: 2.787,
+  multJumpCard: 83.883,
+  stageCost: 4.55,
+  stageSame50: 1.74,
+  stageJump: 2,
+  handQualityRetention: 102.989,
+  nextCardPressure: -30,
+  terminalContinuous: -0.176,
+  chainLatePenalty: 17.906,
+  stageAltMovePenalty: 2.372,
+  stageActualMove: 0.485,
+  stageDestination: -43.919,
+  poolQualityCard: 0.325,
+});
+
+const X36_DICE_SUM_WEIGHT = Object.freeze({
+  2: 1, 3: 2, 4: 3, 5: 4, 6: 5, 7: 6, 8: 5, 9: 4, 10: 3, 11: 2, 12: 1,
+});
+
+let x36CpuLutCache = null;
+
+function x36StaticCardQuality(cardId) {
+  const card = cardInfo[cardId - 1];
+  if (!card) return 0;
+  if (card[1] === 1) return Math.max(-0.3, Math.min(1.3, Number(card[2]) / 10));
+  if (card[1] === 2) return Math.min(1.5, Number(card[2]) / 8);
+  return 0.8;
+}
+
+function buildX36CpuLuts() {
+  const size = 2898;
+  const nextCardProbability = new Float64Array(size + 1);
+  const localQuality = new Float64Array(size + 1);
+  const sameStage50 = new Uint8Array(size + 1);
+  const staticCardQuality = new Float64Array(31);
+  let totalCardQuality = 0;
+
+  const stageIdAt = index => index < 0 || index >= size ? 0 : Number(stage[index][1] || 0);
+  const stageMoveAt = index => index < 0 || index >= size ? 0 : Number(stage[index][4] || 0);
+  const stageEventAt = index => index < 0 || index >= size ? 0 : Number(stage[index][5] || 0);
+
+  const rawLandingAfterMove = (fromScore, rawValue, stop) => {
+    let value = rawValue;
+    if (stop) {
+      const endIndex = Math.min(2897, fromScore + value - 1);
+      for (let i = fromScore; i < endIndex; i++) {
+        const eventType = stageEventAt(i);
+        if (eventType === 6 || eventType === 9) {
+          value = i - fromScore + 1;
+          break;
+        }
+      }
+    }
+    return Math.min(2898, Math.max(1, fromScore + value));
+  };
+
+  const projectedScoreAfterMove = (fromScore, rawValue, stop) => {
+    let projected = rawLandingAfterMove(fromScore, rawValue, stop);
+    for (let guard = 0; guard < 16; guard++) {
+      if (stageEventAt(projected - 1) !== 4) break;
+      projected = Math.min(2898, projected + stageMoveAt(projected - 1));
+    }
+    return projected;
+  };
+
+  for (let id = 1; id <= 30; id++) {
+    const quality = x36StaticCardQuality(id);
+    staticCardQuality[id] = quality;
+    totalCardQuality += quality;
+  }
+
+  for (let score = 1; score <= size; score++) {
+    let nextCard = 0;
+    let local = 0;
+    for (let diceSum = 2; diceSum <= 12; diceSum++) {
+      const weight = X36_DICE_SUM_WEIGHT[diceSum];
+      const landing = rawLandingAfterMove(score, diceSum, true);
+      const projected = projectedScoreAfterMove(score, diceSum, true);
+      const eventType = stageEventAt(landing - 1);
+      if (eventType === 2 || (eventType === 4 && stageEventAt(projected - 1) === 2)) {
+        nextCard += weight;
+      }
+      if (eventType === 2) {
+        local += weight;
+      } else if (eventType === 4) {
+        local += weight * (
+          Math.max(0, stageMoveAt(landing - 1)) / 12
+          + (stageEventAt(projected - 1) === 2 ? 1 : 0)
+        );
+      }
+    }
+    nextCardProbability[score] = nextCard / 36;
+    localQuality[score] = local / 36;
+
+    let count = 0;
+    for (let pos = Math.min(2897, score + 1); pos < Math.min(2897, score + 50); pos++) {
+      if (stageIdAt(pos) === stageIdAt(score - 1)) count++;
+    }
+    sameStage50[score] = count;
+  }
+
+  return {
+    nextCardProbability,
+    localQuality,
+    sameStage50,
+    staticCardQuality,
+    totalCardQuality,
+  };
+}
+
+function getX36CpuLuts() {
+  if (!x36CpuLutCache) x36CpuLutCache = buildX36CpuLuts();
+  return x36CpuLutCache;
+}
+
 class Board {
   constructor() {
     this.score = 1;
@@ -118,7 +247,6 @@ class Board {
       this.useCard(n);
     }
 
-
     return this.diceUse >= 100 && !this.isDouble;
   }
 
@@ -179,14 +307,13 @@ class Board {
     return [
       this.rankReg,
       this.autoProcess,
-      this.score,                     // 현재 점수
-      stage[this.score - 1][1],       // 현재 스테이지 ID
-      stage[this.score - 1][2],       // 현재 스페이스 ID
-      this.diceUse,                   // 주사위 사용 횟수
-      this.isDouble ? 1 : 0,          // 더블 상태
-      // this.cards.length,              // 보유한 카드 수
-      ...Array(5).fill(0).map((_, i) => this.cards[i] ? this.cards[i][0] : 0), // cardIds 패딩 (최대 5개)
-      ...this.cardInfo.map(card => card[3]) // 모든 카드의 cardGetYN 상태 (고정 길이 30)
+      this.score,
+      stage[this.score - 1][1],
+      stage[this.score - 1][2],
+      this.diceUse,
+      this.isDouble ? 1 : 0,
+      ...Array(5).fill(0).map((_, i) => this.cards[i] ? this.cards[i][0] : 0),
+      ...this.cardInfo.map(card => card[3])
     ];
   }
 
@@ -290,23 +417,16 @@ class Board {
   }
 
   chooseActionQuality() {
-    const handCount = this.cards.length;
+    const W = X36_WEIGHTS;
+    const luts = getX36CpuLuts();
+    const cards = this.cards;
+    const handCount = cards.length;
     const score = this.score;
     const diceUse = this.diceUse;
 
     const stageIdAt = index => index < 0 || index >= 2898 ? 0 : Number(stage[index][1] || 0);
     const stageMoveAt = index => index < 0 || index >= 2898 ? 0 : Number(stage[index][4] || 0);
     const stageEventAt = index => index < 0 || index >= 2898 ? 0 : Number(stage[index][5] || 0);
-
-    const diceSumWeight = sum => {
-      if (sum === 2 || sum === 12) return 1;
-      if (sum === 3 || sum === 11) return 2;
-      if (sum === 4 || sum === 10) return 3;
-      if (sum === 5 || sum === 9) return 4;
-      if (sum === 6 || sum === 8) return 5;
-      if (sum === 7) return 6;
-      return 0;
-    };
 
     const rawLandingAfterMove = (fromScore, rawValue, stop) => {
       let value = rawValue;
@@ -326,141 +446,143 @@ class Board {
     const projectedScoreAfterMove = (fromScore, rawValue, stop) => {
       let projected = rawLandingAfterMove(fromScore, rawValue, stop);
       for (let guard = 0; guard < 16; guard++) {
-        const eventType = stageEventAt(projected - 1);
-        if (eventType === 4) {
-          projected = Math.min(2898, projected + stageMoveAt(projected - 1));
-          continue;
-        }
-        break;
+        if (stageEventAt(projected - 1) !== 4) break;
+        projected = Math.min(2898, projected + stageMoveAt(projected - 1));
       }
       return projected;
     };
 
-    const stageCardMove = cValue => {
-      const targetStage = stageIdAt(score - 1) + cValue;
-      let value = targetStage;
-      for (let i = score; i < 2897; i++) {
-        if (stageIdAt(i) === targetStage) {
-          value = i - score + 1;
-          break;
-        }
-      }
-      return value;
-    };
-
-    const sameStageCount50 = () => {
-      let count = 0;
-      for (let pos = Math.min(2897, score + 1); pos < Math.min(2897, score + 50); pos++) {
-        if (stageIdAt(pos) === stageIdAt(score - 1)) count++;
-      }
-      return count;
-    };
-
-    const cardOrJumpCardOption = (landing, projected) => {
-      const eventType = stageEventAt(landing - 1);
-      if (eventType === 2) return true;
-      return eventType === 4 && projected >= 1 && projected <= 2898 && stageEventAt(projected - 1) === 2;
-    };
+    const cardOrJumpCardOption = (landing, projected) => (
+      stageEventAt(landing - 1) === 2
+      || (stageEventAt(landing - 1) === 4 && stageEventAt(projected - 1) === 2)
+    );
 
     const moveChainCardOption = action => {
       if (action === 0 || action > handCount) return false;
-      const card = this.cards[action - 1];
+      const card = cards[action - 1];
       if (!card || card[1] !== 1) return false;
-      const firstValue = card[2];
-      const firstLanding = rawLandingAfterMove(score, firstValue, false);
-      const firstProjected = projectedScoreAfterMove(score, firstValue, false);
-      if (stageEventAt(firstLanding - 1) === 4 && cardOrJumpCardOption(firstLanding, firstProjected)) return true;
+      const firstLanding = rawLandingAfterMove(score, card[2], false);
+      const firstProjected = projectedScoreAfterMove(score, card[2], false);
+      if (stageEventAt(firstLanding - 1) === 4 && cardOrJumpCardOption(firstLanding, firstProjected)) {
+        return true;
+      }
       for (let i = 0; i < handCount; i++) {
-        if (i === action - 1) continue;
-        const nextCard = this.cards[i];
-        if (nextCard && nextCard[1] === 1) {
-          const secondLanding = rawLandingAfterMove(firstProjected, nextCard[2], false);
-          const secondProjected = projectedScoreAfterMove(firstProjected, nextCard[2], false);
-          if (cardOrJumpCardOption(secondLanding, secondProjected)) return true;
-        }
+        if (i === action - 1 || cards[i][1] !== 1) continue;
+        const secondLanding = rawLandingAfterMove(firstProjected, cards[i][2], false);
+        const secondProjected = projectedScoreAfterMove(firstProjected, cards[i][2], false);
+        if (cardOrJumpCardOption(secondLanding, secondProjected)) return true;
       }
       return false;
     };
 
-    const rollValueX36 = () => {
-      const canGainCard = handCount < 5;
-      let total = 0;
-      for (let diceSum = 2; diceSum <= 12; diceSum++) {
-        const landing = rawLandingAfterMove(score, diceSum, true);
-        const eventType = stageEventAt(landing - 1);
-        let value = 0;
-        if (eventType === 2 && canGainCard) {
-          value += 179;
-        } else if (eventType === 4) {
-          value += Math.max(0, stageMoveAt(landing - 1)) * 2;
-          if (canGainCard) {
-            const projected = projectedScoreAfterMove(score, diceSum, true);
-            if (projected >= 1 && projected <= 2898 && stageEventAt(projected - 1) === 2) value += 299;
-          }
-        }
-        total += diceSumWeight(diceSum) * value;
+    let remainingQuality = luts.totalCardQuality;
+    let remainingCount = 30;
+    for (let i = 0; i < 30; i++) {
+      if (this.cardInfo[i][3]) {
+        remainingQuality -= luts.staticCardQuality[i + 1];
+        remainingCount--;
       }
-      return total;
-    };
+    }
+    const poolQuality = remainingCount > 0 ? remainingQuality / remainingCount : 0;
 
-    const cardPostX36 = () => {
-      let value = 0;
-      if (handCount === 5 || diceUse + handCount >= 100) value += 98 * 36;
-      if (diceUse >= 70) value += 3 * 36;
-      return value;
-    };
+    let handQuality = 0;
+    if (handCount > 0) {
+      for (let i = 0; i < handCount; i++) handQuality += luts.staticCardQuality[cards[i][0]];
+      handQuality /= handCount;
+    }
 
-    const moveValueX36 = (action, cValue) => {
-      const landing = rawLandingAfterMove(score, cValue, false);
+    const canGainCard = handCount < 5;
+    let rollValue = 0;
+    for (let diceSum = 2; diceSum <= 12; diceSum++) {
+      const weight = X36_DICE_SUM_WEIGHT[diceSum];
+      const landing = rawLandingAfterMove(score, diceSum, true);
+      const projected = projectedScoreAfterMove(score, diceSum, true);
       const eventType = stageEventAt(landing - 1);
-      let total = cardPostX36() - 80 * 36;
-      if (eventType === 2) {
-        total += 139 * 36;
+      if (eventType === 2 && canGainCard) {
+        rollValue += weight * (W.rollCard + (poolQuality - 0.75) * W.poolQualityCard);
       } else if (eventType === 4) {
-        total += Math.max(0, stageMoveAt(landing - 1)) * 2 * 36;
-        const projected = projectedScoreAfterMove(score, cValue, false);
-        if (projected >= 1 && projected <= 2898 && stageEventAt(projected - 1) === 2) total += 101 * 36;
-      }
-      if (moveChainCardOption(action)) total += 37 * 36;
-      return total;
-    };
-
-    const multValueX36 = cValue => {
-      let total = cardPostX36() - 20 * 36;
-      for (let diceSum = 2; diceSum <= 12; diceSum++) {
-        const rawValue = diceSum * cValue;
-        const landing = rawLandingAfterMove(score, rawValue, false);
-        const eventType = stageEventAt(landing - 1);
-        let value = 0;
-        if (eventType === 2) {
-          value += 142;
-        } else if (eventType === 4) {
-          value += Math.max(0, stageMoveAt(landing - 1)) * 2;
-          const projected = projectedScoreAfterMove(score, rawValue, false);
-          if (projected >= 1 && projected <= 2898 && stageEventAt(projected - 1) === 2) value += 141;
+        rollValue += weight * Math.max(0, stageMoveAt(landing - 1)) * W.rollJump;
+        if (canGainCard && stageEventAt(projected - 1) === 2) {
+          rollValue += weight * (W.rollJumpCard + (poolQuality - 0.75) * W.poolQualityCard);
         }
-        total += diceSumWeight(diceSum) * value;
       }
-      return total;
-    };
+    }
 
-    const stageValueX36 = cValue => {
-      const rawValue = stageCardMove(cValue);
-      const landing = rawLandingAfterMove(score, rawValue, false);
-      let total = cardPostX36() - 2 * 36 + sameStageCount50() * 36;
-      if (stageEventAt(landing - 1) === 4) total += Math.max(0, stageMoveAt(landing - 1)) * 2 * 36;
-      return total;
-    };
+    if (handCount === 0) return 0;
+
+    let cardPost = 0;
+    if (handCount === 5 || diceUse + handCount >= 100) cardPost += 36 * W.handPressure;
+    if (diceUse >= W.lateThreshold) cardPost += 36 * W.lateBonus;
+    if (handCount === 5) {
+      cardPost -= 36 * handQuality * W.handQualityRetention;
+      cardPost += 36 * luts.nextCardProbability[score] * W.nextCardPressure;
+    }
+    const terminalT = Math.max(0, Math.min(1, diceUse / 100));
+    cardPost += 36 * terminalT * terminalT * terminalT * terminalT * W.terminalContinuous;
+
+    let positiveMoveCount = 0;
+    for (let i = 0; i < handCount; i++) {
+      if (cards[i][1] === 1 && cards[i][2] > 0) positiveMoveCount++;
+    }
 
     let bestAction = 0;
-    let bestValue = rollValueX36();
+    let bestValue = rollValue;
+
     for (let action = 1; action <= handCount; action++) {
-      const card = this.cards[action - 1];
-      if (!card) continue;
-      let value = -2147483648;
-      if (card[1] === 1) value = moveValueX36(action, card[2]);
-      else if (card[1] === 2) value = multValueX36(card[2]);
-      else if (card[1] === 3) value = stageValueX36(card[2]);
+      const card = cards[action - 1];
+      let value = -Infinity;
+
+      if (card[1] === 1) {
+        const landing = rawLandingAfterMove(score, card[2], false);
+        const eventType = stageEventAt(landing - 1);
+        value = cardPost - 36 * W.moveCost;
+        if (eventType === 2) {
+          value += 36 * W.moveCard;
+        } else if (eventType === 4) {
+          value += 36 * Math.max(0, stageMoveAt(landing - 1)) * W.moveJump;
+          const projected = projectedScoreAfterMove(score, card[2], false);
+          if (stageEventAt(projected - 1) === 2) value += 36 * W.moveJumpCard;
+        }
+        if (moveChainCardOption(action)) {
+          value += 36 * W.chain;
+          value -= 36 * Math.max(0, (diceUse - 70) / 30) * W.chainLatePenalty;
+        }
+      } else if (card[1] === 2) {
+        value = cardPost - 36 * W.multCost;
+        for (let diceSum = 2; diceSum <= 12; diceSum++) {
+          const weight = X36_DICE_SUM_WEIGHT[diceSum];
+          const rawValue = diceSum * card[2];
+          const landing = rawLandingAfterMove(score, rawValue, false);
+          const projected = projectedScoreAfterMove(score, rawValue, false);
+          const eventType = stageEventAt(landing - 1);
+          if (eventType === 2) {
+            value += weight * W.multCard;
+          } else if (eventType === 4) {
+            value += weight * Math.max(0, stageMoveAt(landing - 1)) * W.multJump;
+            if (stageEventAt(projected - 1) === 2) value += weight * W.multJumpCard;
+          }
+        }
+      } else if (card[1] === 3) {
+        const targetStage = stageIdAt(score - 1) + card[2];
+        let rawValue = targetStage;
+        for (let i = score; i < 2897; i++) {
+          if (stageIdAt(i) === targetStage) {
+            rawValue = i - score + 1;
+            break;
+          }
+        }
+        const landing = rawLandingAfterMove(score, rawValue, false);
+        const projected = projectedScoreAfterMove(score, rawValue, false);
+        value = cardPost - 36 * W.stageCost;
+        value += 36 * luts.sameStage50[score] * W.stageSame50;
+        if (stageEventAt(landing - 1) === 4) {
+          value += 36 * Math.max(0, stageMoveAt(landing - 1)) * W.stageJump;
+        }
+        value -= 36 * positiveMoveCount * W.stageAltMovePenalty;
+        value += 36 * Math.max(0, projected - score) * W.stageActualMove;
+        value += 36 * luts.localQuality[projected] * W.stageDestination;
+      }
+
       if (value > bestValue) {
         bestValue = value;
         bestAction = action;
