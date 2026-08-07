@@ -2,6 +2,12 @@ const $ = id => document.getElementById(id);
 const GPU_WORKGROUP_SIZE = 64;
 const GPU_PARTIAL_STRIDE = 5;
 
+const X36_GPU_STAGE_BASE_LEN = 2898;
+const X36_GPU_LUT_LEN = 2899;
+const X36_GPU_NEXT_OFFSET = X36_GPU_STAGE_BASE_LEN;
+const X36_GPU_LOCAL_OFFSET = X36_GPU_NEXT_OFFSET + X36_GPU_LUT_LEN;
+const X36_GPU_SAME50_OFFSET = X36_GPU_LOCAL_OFFSET + X36_GPU_LUT_LEN;
+
 function log(line) {
   if ($('log')) $('log').textContent += `${line}\n`;
 }
@@ -11,7 +17,146 @@ function fmt(value, digits = 2) {
   return value.toFixed(digits);
 }
 
-function shaderSource() {
+function x36F32ToI32Bits(value) {
+  const f = new Float32Array(1);
+  const i = new Int32Array(f.buffer);
+  f[0] = Math.fround(Number(value) || 0);
+  return i[0];
+}
+
+function x36GpuCardQuality(cardType, cardValue) {
+  const type = Number(cardType) || 0;
+  const value = Number(cardValue) || 0;
+  if (type === 1) return Math.max(-0.3, Math.min(1.3, value / 10));
+  if (type === 2) return Math.min(1.5, value / 8);
+  return 0.8;
+}
+
+function buildX36GpuLookupData(tables) {
+  const next = new Float32Array(X36_GPU_LUT_LEN);
+  const local = new Float32Array(X36_GPU_LUT_LEN);
+  const same50 = new Int32Array(X36_GPU_LUT_LEN);
+  const sid = index => index < 0 || index >= X36_GPU_STAGE_BASE_LEN ? 0 : Number(tables.stageId[index] || 0);
+  const mov = index => index < 0 || index >= X36_GPU_STAGE_BASE_LEN ? 0 : Number(tables.stageMove[index] || 0);
+  const evt = index => index < 0 || index >= X36_GPU_STAGE_BASE_LEN ? 0 : Number(tables.stageEvent[index] || 0);
+  const diceWeight = sum => (
+    sum === 2 || sum === 12 ? 1
+      : sum === 3 || sum === 11 ? 2
+        : sum === 4 || sum === 10 ? 3
+          : sum === 5 || sum === 9 ? 4
+            : sum === 6 || sum === 8 ? 5
+              : sum === 7 ? 6 : 0
+  );
+
+  const landing = (fromScore, rawValue, stop) => {
+    let value = rawValue;
+    if (stop) {
+      const end = Math.min(2897, fromScore + value - 1);
+      for (let i = fromScore; i < end; i++) {
+        const eventType = evt(i);
+        if (eventType === 6 || eventType === 9) {
+          value = i - fromScore + 1;
+          break;
+        }
+      }
+    }
+    return Math.min(2898, Math.max(1, fromScore + value));
+  };
+
+  const projected = (fromScore, rawValue, stop) => {
+    let score = landing(fromScore, rawValue, stop);
+    for (let guard = 0; guard < 16; guard++) {
+      if (evt(score - 1) !== 4) break;
+      score = Math.min(2898, score + mov(score - 1));
+    }
+    return score;
+  };
+
+  for (let score = 1; score <= X36_GPU_STAGE_BASE_LEN; score++) {
+    let nextValue = 0;
+    let localValue = 0;
+    for (let diceSum = 2; diceSum <= 12; diceSum++) {
+      const weight = diceWeight(diceSum);
+      const land = landing(score, diceSum, true);
+      const proj = projected(score, diceSum, true);
+      const eventType = evt(land - 1);
+      if (eventType === 2 || (eventType === 4 && evt(proj - 1) === 2)) {
+        nextValue += weight;
+      }
+      if (eventType === 2) {
+        localValue += weight;
+      } else if (eventType === 4) {
+        localValue += weight * (
+          Math.max(0, mov(land - 1)) / 12
+          + (evt(proj - 1) === 2 ? 1 : 0)
+        );
+      }
+    }
+    next[score] = nextValue / 36;
+    local[score] = localValue / 36;
+
+    let count = 0;
+    for (let pos = Math.min(2897, score + 1); pos < Math.min(2897, score + 50); pos++) {
+      if (sid(pos) === sid(score - 1)) count++;
+    }
+    same50[score] = count;
+  }
+
+  const packedStageId = new Int32Array(
+    X36_GPU_STAGE_BASE_LEN + X36_GPU_LUT_LEN * 3
+  );
+  for (let i = 0; i < X36_GPU_STAGE_BASE_LEN; i++) {
+    packedStageId[i] = Number(tables.stageId[i] || 0);
+  }
+  for (let i = 0; i < X36_GPU_LUT_LEN; i++) {
+    packedStageId[X36_GPU_NEXT_OFFSET + i] = x36F32ToI32Bits(next[i]);
+    packedStageId[X36_GPU_LOCAL_OFFSET + i] = x36F32ToI32Bits(local[i]);
+    packedStageId[X36_GPU_SAME50_OFFSET + i] = same50[i];
+  }
+  return packedStageId;
+}
+
+function wgslFloatLiteral(value) {
+  const n = Math.fround(Number(value) || 0);
+  if (!Number.isFinite(n)) return '0.0';
+  let result = String(n);
+  if (!/[.eE]/.test(result)) result += '.0';
+  return result;
+}
+
+function buildX36PoolQualityWgsl(tables) {
+  const groups = new Map();
+  let totalQuality = 0;
+
+  for (let cardId = 1; cardId <= 30; cardId++) {
+    const quality = Math.fround(x36GpuCardQuality(tables.cardType[cardId], tables.cardValue[cardId]));
+    totalQuality += quality;
+    const key = wgslFloatLiteral(quality);
+    const entry = groups.get(key) || { quality: key, mask: 0 };
+    entry.mask = (entry.mask | ((1 << (cardId - 1)) >>> 0)) >>> 0;
+    groups.set(key, entry);
+  }
+
+  const terms = [...groups.values()].map(entry => (
+    `  total = total - f32(countOneBits(mask & 0x${entry.mask.toString(16)}u)) * ${entry.quality};`
+  )).join('\n');
+
+  return `
+const X36_TOTAL_CARD_QUALITY: f32 = ${wgslFloatLiteral(totalQuality)};
+
+fn pool_quality_x36(obtained: u32) -> f32 {
+  let mask = obtained & 0x3fffffffu;
+  let remaining = 30u - countOneBits(mask);
+  if (remaining == 0u) { return 0.0; }
+  var total = X36_TOTAL_CARD_QUALITY;
+${terms}
+  return total / f32(remaining);
+}
+`;
+}
+
+function shaderSource(tables) {
+  const poolQualityWgsl = buildX36PoolQualityWgsl(tables);
   return `
 struct Params {
   rolloutCount: u32,
@@ -36,6 +181,42 @@ struct Params {
 const WORKGROUP_SIZE = 64u;
 const PARTIAL_STRIDE = 5u;
 
+const X36_NEXT_OFFSET: u32 = 2898u;
+const X36_LOCAL_OFFSET: u32 = 5797u;
+const X36_SAME50_OFFSET: u32 = 8696u;
+
+const X36_WEIGHT_SCALE: i32 = 1000;
+const W_ROLL_CARD: i32 = 234154;
+const W_ROLL_JUMP: i32 = 2474;
+const W_ROLL_JUMP_CARD: i32 = 187074;
+const W_HAND_PRESSURE: i32 = 96072;
+const W_LATE_BONUS: i32 = 4423;
+const W_LATE_THRESHOLD: i32 = 70000;
+const W_MOVE_COST: i32 = 79155;
+const W_MOVE_CARD: i32 = 137845;
+const W_MOVE_JUMP: i32 = 2733;
+const W_MOVE_JUMP_CARD: i32 = 83176;
+const W_CHAIN: i32 = 36783;
+const W_MULT_COST: i32 = 18355;
+const W_MULT_CARD: i32 = 128161;
+const W_MULT_JUMP: i32 = 2787;
+const W_MULT_JUMP_CARD: i32 = 83883;
+const W_STAGE_COST: i32 = 4550;
+const W_STAGE_SAME50: i32 = 1740;
+const W_STAGE_JUMP: i32 = 2000;
+const W_HAND_QUALITY_RETENTION: i32 = 102989;
+const W_NEXT_CARD_PRESSURE: i32 = -30000;
+const W_TERMINAL_CONTINUOUS: i32 = -176;
+const W_CHAIN_LATE_PENALTY: i32 = 17906;
+const W_STAGE_ALT_MOVE_PENALTY: i32 = 2372;
+const W_STAGE_ACTUAL_MOVE: i32 = 485;
+const W_STAGE_DESTINATION: i32 = -43919;
+const W_POOL_QUALITY_CARD: i32 = 325;
+
+fn x36_w(value: i32) -> f32 {
+  return f32(value);
+}
+
 fn next_rand(rng: ptr<function, u32>) -> u32 {
   var t = (*rng) + 0x6D2B79F5u;
   (*rng) = t;
@@ -57,6 +238,59 @@ fn stage_move_at(index: i32) -> i32 {
 fn stage_event_at(index: i32) -> i32 {
   if (index < 0 || index >= 2898) { return 0; }
   return stageEvent[u32(index)];
+}
+
+fn x36_score_index(score: i32) -> u32 {
+  return u32(clamp(score, 1, 2898));
+}
+
+fn next_card_probability_x36(score: i32) -> f32 {
+  return bitcast<f32>(stageId[X36_NEXT_OFFSET + x36_score_index(score)]);
+}
+
+fn local_quality_x36(score: i32) -> f32 {
+  return bitcast<f32>(stageId[X36_LOCAL_OFFSET + x36_score_index(score)]);
+}
+
+fn same_stage_count50(score: i32) -> i32 {
+  return stageId[X36_SAME50_OFFSET + x36_score_index(score)];
+}
+
+${poolQualityWgsl}
+
+fn static_card_quality_x36(cardId: i32) -> f32 {
+  if (cardId <= 0 || cardId > 30) { return 0.0; }
+  let cType = cardType[u32(cardId)];
+  let cValue = f32(cardValue[u32(cardId)]);
+  if (cType == 1) { return clamp(cValue / 10.0, -0.3, 1.3); }
+  if (cType == 2) { return min(1.5, cValue / 8.0); }
+  return 0.8;
+}
+
+fn hand_quality_x36(
+  hand: ptr<function, array<i32, 5>>,
+  handCount: i32,
+) -> f32 {
+  if (handCount <= 0) { return 0.0; }
+  var total: f32 = 0.0;
+  for (var i = 0; i < handCount; i = i + 1) {
+    total = total + static_card_quality_x36((*hand)[u32(i)]);
+  }
+  return total / f32(handCount);
+}
+
+fn positive_move_count_x36(
+  hand: ptr<function, array<i32, 5>>,
+  handCount: i32,
+) -> i32 {
+  var count = 0;
+  for (var i = 0; i < handCount; i = i + 1) {
+    let cardId = u32((*hand)[u32(i)]);
+    if (cardType[cardId] == 1 && cardValue[cardId] > 0) {
+      count = count + 1;
+    }
+  }
+  return count;
 }
 
 fn roll_dice(
@@ -229,14 +463,6 @@ fn stage_card_move(score: i32, cValue: i32) -> i32 {
   return value;
 }
 
-fn same_stage_count50(score: i32) -> i32 {
-  var cnt = 0;
-  for (var pos = min(2897, score + 1); pos < min(2897, score + 50); pos = pos + 1) {
-    if (stage_id_at(pos) == stage_id_at(score - 1)) { cnt = cnt + 1; }
-  }
-  return cnt;
-}
-
 fn dice_sum_weight(sum: i32) -> i32 {
   if (sum == 2 || sum == 12) { return 1; }
   if (sum == 3 || sum == 11) { return 2; }
@@ -276,102 +502,156 @@ fn move_chain_card_option(score: i32, action: u32, hand: ptr<function, array<i32
   return false;
 }
 
-fn current_best_roll_value_x36(score: i32, handCount: i32) -> i32 {
+fn current_best_roll_value_x36(score: i32, handCount: i32, obtained: u32) -> f32 {
   let canGainCard = handCount < 5;
-  var total = 0;
+  let poolQ = pool_quality_x36(obtained);
+  var total: f32 = 0.0;
   for (var diceSum = 2; diceSum <= 12; diceSum = diceSum + 1) {
     let landing = raw_landing_after_move(score, diceSum, true);
+    let projected = projected_score_after_move(score, diceSum, true);
     let eventType = stage_event_at(landing - 1);
-    var value = 0;
+    let dw = f32(dice_sum_weight(diceSum));
     if (eventType == 2 && canGainCard) {
-      value = value + 179;
+      total = total + dw * (x36_w(W_ROLL_CARD) + (poolQ - 0.75) * x36_w(W_POOL_QUALITY_CARD));
     } else if (eventType == 4) {
-      value = value + max(0, stage_move_at(landing - 1)) * 2;
-      if (canGainCard) {
-        let projected = projected_score_after_move(score, diceSum, true);
-        if (projected >= 1 && projected <= 2898 && stage_event_at(projected - 1) == 2) {
-          value = value + 299;
-        }
+      total = total + dw * f32(max(0, stage_move_at(landing - 1))) * x36_w(W_ROLL_JUMP);
+      if (canGainCard && stage_event_at(projected - 1) == 2) {
+        total = total + dw * (x36_w(W_ROLL_JUMP_CARD) + (poolQ - 0.75) * x36_w(W_POOL_QUALITY_CARD));
       }
     }
-    total = total + dice_sum_weight(diceSum) * value;
   }
   return total;
 }
 
-fn current_best_card_post_x36(diceUse: i32, handCount: i32) -> i32 {
-  var value = 0;
-  if (handCount == 5 || diceUse + handCount >= 100) { value = value + 98 * 36; }
-  if (diceUse >= 70) { value = value + 3 * 36; }
+fn current_best_card_post_x36(
+  score: i32,
+  diceUse: i32,
+  hand: ptr<function, array<i32, 5>>,
+  handCount: i32,
+) -> f32 {
+  var value: f32 = 0.0;
+  if (handCount == 5 || diceUse + handCount >= 100) {
+    value = value + 36.0 * x36_w(W_HAND_PRESSURE);
+  }
+  if (diceUse >= 70) {
+    value = value + 36.0 * x36_w(W_LATE_BONUS);
+  }
+  if (handCount == 5) {
+    value = value - 36.0 * hand_quality_x36(hand, handCount) * x36_w(W_HAND_QUALITY_RETENTION);
+    value = value + 36.0 * next_card_probability_x36(score) * x36_w(W_NEXT_CARD_PRESSURE);
+  }
+  let terminalT = clamp(f32(diceUse) / 100.0, 0.0, 1.0);
+  value = value + 36.0 * terminalT * terminalT * terminalT * terminalT * x36_w(W_TERMINAL_CONTINUOUS);
   return value;
 }
 
-fn current_best_move_value_x36(score: i32, diceUse: i32, action: u32, hand: ptr<function, array<i32, 5>>, handCount: i32, cValue: i32) -> i32 {
+fn current_best_move_value_x36(
+  score: i32,
+  diceUse: i32,
+  action: u32,
+  hand: ptr<function, array<i32, 5>>,
+  handCount: i32,
+  cValue: i32,
+) -> f32 {
   let landing = raw_landing_after_move(score, cValue, false);
   let eventType = stage_event_at(landing - 1);
-  var total = current_best_card_post_x36(diceUse, handCount) - 80 * 36;
+  var total = current_best_card_post_x36(score, diceUse, hand, handCount) - 36.0 * x36_w(W_MOVE_COST);
   if (eventType == 2) {
-    total = total + 139 * 36;
+    total = total + 36.0 * x36_w(W_MOVE_CARD);
   } else if (eventType == 4) {
-    total = total + max(0, stage_move_at(landing - 1)) * 2 * 36;
+    total = total + 36.0 * f32(max(0, stage_move_at(landing - 1))) * x36_w(W_MOVE_JUMP);
     let projected = projected_score_after_move(score, cValue, false);
-    if (projected >= 1 && projected <= 2898 && stage_event_at(projected - 1) == 2) {
-      total = total + 101 * 36;
+    if (stage_event_at(projected - 1) == 2) {
+      total = total + 36.0 * x36_w(W_MOVE_JUMP_CARD);
     }
   }
   if (move_chain_card_option(score, action, hand, handCount)) {
-    total = total + 37 * 36;
+    total = total + 36.0 * x36_w(W_CHAIN);
+    let late = max(0.0, (f32(diceUse) - 70.0) / 30.0);
+    total = total - 36.0 * late * x36_w(W_CHAIN_LATE_PENALTY);
   }
   return total;
 }
 
-fn current_best_mult_value_x36(score: i32, diceUse: i32, handCount: i32, cValue: i32) -> i32 {
-  var total = current_best_card_post_x36(diceUse, handCount) - 20 * 36;
+fn current_best_mult_value_x36(
+  score: i32,
+  diceUse: i32,
+  hand: ptr<function, array<i32, 5>>,
+  handCount: i32,
+  cValue: i32,
+) -> f32 {
+  var total = current_best_card_post_x36(score, diceUse, hand, handCount) - 36.0 * x36_w(W_MULT_COST);
   for (var diceSum = 2; diceSum <= 12; diceSum = diceSum + 1) {
     let rawValue = diceSum * cValue;
     let landing = raw_landing_after_move(score, rawValue, false);
+    let projected = projected_score_after_move(score, rawValue, false);
     let eventType = stage_event_at(landing - 1);
-    var value = 0;
+    let dw = f32(dice_sum_weight(diceSum));
     if (eventType == 2) {
-      value = value + 142;
+      total = total + dw * x36_w(W_MULT_CARD);
     } else if (eventType == 4) {
-      value = value + max(0, stage_move_at(landing - 1)) * 2;
-      let projected = projected_score_after_move(score, rawValue, false);
-      if (projected >= 1 && projected <= 2898 && stage_event_at(projected - 1) == 2) {
-        value = value + 141;
+      total = total + dw * f32(max(0, stage_move_at(landing - 1))) * x36_w(W_MULT_JUMP);
+      if (stage_event_at(projected - 1) == 2) {
+        total = total + dw * x36_w(W_MULT_JUMP_CARD);
       }
     }
-    total = total + dice_sum_weight(diceSum) * value;
   }
   return total;
 }
 
-fn current_best_stage_value_x36(score: i32, diceUse: i32, handCount: i32, cValue: i32) -> i32 {
+fn current_best_stage_value_x36(
+  score: i32,
+  diceUse: i32,
+  hand: ptr<function, array<i32, 5>>,
+  handCount: i32,
+  cValue: i32,
+  positiveMoveCount: i32,
+) -> f32 {
   let rawValue = stage_card_move(score, cValue);
   let landing = raw_landing_after_move(score, rawValue, false);
-  var total = current_best_card_post_x36(diceUse, handCount) - 2 * 36 + same_stage_count50(score) * 36;
+  let projected = projected_score_after_move(score, rawValue, false);
+  var total = current_best_card_post_x36(score, diceUse, hand, handCount) - 36.0 * x36_w(W_STAGE_COST);
+  total = total + 36.0 * f32(same_stage_count50(score)) * x36_w(W_STAGE_SAME50);
   if (stage_event_at(landing - 1) == 4) {
-    total = total + max(0, stage_move_at(landing - 1)) * 2 * 36;
+    total = total + 36.0 * f32(max(0, stage_move_at(landing - 1))) * x36_w(W_STAGE_JUMP);
   }
+  total = total - 36.0 * f32(positiveMoveCount) * x36_w(W_STAGE_ALT_MOVE_PENALTY);
+  total = total + 36.0 * f32(max(0, projected - score)) * x36_w(W_STAGE_ACTUAL_MOVE);
+  total = total + 36.0 * local_quality_x36(projected) * x36_w(W_STAGE_DESTINATION);
   return total;
 }
 
-fn current_best_card_value_x36(score: i32, diceUse: i32, action: u32, hand: ptr<function, array<i32, 5>>, handCount: i32) -> i32 {
+fn current_best_card_value_x36(
+  score: i32,
+  diceUse: i32,
+  action: u32,
+  hand: ptr<function, array<i32, 5>>,
+  handCount: i32,
+  positiveMoveCount: i32,
+) -> f32 {
   let cardId = u32((*hand)[action - 1u]);
   let cType = cardType[cardId];
   let cValue = cardValue[cardId];
   if (cType == 1) { return current_best_move_value_x36(score, diceUse, action, hand, handCount, cValue); }
-  if (cType == 2) { return current_best_mult_value_x36(score, diceUse, handCount, cValue); }
-  if (cType == 3) { return current_best_stage_value_x36(score, diceUse, handCount, cValue); }
-  return -2147483648;
+  if (cType == 2) { return current_best_mult_value_x36(score, diceUse, hand, handCount, cValue); }
+  if (cType == 3) { return current_best_stage_value_x36(score, diceUse, hand, handCount, cValue, positiveMoveCount); }
+  return -3.402823466e+38;
 }
 
-fn choose_action(score: i32, diceUse: i32, hand: ptr<function, array<i32, 5>>, handCount: i32) -> u32 {
+fn choose_action(
+  score: i32,
+  diceUse: i32,
+  hand: ptr<function, array<i32, 5>>,
+  handCount: i32,
+  obtained: u32,
+) -> u32 {
   var bestAction = 0u;
-  var bestValue = current_best_roll_value_x36(score, handCount);
+  var bestValue = current_best_roll_value_x36(score, handCount, obtained);
+  if (handCount <= 0) { return 0u; }
+  let positiveMoveCount = positive_move_count_x36(hand, handCount);
   let actionCount = u32(handCount + 1);
   for (var action = 1u; action < actionCount; action = action + 1u) {
-    let value = current_best_card_value_x36(score, diceUse, action, hand, handCount);
+    let value = current_best_card_value_x36(score, diceUse, action, hand, handCount, positiveMoveCount);
     if (value > bestValue) {
       bestValue = value;
       bestAction = action;
@@ -445,7 +725,7 @@ fn main(
     var done = step_once(&score, &diceUse, &isDouble, &hand, &handCount, &obtained, &rng, actionIndex);
     for (var step = 0u; step < params.maxSteps; step = step + 1u) {
       if (done) { break; }
-      let action = choose_action(score, diceUse, &hand, handCount);
+      let action = choose_action(score, diceUse, &hand, handCount, obtained);
       done = step_once(&score, &diceUse, &isDouble, &hand, &handCount, &obtained, &rng, action);
     }
     let scoreValue = u32(score);
@@ -519,7 +799,7 @@ async function getGpuContext(tables) {
     const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
     if (!adapter) throw new Error('No WebGPU adapter was found.');
     const device = await adapter.requestDevice();
-    const shader = device.createShaderModule({ code: shaderSource() });
+    const shader = device.createShaderModule({ code: shaderSource(tables) });
     const pipelineDescriptor = {
       layout: 'auto',
       compute: { module: shader, entryPoint: 'main' },
@@ -527,11 +807,12 @@ async function getGpuContext(tables) {
     const pipeline = typeof device.createComputePipelineAsync === 'function'
       ? await device.createComputePipelineAsync(pipelineDescriptor)
       : device.createComputePipeline(pipelineDescriptor);
+    const packedStageId = buildX36GpuLookupData(tables);
     return {
       adapter,
       device,
       pipeline,
-      stageId: createStorageBuffer(device, new Int32Array(tables.stageId)),
+      stageId: createStorageBuffer(device, packedStageId),
       stageMove: createStorageBuffer(device, new Int32Array(tables.stageMove)),
       stageEvent: createStorageBuffer(device, new Int32Array(tables.stageEvent)),
       cardType: createStorageBuffer(device, new Int32Array(tables.cardType)),
@@ -559,9 +840,9 @@ function summaryFromPartials(partials, recordOffset, recordCount) {
   let sumSq = 0;
   let min = Infinity;
   let max = -Infinity;
-  for (let record = 0; record < recordCount; record += 1) {
-    let base = (recordOffset + record) * GPU_PARTIAL_STRIDE;
-    let partialCount = partials[base];
+  for (let record = 0; record < recordCount; record++) {
+    const base = (recordOffset + record) * GPU_PARTIAL_STRIDE;
+    const partialCount = partials[base];
     if (partialCount === 0) continue;
     count += partialCount;
     sum += partials[base + 1];
@@ -570,8 +851,8 @@ function summaryFromPartials(partials, recordOffset, recordCount) {
     max = Math.max(max, partials[base + 4]);
   }
   if (count === 0) return { count: 0, mean: 0, std: 0, min: 0, max: 0 };
-  let mean = sum / count;
-  let variance = Math.max(0, sumSq / count - mean * mean);
+  const mean = sum / count;
+  const variance = Math.max(0, sumSq / count - mean * mean);
   return { count, mean, std: Math.sqrt(variance), min, max };
 }
 
@@ -617,13 +898,13 @@ async function runGpuPartial(context, { sample, action, rolloutCount, seed }) {
   pass.dispatchWorkgroups(workgroupsPerAction);
   pass.end();
   encoder.copyBufferToBuffer(partialBuffer, 0, readBuffer, 0, byteLength);
-  const readResult = await submitAndReadU32({
-    device,
-    encoder,
-    readBuffer,
-    started,
-  });
+  const readResult = await submitAndReadU32({ device, encoder, readBuffer, started });
   const summary = summaryFromPartials(readResult.values, 0, recordCount);
+
+  inputState.destroy();
+  partialBuffer.destroy();
+  readBuffer.destroy();
+  params.destroy();
 
   return { ...summary, elapsedMs: readResult.elapsedMs, adapterInfo: adapter.info };
 }
@@ -671,20 +952,20 @@ async function runGpuAllActionsPartial(context, { sample, rolloutCount, seed }) 
   pass.dispatchWorkgroups(workgroupsPerAction, actionCount);
   pass.end();
   encoder.copyBufferToBuffer(partialBuffer, 0, readBuffer, 0, byteLength);
-  const readResult = await submitAndReadU32({
-    device,
-    encoder,
-    readBuffer,
-    started,
-  });
+  const readResult = await submitAndReadU32({ device, encoder, readBuffer, started });
   const summaries = [];
-  for (let action = 0; action < actionCount; action += 1) {
+  for (let action = 0; action < actionCount; action++) {
     summaries.push({
       action,
       ...summaryFromPartials(readResult.values, action * workgroupsPerAction, workgroupsPerAction),
     });
   }
   const bestAction = summaries.reduce((best, summary) => (summary.mean > summaries[best].mean ? summary.action : best), 0);
+
+  inputState.destroy();
+  partialBuffer.destroy();
+  readBuffer.destroy();
+  params.destroy();
 
   return {
     actionCount,
@@ -790,7 +1071,7 @@ if ($('run')) {
   if (query.get('autorun') === '1') {
     const repeat = Math.max(1, Number(query.get('repeat') || 1));
     (async () => {
-      for (let i = 0; i < repeat; i += 1) {
+      for (let i = 0; i < repeat; i++) {
         await run({ clear: i === 0 });
       }
     })();
