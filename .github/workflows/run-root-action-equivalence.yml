@@ -40,14 +40,14 @@ jobs:
                   break
           if run_line is None:
               raise SystemExit('patch payload run block not found')
-          payload = []
-          for line in lines[run_line + 1:]:
-              if line.startswith('          '):
-                  payload.append(line[10:])
-              elif line.strip() == '':
-                  payload.append('')
-              else:
+          end = len(lines)
+          for i in range(run_line + 1, len(lines)):
+              if lines[i].strip() == '- name: Commit source changes':
+                  end = i
                   break
+          payload = []
+          for line in lines[run_line + 1:end]:
+              payload.append(line[10:] if line.startswith('          ') else line)
           Path('/tmp/root-action-payload.sh').write_text('\n'.join(payload) + '\n', encoding='utf-8')
           PY
           bash /tmp/root-action-payload.sh
