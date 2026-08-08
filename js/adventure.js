@@ -1893,6 +1893,12 @@ function eventCanvasClick(e) {
   if (!env.autoProcess && diceButtonIndex >= 0) {
     const value = diceButtonIndex + 2;
 
+    if (env.isDouble) {
+      env.isDouble = false;
+    } else {
+      env.diceUse++;
+    }
+
     env.updateScore(value, true);
     clearPredictionInteractionState();
     calcEx();
@@ -1911,6 +1917,13 @@ function eventCanvasClick(e) {
   } else if (isInsideRegion(x, y, REGION_CARDS)) {
     let action = Math.trunc((x - 379) / 43);
     if (env.cards[action - 1] !== undefined) {
+      if (!env.autoProcess && env.cards[action - 1][1] === 2) {
+        if (env.isDouble) {
+          env.isDouble = false;
+        } else {
+          env.diceUse++;
+        }
+      }
       done = env.step(action);
       clearPredictionInteractionState();
       calcEx();
@@ -2081,6 +2094,13 @@ function eventKeydown(e) {
     e.preventDefault();
     let action = e.key;
     if (env.cards[action - 1] !== undefined) {
+      if (!env.autoProcess && env.cards[action - 1][1] === 2) {
+        if (env.isDouble) {
+          env.isDouble = false;
+        } else {
+          env.diceUse++;
+        }
+      }
       done = env.step(action);
       clearPredictionInteractionState();
       calcEx();
@@ -2117,6 +2137,13 @@ function newEventKeydown(e) {
     e.preventDefault();
     let action = e.key;
     if (env.cards[action - 1] !== undefined) {
+      if (!env.autoProcess && env.cards[action - 1][1] === 2) {
+        if (env.isDouble) {
+          env.isDouble = false;
+        } else {
+          env.diceUse++;
+        }
+      }
       done = env.step(action);
       clearPredictionInteractionState();
       calcEx();
