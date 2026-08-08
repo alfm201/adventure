@@ -822,7 +822,7 @@ function resetGpuContext() {
 
 async function getGpuContext(tables) {
   if (gpuContextPromise) return gpuContextPromise;
-  gpuContextPromise = (async () => {
+  const contextPromise = (async () => {
     if (!navigator.gpu) {
       throw new Error('WebGPU is not available. Use a Chromium browser with WebGPU enabled.');
     }
@@ -838,7 +838,7 @@ async function getGpuContext(tables) {
       ? await device.createComputePipelineAsync(pipelineDescriptor)
       : device.createComputePipeline(pipelineDescriptor);
     const packedStageId = buildX36GpuLookupData(tables);
-    return {
+    const context = {
       adapter,
       device,
       pipeline,
@@ -848,8 +848,22 @@ async function getGpuContext(tables) {
       cardType: createStorageBuffer(device, new Int32Array(tables.cardType)),
       cardValue: createStorageBuffer(device, new Int32Array(tables.cardValue)),
     };
+    if (device.lost && typeof device.lost.then === 'function') {
+      device.lost.then(() => {
+        if (gpuContextPromise === contextPromise) gpuContextPromise = null;
+      }).catch(() => {
+        if (gpuContextPromise === contextPromise) gpuContextPromise = null;
+      });
+    }
+    return context;
   })();
-  return gpuContextPromise;
+  gpuContextPromise = contextPromise;
+  try {
+    return await contextPromise;
+  } catch (error) {
+    if (gpuContextPromise === contextPromise) gpuContextPromise = null;
+    throw error;
+  }
 }
 
 async function submitAndReadU32({ device, encoder, readBuffer, started }) {
@@ -885,6 +899,41 @@ function summaryFromPartials(partials, recordOffset, recordCount) {
   const variance = Math.max(0, sumSq / count - mean * mean);
   return { count, mean, std: Math.sqrt(variance), min, max };
 }
+
+function mergeGpuSummaryPair(left, right) {
+  const count = (left?.count || 0) + (right?.count || 0);
+  if (count <= 0) return { count: 0, mean: 0, std: 0, min: 0, max: 0 };
+  const leftCount = left?.count || 0;
+  const rightCount = right?.count || 0;
+  const leftMean = Number(left?.mean) || 0;
+  const rightMean = Number(right?.mean) || 0;
+  const leftStd = Number(left?.std) || 0;
+  const rightStd = Number(right?.std) || 0;
+  const sum = leftMean * leftCount + rightMean * rightCount;
+  const sumSq = (leftStd * leftStd + leftMean * leftMean) * leftCount
+    + (rightStd * rightStd + rightMean * rightMean) * rightCount;
+  const mean = sum / count;
+  const variance = Math.max(0, sumSq / count - mean * mean);
+  const mins = [left, right].filter(summary => summary && summary.count > 0).map(summary => summary.min);
+  const maxs = [left, right].filter(summary => summary && summary.count > 0).map(summary => summary.max);
+  return {
+    count,
+    mean,
+    std: Math.sqrt(variance),
+    min: mins.length ? Math.min(...mins) : 0,
+    max: maxs.length ? Math.max(...maxs) : 0,
+  };
+}
+
+function mixRecoverySeed(seed, path) {
+  let value = (Number(seed) + Math.imul(path | 0, 0x9e3779b1)) >>> 0;
+  value = Math.imul(value ^ (value >>> 16), 0x85ebca6b) >>> 0;
+  value = Math.imul(value ^ (value >>> 13), 0xc2b2ae35) >>> 0;
+  return (value ^ (value >>> 16)) >>> 0;
+}
+
+const GPU_RECOVERY_MIN_ROLLOUTS = 1024;
+const GPU_RECOVERY_MAX_DEPTH = 6;
 
 async function runGpuPartial(context, { sample, action, rolloutCount, seed }) {
   const { adapter, device, pipeline, stageId, stageMove, stageEvent, cardType, cardValue } = context;
@@ -1008,19 +1057,119 @@ async function runGpuAllActionsPartial(context, { sample, rolloutCount, seed }) 
   };
 }
 
+async function runGpuRecovered({ tables, sample, action, rolloutCount, seed }, depth = 0, path = 1) {
+  let context;
+  try {
+    context = await getGpuContext(tables);
+  } catch (error) {
+    resetGpuContext();
+    throw error;
+  }
+
+  try {
+    return await runGpuPartial(context, { sample, action, rolloutCount, seed });
+  } catch (error) {
+    resetGpuContext();
+    if (depth >= GPU_RECOVERY_MAX_DEPTH || rolloutCount <= GPU_RECOVERY_MIN_ROLLOUTS) {
+      const retryContext = await getGpuContext(tables);
+      return runGpuPartial(retryContext, { sample, action, rolloutCount, seed });
+    }
+
+    const leftCount = Math.max(1, Math.floor(rolloutCount / 2));
+    const rightCount = rolloutCount - leftCount;
+    const left = await runGpuRecovered({
+      tables,
+      sample,
+      action,
+      rolloutCount: leftCount,
+      seed: mixRecoverySeed(seed, path * 2),
+    }, depth + 1, path * 2);
+    const right = await runGpuRecovered({
+      tables,
+      sample,
+      action,
+      rolloutCount: rightCount,
+      seed: mixRecoverySeed(seed, path * 2 + 1),
+    }, depth + 1, path * 2 + 1);
+    return {
+      ...mergeGpuSummaryPair(left, right),
+      elapsedMs: (left.elapsedMs || 0) + (right.elapsedMs || 0),
+      adapterInfo: right.adapterInfo || left.adapterInfo,
+    };
+  }
+}
+
+async function runGpuAllActionsRecovered({ tables, sample, rolloutCount, seed }, depth = 0, path = 1) {
+  let context;
+  try {
+    context = await getGpuContext(tables);
+  } catch (error) {
+    resetGpuContext();
+    throw error;
+  }
+
+  try {
+    return await runGpuAllActionsPartial(context, { sample, rolloutCount, seed });
+  } catch (error) {
+    resetGpuContext();
+    if (depth >= GPU_RECOVERY_MAX_DEPTH || rolloutCount <= GPU_RECOVERY_MIN_ROLLOUTS) {
+      const retryContext = await getGpuContext(tables);
+      return runGpuAllActionsPartial(retryContext, { sample, rolloutCount, seed });
+    }
+
+    const leftCount = Math.max(1, Math.floor(rolloutCount / 2));
+    const rightCount = rolloutCount - leftCount;
+    const left = await runGpuAllActionsRecovered({
+      tables,
+      sample,
+      rolloutCount: leftCount,
+      seed: mixRecoverySeed(seed, path * 2),
+    }, depth + 1, path * 2);
+    const right = await runGpuAllActionsRecovered({
+      tables,
+      sample,
+      rolloutCount: rightCount,
+      seed: mixRecoverySeed(seed, path * 2 + 1),
+    }, depth + 1, path * 2 + 1);
+    const actionCount = sample.actionCount;
+    const summaries = new Array(actionCount).fill(0).map((_, action) => ({
+      action,
+      ...mergeGpuSummaryPair(left.summaries[action], right.summaries[action]),
+    }));
+    const bestAction = summaries.reduce((best, summary) => (summary.mean > summaries[best].mean ? summary.action : best), 0);
+    const elapsedMs = (left.elapsedMs || 0) + (right.elapsedMs || 0);
+    return {
+      actionCount,
+      rolloutCount,
+      summaries,
+      bestAction,
+      elapsedMs,
+      rolloutsPerSecond: elapsedMs > 0 ? (rolloutCount * actionCount) / (elapsedMs / 1000) : 0,
+      adapterInfo: right.adapterInfo || left.adapterInfo,
+    };
+  }
+}
+
 async function prepareGpuReadbackMode({ tables }) {
   await getGpuContext(tables);
   return 'partial';
 }
 
 async function runGpu({ tables, sample, action, rolloutCount, seed }) {
-  const context = await getGpuContext(tables);
-  return runGpuPartial(context, { sample, action, rolloutCount, seed });
+  const started = performance.now();
+  const result = await runGpuRecovered({ tables, sample, action, rolloutCount, seed });
+  return { ...result, elapsedMs: performance.now() - started };
 }
 
 async function runGpuAllActions({ tables, sample, rolloutCount, seed }) {
-  const context = await getGpuContext(tables);
-  return runGpuAllActionsPartial(context, { sample, rolloutCount, seed });
+  const started = performance.now();
+  const result = await runGpuAllActionsRecovered({ tables, sample, rolloutCount, seed });
+  const elapsedMs = performance.now() - started;
+  return {
+    ...result,
+    elapsedMs,
+    rolloutsPerSecond: elapsedMs > 0 ? (result.rolloutCount * result.actionCount) / (elapsedMs / 1000) : 0,
+  };
 }
 
 async function run({ clear = true } = {}) {
