@@ -156,14 +156,25 @@ class Board {
     this.cardInfo = JSON.parse(JSON.stringify(cardInfo));
   }
 
+  consumeManualDiceUse() {
+    if (this.autoProcess) return;
+    if (this.isDouble) {
+      this.isDouble = false;
+    } else {
+      this.diceUse++;
+    }
+  }
+
   getRandom() {
     let val1 = Math.floor(Math.random() * 6 + 1);
     let val2 = Math.floor(Math.random() * 6 + 1);
-    if (this.isDouble || !this.autoProcess) {
-      this.isDouble = false;
-    } else {
-      this.isDouble = val1 === val2;
-      this.diceUse++;
+    if (this.autoProcess) {
+      if (this.isDouble) {
+        this.isDouble = false;
+      } else {
+        this.isDouble = val1 === val2;
+        this.diceUse++;
+      }
     }
     return val1 + val2;
   }
@@ -203,6 +214,7 @@ class Board {
 
   updateScore(value, stop = false) {
     if (stop) {
+      this.consumeManualDiceUse();
       value = this.checkStop(value);
     }
     this.score = this.clampScore(this.score + value);
@@ -261,6 +273,7 @@ class Board {
         this.updateScore(cardValue, false);
         break;
       case 2:
+        this.consumeManualDiceUse();
         this.updateScore(this.getRandom() * cardValue, false);
         break;
       case 3:
