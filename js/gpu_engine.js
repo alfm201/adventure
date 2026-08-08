@@ -723,7 +723,12 @@ fn main(
 ) {
   let lane = localId.x;
   let rolloutIndex = workgroupId.x * WORKGROUP_SIZE + lane;
-  let actionIndex = select(params.action, workgroupId.y, params.mode == 1u);
+  var actionIndex = params.action;
+  if (params.mode == 1u) {
+    actionIndex = workgroupId.y;
+  } else if (params.mode == 2u) {
+    actionIndex = u32(inputState[42u + workgroupId.y]);
+  }
 
   var rng = params.seed + rolloutIndex * 747796405u + actionIndex * 9173u + 2891336453u;
   boundedWord = 0u;
@@ -787,7 +792,7 @@ fn main(
 
   if (lane == 0u) {
     let workgroupsPerAction = (params.rolloutCount + WORKGROUP_SIZE - 1u) / WORKGROUP_SIZE;
-    let actionOffset = select(0u, workgroupId.y * workgroupsPerAction, params.mode == 1u);
+    let actionOffset = select(0u, workgroupId.y * workgroupsPerAction, params.mode != 0u);
     let base = (actionOffset + workgroupId.x) * PARTIAL_STRIDE;
     partials[base + 0u] = partialCount[0];
     partials[base + 1u] = partialSum[0];
@@ -939,10 +944,21 @@ async function runGpuPartial(context, { sample, action, rolloutCount, seed }) {
   return { ...summary, elapsedMs: readResult.elapsedMs, adapterInfo: adapter.info };
 }
 
-async function runGpuAllActionsPartial(context, { sample, rolloutCount, seed }) {
+async function runGpuAllActionsPartial(context, { sample, actions, rolloutCount, seed }) {
   const { adapter, device, pipeline, stageId, stageMove, stageEvent, cardType, cardValue } = context;
-  const actionCount = sample.actionCount;
-  const inputState = createStorageBuffer(device, new Int32Array(sample.state));
+  const requestedActions = Array.isArray(actions) && actions.length > 0
+    ? actions.map(Number)
+    : Array.from({ length: sample.actionCount }, (_, action) => action);
+  const actionCount = requestedActions.length;
+  const directAllActions = actionCount === sample.actionCount && requestedActions.every((action, index) => action === index);
+  let inputValues = new Int32Array(sample.state);
+  if (!directAllActions) {
+    if (sample.state.length < 42) throw new Error('GPU state must contain 42 values.');
+    inputValues = new Int32Array(42 + actionCount);
+    inputValues.set(new Int32Array(sample.state).subarray(0, 42));
+    requestedActions.forEach((action, index) => { inputValues[42 + index] = action; });
+  }
+  const inputState = createStorageBuffer(device, inputValues);
   const workgroupsPerAction = Math.ceil(rolloutCount / GPU_WORKGROUP_SIZE);
   const recordCount = workgroupsPerAction * actionCount;
   const byteLength = recordCount * GPU_PARTIAL_STRIDE * Uint32Array.BYTES_PER_ELEMENT;
@@ -958,7 +974,7 @@ async function runGpuAllActionsPartial(context, { sample, rolloutCount, seed }) 
     size: 32,
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
   });
-  device.queue.writeBuffer(params, 0, new Uint32Array([rolloutCount, 0, seed >>> 0, 512, actionCount, 1, 0, 0]));
+  device.queue.writeBuffer(params, 0, new Uint32Array([rolloutCount, 0, seed >>> 0, 512, actionCount, directAllActions ? 1 : 2, 0, 0]));
 
   const bindGroup = device.createBindGroup({
     layout: pipeline.getBindGroupLayout(0),
@@ -983,14 +999,18 @@ async function runGpuAllActionsPartial(context, { sample, rolloutCount, seed }) 
   pass.end();
   encoder.copyBufferToBuffer(partialBuffer, 0, readBuffer, 0, byteLength);
   const readResult = await submitAndReadU32({ device, encoder, readBuffer, started });
-  const summaries = [];
-  for (let action = 0; action < actionCount; action++) {
-    summaries.push({
+  const summaries = new Array(sample.actionCount);
+  for (let batchIndex = 0; batchIndex < actionCount; batchIndex++) {
+    const action = requestedActions[batchIndex];
+    summaries[action] = {
       action,
-      ...summaryFromPartials(readResult.values, action * workgroupsPerAction, workgroupsPerAction),
-    });
+      ...summaryFromPartials(readResult.values, batchIndex * workgroupsPerAction, workgroupsPerAction),
+    };
   }
-  const bestAction = summaries.reduce((best, summary) => (summary.mean > summaries[best].mean ? summary.action : best), 0);
+  let bestAction = requestedActions[0] ?? 0;
+  requestedActions.forEach(action => {
+    if (summaries[action].mean > summaries[bestAction].mean) bestAction = action;
+  });
 
   inputState.destroy();
   partialBuffer.destroy();
@@ -998,7 +1018,9 @@ async function runGpuAllActionsPartial(context, { sample, rolloutCount, seed }) 
   params.destroy();
 
   return {
-    actionCount,
+    actionCount: sample.actionCount,
+    batchActionCount: actionCount,
+    actions: requestedActions,
     rolloutCount,
     summaries,
     bestAction,
@@ -1021,6 +1043,11 @@ async function runGpu({ tables, sample, action, rolloutCount, seed }) {
 async function runGpuAllActions({ tables, sample, rolloutCount, seed }) {
   const context = await getGpuContext(tables);
   return runGpuAllActionsPartial(context, { sample, rolloutCount, seed });
+}
+
+async function runGpuActions({ tables, sample, actions, rolloutCount, seed }) {
+  const context = await getGpuContext(tables);
+  return runGpuAllActionsPartial(context, { sample, actions, rolloutCount, seed });
 }
 
 async function run({ clear = true } = {}) {
@@ -1084,6 +1111,7 @@ window.gpuRolloutWorkbench = {
   resetGpuContext,
   runGpu,
   runGpuAllActions,
+  runGpuActions,
 };
 
 if ($('run')) {
