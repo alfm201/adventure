@@ -160,7 +160,47 @@
     <script src="./js/gpu_engine.js?v=20260808103000000000"></script>
     <script src="./js/cpu_rollout_worker_loader.js?v=20260807203200000000"></script>
     <script src="./js/adventure.js?v=20260808095500000000"></script>
-    <script>window.isMobileComputeEnvironment = () => false;</script>
+    <script>
+        (() => {
+            // Mobile and desktop use the same GPU dispatch profile.
+            window.isMobileComputeEnvironment = () => false;
+
+            // A failed dispatch invalidates the context, but is never retried with a smaller chunk.
+            const workbench = window.gpuRolloutWorkbench;
+            if (workbench && typeof workbench.resetGpuContext === 'function') {
+                ['runGpu', 'runGpuAllActions'].forEach(name => {
+                    const original = workbench[name];
+                    if (typeof original !== 'function') return;
+                    workbench[name] = async function (...args) {
+                        try {
+                            return await original.apply(this, args);
+                        } catch (error) {
+                            workbench.resetGpuContext();
+                            throw error;
+                        }
+                    };
+                });
+            }
+
+            // WebGPU work already submitted cannot be cancelled. Queue calc requests so a new
+            // inference never overlaps the still-running dispatch from an obsolete request.
+            const originalCalcExGpu = window.calcExGpu;
+            if (typeof originalCalcExGpu === 'function') {
+                let gpuCalcTail = Promise.resolve();
+                window.calcExGpu = function (...args) {
+                    const requestId = args[3];
+                    const queued = gpuCalcTail.catch(() => {}).then(async () => {
+                        if (typeof window.isCalcExRequestActive === 'function' && !window.isCalcExRequestActive(requestId)) {
+                            return;
+                        }
+                        return originalCalcExGpu.apply(this, args);
+                    });
+                    gpuCalcTail = queued.catch(() => {});
+                    return queued;
+                };
+            }
+        })();
+    </script>
     <script src="./js/fq1_mode.js?v=20260806083700000000"></script>
 </body>
 </html>
