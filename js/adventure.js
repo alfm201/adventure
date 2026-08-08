@@ -510,7 +510,7 @@ function formatExScoreOverviewNumber(value, formatter = formatValue) {
 
 function getExScoreOverviewStatus(action) {
   if (!isExScoreActionAvailable(action)) return { text: '비어 있음', color: '#64748b', bg: '#f1f5f9' };
-  if (env.exAction === action) return { text: '추천', color: '#b91c1c', bg: '#fee2e2' };
+  if (env.exAction === action || env.exRecommendedActions?.includes(action)) return { text: '추천', color: '#b91c1c', bg: '#fee2e2' };
   if (isExScoreHighlighted(action)) return { text: '근접', color: '#047857', bg: '#d1fae5' };
 
   const raw = env.exValues?.status?.[action];
@@ -4291,7 +4291,53 @@ function getAdaptiveSampleActions(actionStats, activeActions, maxIteration) {
   return sampleActions;
 }
 
-async function calcExGpu(activeActions, displayActions, simulationState, requestId) {
+
+function buildRolloutActionEquivalence(displayActions) {
+  const canonicalBySignature = new Map();
+  const canonicalByAction = new Array(6).fill(null);
+  const aliasesByCanonical = new Map();
+  const canonicalActions = [];
+
+  displayActions.slice().sort((a, b) => a - b).forEach(action => {
+    let signature;
+    if (action === 0) {
+      signature = 'roll';
+    } else {
+      const card = env.cards[action - 1];
+      signature = card
+        ? `card:${Number(card[1])}:${Number(card[2])}`
+        : `action:${action}`;
+    }
+
+    let canonicalAction = canonicalBySignature.get(signature);
+    if (canonicalAction === undefined) {
+      canonicalAction = action;
+      canonicalBySignature.set(signature, canonicalAction);
+      canonicalActions.push(canonicalAction);
+      aliasesByCanonical.set(canonicalAction, []);
+    }
+    canonicalByAction[action] = canonicalAction;
+    aliasesByCanonical.get(canonicalAction).push(action);
+  });
+
+  return {
+    canonicalActions,
+    canonicalByAction,
+    aliasesByCanonical,
+    hasAliases: canonicalActions.length < displayActions.length,
+  };
+}
+
+function getCanonicalRolloutAction(action, equivalence) {
+  return equivalence?.canonicalByAction?.[action] ?? action;
+}
+
+function getRolloutActionAliases(action, equivalence) {
+  const canonicalAction = getCanonicalRolloutAction(action, equivalence);
+  return equivalence?.aliasesByCanonical?.get(canonicalAction) || [action];
+}
+
+async function calcExGpu(activeActions, displayActions, simulationState, requestId, actionEquivalence) {
   let actionCount = env.cards.length + 1;
   let initialIteration = Math.max(1, Math.floor(computeSettings.gpuIteration * 0.1));
   let batchIteration = Math.max(1, Math.floor(computeSettings.gpuIteration * computeSettings.gpuBatchPct / 100));
@@ -4320,7 +4366,8 @@ async function calcExGpu(activeActions, displayActions, simulationState, request
   function applySummaries(decision) {
     if (!isCurrentRequest()) return;
     displayActions.forEach(action => {
-      let summary = decision.summaries[action];
+      const canonicalAction = getCanonicalRolloutAction(action, actionEquivalence);
+      let summary = decision.summaries[canonicalAction];
       env.exScores[action] = summary.avg;
       env.exValues.min[action] = summary.min;
       env.exValues.max[action] = summary.max;
@@ -4337,6 +4384,9 @@ async function calcExGpu(activeActions, displayActions, simulationState, request
     if (!isCurrentRequest()) return;
     env.exHighlights = new Array(6).fill(false);
     env.exAction = decision.bestAction;
+    env.exRecommendedActions = decision.bestAction === undefined
+      ? []
+      : getRolloutActionAliases(decision.bestAction, actionEquivalence).filter(action => displayActions.includes(action));
 
     if (decision.bestAction === undefined) {
       env.exScore = Infinity;
@@ -4347,9 +4397,11 @@ async function calcExGpu(activeActions, displayActions, simulationState, request
     env.exScore = best.avg;
     let activeActionSet = new Set(activeActions);
     displayActions.forEach(action => {
-      let summary = decision.summaries[action];
-      env.exValues.status[action] = action === decision.bestAction ? 'best' : activeActionSet.has(action) ? 'active' : 'pruned';
-      if (summary.count === 0 && actionStats[action].count === 0) {
+      const canonicalAction = getCanonicalRolloutAction(action, actionEquivalence);
+      let summary = decision.summaries[canonicalAction];
+      let recommended = canonicalAction === decision.bestAction;
+      env.exValues.status[action] = recommended ? 'best' : activeActionSet.has(canonicalAction) ? 'active' : 'pruned';
+      if (summary.count === 0 && actionStats[canonicalAction].count === 0) {
         env.exValues.gap[action] = 0;
         env.exValues.z[action] = 0;
         return;
@@ -4359,10 +4411,12 @@ async function calcExGpu(activeActions, displayActions, simulationState, request
       env.exValues.gap[action] = parseFloat(gap.toFixed(3));
       env.exValues.z[action] = combinedSe > 0 && isFinite(combinedSe) ? parseFloat((gap / combinedSe).toFixed(3)) : 0;
     });
-    activeActions.forEach(action => {
-      let summary = decision.summaries[action];
+    displayActions.forEach(action => {
+      const canonicalAction = getCanonicalRolloutAction(action, actionEquivalence);
+      if (!activeActionSet.has(canonicalAction)) return;
+      let summary = decision.summaries[canonicalAction];
       let gap = best.avg - summary.avg;
-      env.exHighlights[action] = action === decision.bestAction || gap <= calcHighlightMargin(getMaxActionIteration(), best, summary);
+      env.exHighlights[action] = canonicalAction === decision.bestAction || gap <= calcHighlightMargin(getMaxActionIteration(), best, summary);
     });
   }
 
@@ -4378,6 +4432,16 @@ async function calcExGpu(activeActions, displayActions, simulationState, request
         let result = await window.gpuRolloutWorkbench.runGpuAllActions({
           tables: tables,
           sample: sample,
+          rolloutCount: chunkIteration,
+          seed: getGpuRandomSeed(),
+        });
+        if (!isCurrentRequest()) return false;
+        actions.forEach(action => mergeGpuSummary(actionStats[action], result.summaries[action]));
+      } else if (actions.length > 1 && actionEquivalence?.hasAliases && typeof window.gpuRolloutWorkbench.runGpuActions === 'function') {
+        let result = await window.gpuRolloutWorkbench.runGpuActions({
+          tables: tables,
+          sample: sample,
+          actions: actions,
           rolloutCount: chunkIteration,
           seed: getGpuRandomSeed(),
         });
@@ -4416,6 +4480,13 @@ async function calcExGpu(activeActions, displayActions, simulationState, request
 
     if (runnableActions.length === 0) return false;
 
+    if (actionEquivalence?.hasAliases && runnableActions.length > 1 && typeof window.gpuRolloutWorkbench.runGpuActions === 'function') {
+      const sharedIteration = runnableActions[0].iteration;
+      if (runnableActions.every(job => job.iteration === sharedIteration)) {
+        return evaluateGpuBatch(runnableActions.map(job => job.action), sharedIteration);
+      }
+    }
+
     for (const job of runnableActions) {
       if (!isCurrentRequest()) return false;
       let completed = await evaluateGpuBatch([job.action], job.iteration);
@@ -4428,11 +4499,13 @@ async function calcExGpu(activeActions, displayActions, simulationState, request
     console.time('GPU simulation');
     if (!isCurrentRequest()) return;
     env.exAction = undefined;
+    env.exRecommendedActions = [];
     env.exScore = Infinity;
     updateBoard();
 
     let initialAllActions = activeActions.length === actionCount && activeActions.every((action, index) => action === index);
-    if (initialAllActions) {
+    let initialEquivalentSubset = actionEquivalence?.hasAliases && activeActions.length > 1 && typeof window.gpuRolloutWorkbench.runGpuActions === 'function';
+    if (initialAllActions || initialEquivalentSubset) {
       let completed = await evaluateGpuBatch(activeActions, initialIteration);
       if (!completed || !isCurrentRequest()) return;
     } else {
@@ -4492,6 +4565,7 @@ async function calcExGpu(activeActions, displayActions, simulationState, request
       env.exValues.status[action] = 'error';
     });
     env.exAction = undefined;
+    env.exRecommendedActions = [];
     env.exScore = Infinity;
     updateBoard();
   }
@@ -4513,6 +4587,7 @@ function calcEx(r = [0, 1, 2, 3, 4, 5]) {
   restorePredictionInteractionFromLastPointer({ update: false });
   env.exScores = new Array(6).fill(0);
   env.exHighlights = new Array(6).fill(false);
+  env.exRecommendedActions = [];
   env.exValues = {
     min: new Array(6).fill(0),
     max: new Array(6).fill(0),
@@ -4524,10 +4599,10 @@ function calcEx(r = [0, 1, 2, 3, 4, 5]) {
     z: new Array(6).fill(0),
     status: new Array(6).fill(''),
   };
-  let activeActions = [];
+  let displayActions = [];
   for (let i = 0; i < 6; i++) {
     if (i === 0 || env.cards[i - 1] !== undefined && r.includes(i)) {
-      activeActions.push(i);
+      displayActions.push(i);
       env.exScores[i] = '\uACC4\uC0B0\uC911...';
       env.exHighlights[i] = false;
       env.exValues.min[i] = 0;
@@ -4542,15 +4617,18 @@ function calcEx(r = [0, 1, 2, 3, 4, 5]) {
     }
   }
 
-  if (activeActions.length === 0) {
+  if (displayActions.length === 0) {
     if (isCalcExRequestActive(calcRequestId)) updateBoard();
     return;
   }
 
+  const actionEquivalence = buildRolloutActionEquivalence(displayActions);
+  let activeActions = actionEquivalence.canonicalActions.slice();
+
   if (isCalcExRequestActive(calcRequestId)) updateBoard();
 
   if (computeSettings.engine === 'gpu' && isGpuAvailable()) {
-    calcExGpu(activeActions, activeActions.slice(), env.getState(), calcRequestId);
+    calcExGpu(activeActions, displayActions, env.getState(), calcRequestId, actionEquivalence);
     return;
   }
 
@@ -4563,7 +4641,6 @@ function calcEx(r = [0, 1, 2, 3, 4, 5]) {
   let requestId = workerReqIndex++;
   resetWorkers();
   let simulationState = env.getState();
-  let displayActions = activeActions.slice();
   let initialIteration = getAdaptiveInitialIteration(workerIteration);
   let batchIteration = getAdaptiveBatchIteration(workerIteration);
   let maxIteration = getAdaptiveMaxIteration(workerIteration, computeSettings.cpuMaxPct);
@@ -4575,7 +4652,8 @@ function calcEx(r = [0, 1, 2, 3, 4, 5]) {
   function applySummaries(decision) {
     if (!isCalcExRequestActive(calcRequestId)) return;
     displayActions.forEach(action => {
-      let summary = decision.summaries[action];
+      const canonicalAction = getCanonicalRolloutAction(action, actionEquivalence);
+      let summary = decision.summaries[canonicalAction];
       env.exScores[action] = summary.avg;
       env.exValues.min[action] = summary.min;
       env.exValues.max[action] = summary.max;
@@ -4602,6 +4680,9 @@ function calcEx(r = [0, 1, 2, 3, 4, 5]) {
     if (!isCalcExRequestActive(calcRequestId)) return;
     env.exHighlights = new Array(6).fill(false);
     env.exAction = decision.bestAction;
+    env.exRecommendedActions = decision.bestAction === undefined
+      ? []
+      : getRolloutActionAliases(decision.bestAction, actionEquivalence).filter(action => displayActions.includes(action));
 
     if (decision.bestAction === undefined) {
       env.exScore = Infinity;
@@ -4612,9 +4693,11 @@ function calcEx(r = [0, 1, 2, 3, 4, 5]) {
     env.exScore = best.avg;
     let activeActionSet = new Set(activeActions);
     displayActions.forEach(action => {
-      let summary = decision.summaries[action];
-      env.exValues.status[action] = action === decision.bestAction ? '추천' : activeActionSet.has(action) ? '후보' : '제외';
-      if (summary.count === 0 && actionStats[action].count === 0) {
+      const canonicalAction = getCanonicalRolloutAction(action, actionEquivalence);
+      let summary = decision.summaries[canonicalAction];
+      let recommended = canonicalAction === decision.bestAction;
+      env.exValues.status[action] = recommended ? '추천' : activeActionSet.has(canonicalAction) ? '후보' : '제외';
+      if (summary.count === 0 && actionStats[canonicalAction].count === 0) {
         env.exValues.gap[action] = 0;
         env.exValues.z[action] = 0;
         return;
@@ -4624,10 +4707,12 @@ function calcEx(r = [0, 1, 2, 3, 4, 5]) {
       env.exValues.gap[action] = parseFloat(gap.toFixed(3));
       env.exValues.z[action] = combinedSe > 0 && isFinite(combinedSe) ? parseFloat((gap / combinedSe).toFixed(3)) : 0;
     });
-    activeActions.forEach(action => {
-      let summary = decision.summaries[action];
+    displayActions.forEach(action => {
+      const canonicalAction = getCanonicalRolloutAction(action, actionEquivalence);
+      if (!activeActionSet.has(canonicalAction)) return;
+      let summary = decision.summaries[canonicalAction];
       let gap = best.avg - summary.avg;
-      env.exHighlights[action] = action === decision.bestAction || gap <= calcHighlightMargin(getMaxActionIteration(), best, summary);
+      env.exHighlights[action] = canonicalAction === decision.bestAction || gap <= calcHighlightMargin(getMaxActionIteration(), best, summary);
     });
   }
 
@@ -4722,12 +4807,16 @@ function calcEx(r = [0, 1, 2, 3, 4, 5]) {
       switch (e.data.res[0]) {
         case undefined:
         case -1:
-          env.exScores[action] = String(env.exScores[action]).replace('\uACC4\uC0B0\uC911...', 'Error');
+          getRolloutActionAliases(action, actionEquivalence).forEach(aliasAction => {
+            env.exScores[aliasAction] = String(env.exScores[aliasAction]).replace('\uACC4\uC0B0\uC911...', 'Error');
+          });
           completeJob(workerIndex);
           updateBoard();
           return;
         case -2:
-          env.exScores[action] = env.score;
+          getRolloutActionAliases(action, actionEquivalence).forEach(aliasAction => {
+            env.exScores[aliasAction] = env.score;
+          });
           completeJob(workerIndex);
           updateBoard();
           return;
