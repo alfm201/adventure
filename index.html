@@ -160,42 +160,7 @@
     <script src="./js/gpu_engine.js?v=20260808103000000000"></script>
     <script src="./js/cpu_rollout_worker_loader.js?v=20260807203200000000"></script>
     <script src="./js/adventure.js?v=20260808095500000000"></script>
-    <script>
-        (() => {
-            window.isMobileComputeEnvironment = () => false;
-
-            const originalCalcExGpu = window.calcExGpu;
-            if (typeof originalCalcExGpu !== 'function') return;
-
-            let running = false;
-            let pending = null;
-
-            function pump() {
-                if (running || !pending) return;
-                const job = pending;
-                pending = null;
-                running = true;
-
-                Promise.resolve()
-                    .then(() => originalCalcExGpu.apply(window, job.args))
-                    .then(job.resolve, job.reject)
-                    .finally(() => {
-                        running = false;
-                        pump();
-                    });
-            }
-
-            window.calcExGpu = function (...args) {
-                return new Promise((resolve, reject) => {
-                    if (pending) {
-                        pending.resolve();
-                    }
-                    pending = { args, resolve, reject };
-                    pump();
-                });
-            };
-        })();
-    </script>
+    <script>window.isMobileComputeEnvironment = () => false;</script>
     <script src="./js/fq1_mode.js?v=20260806083700000000"></script>
 </body>
 </html>
