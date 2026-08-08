@@ -62,6 +62,16 @@ let canvasBackingScale = 1;
 let responsiveLayoutFrame = null;
 let computeModalFitFrame = null;
 
+function isMobileComputeEnvironment() {
+  const coarsePointer = typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
+  const touch = (navigator.maxTouchPoints || 0) > 0;
+  const viewportMin = Math.min(
+    window.innerWidth || document.documentElement.clientWidth || 9999,
+    window.innerHeight || document.documentElement.clientHeight || 9999,
+  );
+  return (coarsePointer || touch) && viewportMin <= 900;
+}
+
 function getCanvasBackingScale() {
   const dpr = window.devicePixelRatio || 1;
   return Math.max(2, Math.ceil(dpr));
@@ -1335,7 +1345,7 @@ function renderPredictionOverlayRoot(analysis) {
   const ratioDelta = getPredictionRatioDelta(analysis);
   const ratioDeltaColor = ratioDelta === null ? '#64748b' : getPredictionAverageDeltaColor(ratioDelta);
   const ratioDeltaText = formatPredictionRatioDelta(ratioDelta);
-  const stageIds = Array.from(new Set(offStage.map(item => getStageRowByScore(item.score)[1]))).sort((a, b) => a - b);
+  const stageIds = Array.from(new Set(offStage.map(item => getStageRowByScore(item.score)[1])).sort((a, b) => a - b));
   const viewportW = window.innerWidth || document.documentElement.clientWidth || 1024;
   const viewportH = window.innerHeight || document.documentElement.clientHeight || 694;
   const canvasRect = canvas.getBoundingClientRect();
@@ -2827,7 +2837,6 @@ function compactScoreCounts(scoreCounts) {
 
 
 
-
 const workerBlob = new Blob([workerCode], { type: 'application/javascript' });
 const workerUrl = URL.createObjectURL(workerBlob);
 
@@ -3056,8 +3065,37 @@ function getGpuLoadConfig(gpuLoad = computeSettings.gpuLoad) {
   return { targetChunkMs: 1000, yieldMs: 0, cooldownRatio: 0, initialChunkPct: 100, minChunkPct: 100 };
 }
 
+function getMobileGpuDispatchProfile(gpuLoad = computeSettings.gpuLoad) {
+  if (gpuLoad === 'low') return { targetChunkMs: 50, yieldMs: 24, cooldownRatio: 0.35, initialChunkPct: 2, minChunkPct: 0.75 };
+  if (gpuLoad === 'high') return { targetChunkMs: 120, yieldMs: 8, cooldownRatio: 0.08, initialChunkPct: 5, minChunkPct: 1.5 };
+  return { targetChunkMs: 75, yieldMs: 16, cooldownRatio: 0.18, initialChunkPct: 3, minChunkPct: 1 };
+}
+
+function applyMobileGpuDispatchSettings(settings, loadConfig) {
+  if (!isMobileComputeEnvironment()) return settings;
+  let profile = getMobileGpuDispatchProfile(settings.gpuLoad);
+  let currentTarget = Number(settings.targetChunkMs);
+  let currentInitial = Number(settings.initialChunkPct);
+  let currentMin = Number(settings.minChunkPct);
+  return {
+    ...settings,
+    targetChunkMs: Number.isFinite(currentTarget) && currentTarget > 0
+      ? Math.min(currentTarget, profile.targetChunkMs)
+      : profile.targetChunkMs,
+    yieldMs: Math.max(Number(settings.yieldMs) || 0, profile.yieldMs),
+    cooldownRatio: Math.max(Number(settings.cooldownRatio) || 0, profile.cooldownRatio),
+    initialChunkPct: Number.isFinite(currentInitial) && currentInitial > 0
+      ? Math.min(currentInitial, profile.initialChunkPct)
+      : profile.initialChunkPct,
+    minChunkPct: Number.isFinite(currentMin) && currentMin > 0
+      ? Math.min(currentMin, profile.minChunkPct)
+      : profile.minChunkPct,
+  };
+}
+
 function createGpuDispatchTuner(batchIteration, settings = {}) {
   let loadConfig = getGpuLoadConfig(settings.gpuLoad);
+  settings = applyMobileGpuDispatchSettings(settings, loadConfig);
   let targetChunkMs = Math.max(4, settings.targetChunkMs || loadConfig.targetChunkMs);
   let baseYieldMs = Math.max(0, settings.yieldMs !== undefined ? settings.yieldMs : loadConfig.yieldMs);
   let cooldownRatio = Math.max(0, settings.cooldownRatio !== undefined ? settings.cooldownRatio : loadConfig.cooldownRatio || 0);
@@ -3096,8 +3134,14 @@ function createGpuDispatchTuner(batchIteration, settings = {}) {
 }
 
 function waitGpuYield(ms) {
-  if (ms <= 0) return Promise.resolve();
-  return new Promise(resolve => setTimeout(resolve, ms));
+  let delay = Math.max(0, Number(ms) || 0);
+  if (delay <= 0) return Promise.resolve();
+  if (isMobileComputeEnvironment() && !document.hidden && typeof window.requestAnimationFrame === 'function') {
+    return new Promise(resolve => {
+      window.requestAnimationFrame(() => window.setTimeout(resolve, delay));
+    });
+  }
+  return new Promise(resolve => setTimeout(resolve, delay));
 }
 
 function recordComputePerf(engine, key, elapsedMs, options = {}) {
@@ -4924,6 +4968,7 @@ function showComputeModeModal(onDone) {
       </div>
     </div>
     <div style="display:flex;justify-content:flex-end;gap:8px;">
+      <button id="compute-measure-perf" type="button" style="border:1px solid #2563eb;border-radius:6px;padding:9px 14px;background:#ffffff;color:#2563eb;font-weight:700;cursor:pointer;">추론 시간 측정</button>
       <button id="compute-start" style="border:0;border-radius:6px;padding:9px 14px;background:#2563eb;color:white;font-weight:700;cursor:pointer;">시작</button>
     </div>
   `;
@@ -4935,6 +4980,7 @@ function showComputeModeModal(onDone) {
     : null;
   if (computeResizeObserver) computeResizeObserver.observe(card);
 
+  let measureButton = card.querySelector('#compute-measure-perf');
   let startButton = card.querySelector('#compute-start');
 
   function getSelectedGpuUsage() {
@@ -4987,6 +5033,24 @@ function showComputeModeModal(onDone) {
   card.querySelectorAll('input[name="cpu-policy"]').forEach(input => {
     input.addEventListener('change', updateCpuPolicyHelp);
   });
+  measureButton.addEventListener('click', () => {
+    if (computePerfBenchmarkRunning || computePerfBenchmarkPromise) return;
+    measureButton.disabled = true;
+    measureButton.style.opacity = '0.7';
+    measureButton.style.cursor = 'default';
+    measureButton.textContent = '측정 중...';
+    computePerfBenchmarkPromise = measureComputePerfOptions(gpuAvailable, cpuWorkerCandidates)
+      .catch(error => console.warn('Compute perf benchmark failed.', error))
+      .finally(() => {
+        computePerfBenchmarkPromise = null;
+        if (!root.isConnected) return;
+        measureButton.disabled = false;
+        measureButton.style.opacity = '1';
+        measureButton.style.cursor = 'pointer';
+        measureButton.textContent = '다시 측정';
+        scheduleComputeModeModalFit();
+      });
+  });
   startButton.addEventListener('click', async () => {
     startButton.disabled = true;
     startButton.style.opacity = '0.7';
@@ -5017,18 +5081,7 @@ function showComputeModeModal(onDone) {
   updateComputeOptionCards('gpu');
   updateComputeOptionCards('cpu');
   scheduleComputeModeModalFit();
-  if (new URLSearchParams(window.location.search).get('skipPerfBenchmark') !== '1') {
-    setTimeout(() => {
-      if (!root.isConnected) return;
-      computePerfBenchmarkPromise = measureComputePerfOptions(gpuAvailable, cpuWorkerCandidates)
-        .catch(error => console.warn('Compute perf benchmark failed.', error))
-        .finally(() => {
-          computePerfBenchmarkPromise = null;
-        });
-    }, 0);
-  }
 }
-
 
 
 
