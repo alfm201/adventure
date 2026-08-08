@@ -1,0 +1,564 @@
+from pathlib import Path
+
+
+def replace_once(text, old, new, label):
+    count = text.count(old)
+    if count != 1:
+        raise SystemExit(f'{label}: expected 1 occurrence, got {count}')
+    return text.replace(old, new, 1)
+
+
+# adventure.js
+p = Path('js/adventure.js')
+s = p.read_text(encoding='utf-8')
+
+s = replace_once(
+    s,
+    "  if (env.exAction === action) return { text: '추천', color: '#b91c1c', bg: '#fee2e2' };",
+    "  if (env.exAction === action || env.exRecommendedActions?.includes(action)) return { text: '추천', color: '#b91c1c', bg: '#fee2e2' };",
+    'recommended UI aliases',
+)
+
+helper = r'''
+function buildRolloutActionEquivalence(displayActions) {
+  const canonicalBySignature = new Map();
+  const canonicalByAction = new Array(6).fill(null);
+  const aliasesByCanonical = new Map();
+  const canonicalActions = [];
+
+  displayActions.slice().sort((a, b) => a - b).forEach(action => {
+    let signature;
+    if (action === 0) {
+      signature = 'roll';
+    } else {
+      const card = env.cards[action - 1];
+      signature = card
+        ? `card:${Number(card[1])}:${Number(card[2])}`
+        : `action:${action}`;
+    }
+
+    let canonicalAction = canonicalBySignature.get(signature);
+    if (canonicalAction === undefined) {
+      canonicalAction = action;
+      canonicalBySignature.set(signature, canonicalAction);
+      canonicalActions.push(canonicalAction);
+      aliasesByCanonical.set(canonicalAction, []);
+    }
+    canonicalByAction[action] = canonicalAction;
+    aliasesByCanonical.get(canonicalAction).push(action);
+  });
+
+  return {
+    canonicalActions,
+    canonicalByAction,
+    aliasesByCanonical,
+    hasAliases: canonicalActions.length < displayActions.length,
+  };
+}
+
+function getCanonicalRolloutAction(action, equivalence) {
+  return equivalence?.canonicalByAction?.[action] ?? action;
+}
+
+function getRolloutActionAliases(action, equivalence) {
+  const canonicalAction = getCanonicalRolloutAction(action, equivalence);
+  return equivalence?.aliasesByCanonical?.get(canonicalAction) || [action];
+}
+
+'''
+s = replace_once(
+    s,
+    "async function calcExGpu(activeActions, displayActions, simulationState, requestId) {",
+    helper + "async function calcExGpu(activeActions, displayActions, simulationState, requestId, actionEquivalence) {",
+    'equivalence helpers',
+)
+
+old_gpu_apply = r'''  function applySummaries(decision) {
+    if (!isCurrentRequest()) return;
+    displayActions.forEach(action => {
+      let summary = decision.summaries[action];
+      env.exScores[action] = summary.avg;
+      env.exValues.min[action] = summary.min;
+      env.exValues.max[action] = summary.max;
+      env.exValues.mid[action] = summary.mid;
+      env.exValues.std[action] = parseFloat(summary.std.toFixed(3));
+      env.exValues.count[action] = summary.count;
+      env.exValues.se[action] = parseFloat(summary.se.toFixed(3));
+    });
+    applyExHighlights(decision);
+
+  }
+
+  function applyExHighlights(decision) {
+    if (!isCurrentRequest()) return;
+    env.exHighlights = new Array(6).fill(false);
+    env.exAction = decision.bestAction;
+
+    if (decision.bestAction === undefined) {
+      env.exScore = Infinity;
+      return;
+    }
+
+    let best = decision.summaries[decision.bestAction];
+    env.exScore = best.avg;
+    let activeActionSet = new Set(activeActions);
+    displayActions.forEach(action => {
+      let summary = decision.summaries[action];
+      env.exValues.status[action] = action === decision.bestAction ? 'best' : activeActionSet.has(action) ? 'active' : 'pruned';
+      if (summary.count === 0 && actionStats[action].count === 0) {
+        env.exValues.gap[action] = 0;
+        env.exValues.z[action] = 0;
+        return;
+      }
+      let gap = best.avg - summary.avg;
+      let combinedSe = Math.sqrt(best.se * best.se + summary.se * summary.se);
+      env.exValues.gap[action] = parseFloat(gap.toFixed(3));
+      env.exValues.z[action] = combinedSe > 0 && isFinite(combinedSe) ? parseFloat((gap / combinedSe).toFixed(3)) : 0;
+    });
+    activeActions.forEach(action => {
+      let summary = decision.summaries[action];
+      let gap = best.avg - summary.avg;
+      env.exHighlights[action] = action === decision.bestAction || gap <= calcHighlightMargin(getMaxActionIteration(), best, summary);
+    });
+  }
+'''
+new_gpu_apply = r'''  function applySummaries(decision) {
+    if (!isCurrentRequest()) return;
+    displayActions.forEach(action => {
+      const canonicalAction = getCanonicalRolloutAction(action, actionEquivalence);
+      let summary = decision.summaries[canonicalAction];
+      env.exScores[action] = summary.avg;
+      env.exValues.min[action] = summary.min;
+      env.exValues.max[action] = summary.max;
+      env.exValues.mid[action] = summary.mid;
+      env.exValues.std[action] = parseFloat(summary.std.toFixed(3));
+      env.exValues.count[action] = summary.count;
+      env.exValues.se[action] = parseFloat(summary.se.toFixed(3));
+    });
+    applyExHighlights(decision);
+
+  }
+
+  function applyExHighlights(decision) {
+    if (!isCurrentRequest()) return;
+    env.exHighlights = new Array(6).fill(false);
+    env.exAction = decision.bestAction;
+    env.exRecommendedActions = decision.bestAction === undefined
+      ? []
+      : getRolloutActionAliases(decision.bestAction, actionEquivalence).filter(action => displayActions.includes(action));
+
+    if (decision.bestAction === undefined) {
+      env.exScore = Infinity;
+      return;
+    }
+
+    let best = decision.summaries[decision.bestAction];
+    env.exScore = best.avg;
+    let activeActionSet = new Set(activeActions);
+    displayActions.forEach(action => {
+      const canonicalAction = getCanonicalRolloutAction(action, actionEquivalence);
+      let summary = decision.summaries[canonicalAction];
+      let recommended = canonicalAction === decision.bestAction;
+      env.exValues.status[action] = recommended ? 'best' : activeActionSet.has(canonicalAction) ? 'active' : 'pruned';
+      if (summary.count === 0 && actionStats[canonicalAction].count === 0) {
+        env.exValues.gap[action] = 0;
+        env.exValues.z[action] = 0;
+        return;
+      }
+      let gap = best.avg - summary.avg;
+      let combinedSe = Math.sqrt(best.se * best.se + summary.se * summary.se);
+      env.exValues.gap[action] = parseFloat(gap.toFixed(3));
+      env.exValues.z[action] = combinedSe > 0 && isFinite(combinedSe) ? parseFloat((gap / combinedSe).toFixed(3)) : 0;
+    });
+    displayActions.forEach(action => {
+      const canonicalAction = getCanonicalRolloutAction(action, actionEquivalence);
+      if (!activeActionSet.has(canonicalAction)) return;
+      let summary = decision.summaries[canonicalAction];
+      let gap = best.avg - summary.avg;
+      env.exHighlights[action] = canonicalAction === decision.bestAction || gap <= calcHighlightMargin(getMaxActionIteration(), best, summary);
+    });
+  }
+'''
+s = replace_once(s, old_gpu_apply, new_gpu_apply, 'gpu result aliasing')
+
+old_gpu_else = r'''      } else {
+        let results = await Promise.all(actions.map(action => window.gpuRolloutWorkbench.runGpu({
+          tables: tables,
+          sample: sample,
+          action: action,
+          rolloutCount: chunkIteration,
+          seed: getGpuRandomSeed(),
+        }).then(summary => ({ action, summary }))));
+
+        if (!isCurrentRequest()) return false;
+        results.forEach(({ action, summary }) => {
+          mergeGpuSummary(actionStats[action], { action: action, count: chunkIteration, ...summary });
+        });
+      }
+'''
+new_gpu_else = r'''      } else if (actions.length > 1 && actionEquivalence?.hasAliases && typeof window.gpuRolloutWorkbench.runGpuActions === 'function') {
+        let result = await window.gpuRolloutWorkbench.runGpuActions({
+          tables: tables,
+          sample: sample,
+          actions: actions,
+          rolloutCount: chunkIteration,
+          seed: getGpuRandomSeed(),
+        });
+        if (!isCurrentRequest()) return false;
+        actions.forEach(action => mergeGpuSummary(actionStats[action], result.summaries[action]));
+      } else {
+        let results = await Promise.all(actions.map(action => window.gpuRolloutWorkbench.runGpu({
+          tables: tables,
+          sample: sample,
+          action: action,
+          rolloutCount: chunkIteration,
+          seed: getGpuRandomSeed(),
+        }).then(summary => ({ action, summary }))));
+
+        if (!isCurrentRequest()) return false;
+        results.forEach(({ action, summary }) => {
+          mergeGpuSummary(actionStats[action], { action: action, count: chunkIteration, ...summary });
+        });
+      }
+'''
+# There are two evaluateGpuBatch implementations in adventure.js; patch the production one only by locating calcExGpu.
+calc_gpu_start = s.index('async function calcExGpu(')
+calc_gpu_end = s.index('\nfunction calcEx(', calc_gpu_start)
+prefix, calc_gpu, suffix = s[:calc_gpu_start], s[calc_gpu_start:calc_gpu_end], s[calc_gpu_end:]
+calc_gpu = replace_once(calc_gpu, old_gpu_else, new_gpu_else, 'gpu subset batching')
+
+old_run_batch_tail = r'''    if (runnableActions.length === 0) return false;
+
+    for (const job of runnableActions) {
+      if (!isCurrentRequest()) return false;
+      let completed = await evaluateGpuBatch([job.action], job.iteration);
+      if (!completed) return false;
+    }
+    return true;
+'''
+new_run_batch_tail = r'''    if (runnableActions.length === 0) return false;
+
+    if (actionEquivalence?.hasAliases && runnableActions.length > 1 && typeof window.gpuRolloutWorkbench.runGpuActions === 'function') {
+      const sharedIteration = runnableActions[0].iteration;
+      if (runnableActions.every(job => job.iteration === sharedIteration)) {
+        return evaluateGpuBatch(runnableActions.map(job => job.action), sharedIteration);
+      }
+    }
+
+    for (const job of runnableActions) {
+      if (!isCurrentRequest()) return false;
+      let completed = await evaluateGpuBatch([job.action], job.iteration);
+      if (!completed) return false;
+    }
+    return true;
+'''
+calc_gpu = replace_once(calc_gpu, old_run_batch_tail, new_run_batch_tail, 'gpu adaptive subset batching')
+calc_gpu = replace_once(
+    calc_gpu,
+    "    env.exAction = undefined;\n    env.exScore = Infinity;\n    updateBoard();\n\n    let initialAllActions = activeActions.length === actionCount && activeActions.every((action, index) => action === index);\n    if (initialAllActions) {",
+    "    env.exAction = undefined;\n    env.exRecommendedActions = [];\n    env.exScore = Infinity;\n    updateBoard();\n\n    let initialAllActions = activeActions.length === actionCount && activeActions.every((action, index) => action === index);\n    let initialEquivalentSubset = actionEquivalence?.hasAliases && activeActions.length > 1 && typeof window.gpuRolloutWorkbench.runGpuActions === 'function';\n    if (initialAllActions || initialEquivalentSubset) {",
+    'gpu initial subset batch',
+)
+calc_gpu = replace_once(
+    calc_gpu,
+    "    env.exAction = undefined;\n    env.exScore = Infinity;\n    updateBoard();",
+    "    env.exAction = undefined;\n    env.exRecommendedActions = [];\n    env.exScore = Infinity;\n    updateBoard();",
+    'gpu error recommendation reset',
+)
+s = prefix + calc_gpu + suffix
+
+old_calc_actions = r'''  env.exScores = new Array(6).fill(0);
+  env.exHighlights = new Array(6).fill(false);
+  env.exValues = {
+    min: new Array(6).fill(0),
+    max: new Array(6).fill(0),
+    std: new Array(6).fill(0),
+    mid: new Array(6).fill(0),
+    count: new Array(6).fill(0),
+    se: new Array(6).fill(0),
+    gap: new Array(6).fill(0),
+    z: new Array(6).fill(0),
+    status: new Array(6).fill(''),
+  };
+  let activeActions = [];
+  for (let i = 0; i < 6; i++) {
+    if (i === 0 || env.cards[i - 1] !== undefined && r.includes(i)) {
+      activeActions.push(i);
+      env.exScores[i] = '\uACC4\uC0B0\uC911...';
+      env.exHighlights[i] = false;
+      env.exValues.min[i] = 0;
+      env.exValues.max[i] = 0;
+      env.exValues.std[i] = 0;
+      env.exValues.mid[i] = 0;
+      env.exValues.count[i] = 0;
+      env.exValues.se[i] = 0;
+      env.exValues.gap[i] = 0;
+      env.exValues.z[i] = 0;
+      env.exValues.status[i] = '계산중';
+    }
+  }
+
+  if (activeActions.length === 0) {
+    if (isCalcExRequestActive(calcRequestId)) updateBoard();
+    return;
+  }
+
+  if (isCalcExRequestActive(calcRequestId)) updateBoard();
+
+  if (computeSettings.engine === 'gpu' && isGpuAvailable()) {
+    calcExGpu(activeActions, activeActions.slice(), env.getState(), calcRequestId);
+    return;
+  }
+'''
+new_calc_actions = r'''  env.exScores = new Array(6).fill(0);
+  env.exHighlights = new Array(6).fill(false);
+  env.exRecommendedActions = [];
+  env.exValues = {
+    min: new Array(6).fill(0),
+    max: new Array(6).fill(0),
+    std: new Array(6).fill(0),
+    mid: new Array(6).fill(0),
+    count: new Array(6).fill(0),
+    se: new Array(6).fill(0),
+    gap: new Array(6).fill(0),
+    z: new Array(6).fill(0),
+    status: new Array(6).fill(''),
+  };
+  let displayActions = [];
+  for (let i = 0; i < 6; i++) {
+    if (i === 0 || env.cards[i - 1] !== undefined && r.includes(i)) {
+      displayActions.push(i);
+      env.exScores[i] = '\uACC4\uC0B0\uC911...';
+      env.exHighlights[i] = false;
+      env.exValues.min[i] = 0;
+      env.exValues.max[i] = 0;
+      env.exValues.std[i] = 0;
+      env.exValues.mid[i] = 0;
+      env.exValues.count[i] = 0;
+      env.exValues.se[i] = 0;
+      env.exValues.gap[i] = 0;
+      env.exValues.z[i] = 0;
+      env.exValues.status[i] = '계산중';
+    }
+  }
+
+  if (displayActions.length === 0) {
+    if (isCalcExRequestActive(calcRequestId)) updateBoard();
+    return;
+  }
+
+  const actionEquivalence = buildRolloutActionEquivalence(displayActions);
+  let activeActions = actionEquivalence.canonicalActions.slice();
+
+  if (isCalcExRequestActive(calcRequestId)) updateBoard();
+
+  if (computeSettings.engine === 'gpu' && isGpuAvailable()) {
+    calcExGpu(activeActions, displayActions, env.getState(), calcRequestId, actionEquivalence);
+    return;
+  }
+'''
+s = replace_once(s, old_calc_actions, new_calc_actions, 'calc action canonicalization')
+s = replace_once(s, "  let displayActions = activeActions.slice();\n", "", 'remove cpu display alias copy')
+
+old_cpu_apply = r'''  function applySummaries(decision) {
+    if (!isCalcExRequestActive(calcRequestId)) return;
+    displayActions.forEach(action => {
+      let summary = decision.summaries[action];
+      env.exScores[action] = summary.avg;
+      env.exValues.min[action] = summary.min;
+      env.exValues.max[action] = summary.max;
+      env.exValues.mid[action] = summary.mid;
+      env.exValues.std[action] = parseFloat(summary.std.toFixed(3));
+      env.exValues.count[action] = summary.count;
+      env.exValues.se[action] = parseFloat(summary.se.toFixed(3));
+    });
+    applyExHighlights(decision);
+
+  }
+'''
+new_cpu_apply = r'''  function applySummaries(decision) {
+    if (!isCalcExRequestActive(calcRequestId)) return;
+    displayActions.forEach(action => {
+      const canonicalAction = getCanonicalRolloutAction(action, actionEquivalence);
+      let summary = decision.summaries[canonicalAction];
+      env.exScores[action] = summary.avg;
+      env.exValues.min[action] = summary.min;
+      env.exValues.max[action] = summary.max;
+      env.exValues.mid[action] = summary.mid;
+      env.exValues.std[action] = parseFloat(summary.std.toFixed(3));
+      env.exValues.count[action] = summary.count;
+      env.exValues.se[action] = parseFloat(summary.se.toFixed(3));
+    });
+    applyExHighlights(decision);
+
+  }
+'''
+s = replace_once(s, old_cpu_apply, new_cpu_apply, 'cpu summary aliasing')
+
+old_cpu_highlights = r'''  function applyExHighlights(decision) {
+    if (!isCalcExRequestActive(calcRequestId)) return;
+    env.exHighlights = new Array(6).fill(false);
+    env.exAction = decision.bestAction;
+
+    if (decision.bestAction === undefined) {
+      env.exScore = Infinity;
+      return;
+    }
+
+    let best = decision.summaries[decision.bestAction];
+    env.exScore = best.avg;
+    let activeActionSet = new Set(activeActions);
+    displayActions.forEach(action => {
+      let summary = decision.summaries[action];
+      env.exValues.status[action] = action === decision.bestAction ? '추천' : activeActionSet.has(action) ? '후보' : '제외';
+      if (summary.count === 0 && actionStats[action].count === 0) {
+        env.exValues.gap[action] = 0;
+        env.exValues.z[action] = 0;
+        return;
+      }
+      let gap = best.avg - summary.avg;
+      let combinedSe = Math.sqrt(best.se * best.se + summary.se * summary.se);
+      env.exValues.gap[action] = parseFloat(gap.toFixed(3));
+      env.exValues.z[action] = combinedSe > 0 && isFinite(combinedSe) ? parseFloat((gap / combinedSe).toFixed(3)) : 0;
+    });
+    activeActions.forEach(action => {
+      let summary = decision.summaries[action];
+      let gap = best.avg - summary.avg;
+      env.exHighlights[action] = action === decision.bestAction || gap <= calcHighlightMargin(getMaxActionIteration(), best, summary);
+    });
+  }
+'''
+new_cpu_highlights = r'''  function applyExHighlights(decision) {
+    if (!isCalcExRequestActive(calcRequestId)) return;
+    env.exHighlights = new Array(6).fill(false);
+    env.exAction = decision.bestAction;
+    env.exRecommendedActions = decision.bestAction === undefined
+      ? []
+      : getRolloutActionAliases(decision.bestAction, actionEquivalence).filter(action => displayActions.includes(action));
+
+    if (decision.bestAction === undefined) {
+      env.exScore = Infinity;
+      return;
+    }
+
+    let best = decision.summaries[decision.bestAction];
+    env.exScore = best.avg;
+    let activeActionSet = new Set(activeActions);
+    displayActions.forEach(action => {
+      const canonicalAction = getCanonicalRolloutAction(action, actionEquivalence);
+      let summary = decision.summaries[canonicalAction];
+      let recommended = canonicalAction === decision.bestAction;
+      env.exValues.status[action] = recommended ? '추천' : activeActionSet.has(canonicalAction) ? '후보' : '제외';
+      if (summary.count === 0 && actionStats[canonicalAction].count === 0) {
+        env.exValues.gap[action] = 0;
+        env.exValues.z[action] = 0;
+        return;
+      }
+      let gap = best.avg - summary.avg;
+      let combinedSe = Math.sqrt(best.se * best.se + summary.se * summary.se);
+      env.exValues.gap[action] = parseFloat(gap.toFixed(3));
+      env.exValues.z[action] = combinedSe > 0 && isFinite(combinedSe) ? parseFloat((gap / combinedSe).toFixed(3)) : 0;
+    });
+    displayActions.forEach(action => {
+      const canonicalAction = getCanonicalRolloutAction(action, actionEquivalence);
+      if (!activeActionSet.has(canonicalAction)) return;
+      let summary = decision.summaries[canonicalAction];
+      let gap = best.avg - summary.avg;
+      env.exHighlights[action] = canonicalAction === decision.bestAction || gap <= calcHighlightMargin(getMaxActionIteration(), best, summary);
+    });
+  }
+'''
+s = replace_once(s, old_cpu_highlights, new_cpu_highlights, 'cpu recommendation aliases')
+
+s = replace_once(
+    s,
+    "          env.exScores[action] = String(env.exScores[action]).replace('\\uACC4\\uC0B0\\uC911...', 'Error');",
+    "          getRolloutActionAliases(action, actionEquivalence).forEach(aliasAction => {\n            env.exScores[aliasAction] = String(env.exScores[aliasAction]).replace('\\uACC4\\uC0B0\\uC911...', 'Error');\n          });",
+    'cpu error aliasing',
+)
+s = replace_once(
+    s,
+    "          env.exScores[action] = env.score;",
+    "          getRolloutActionAliases(action, actionEquivalence).forEach(aliasAction => {\n            env.exScores[aliasAction] = env.score;\n          });",
+    'cpu terminal aliasing',
+)
+p.write_text(s, encoding='utf-8')
+
+
+# gpu_engine.js
+p = Path('js/gpu_engine.js')
+s = p.read_text(encoding='utf-8')
+s = replace_once(
+    s,
+    "  let actionIndex = select(params.action, workgroupId.y, params.mode == 1u);",
+    "  var actionIndex = params.action;\n  if (params.mode == 1u) {\n    actionIndex = workgroupId.y;\n  } else if (params.mode == 2u) {\n    actionIndex = u32(inputState[42u + workgroupId.y]);\n  }",
+    'shader subset action map',
+)
+s = replace_once(
+    s,
+    "    let actionOffset = select(0u, workgroupId.y * workgroupsPerAction, params.mode == 1u);",
+    "    let actionOffset = select(0u, workgroupId.y * workgroupsPerAction, params.mode != 0u);",
+    'shader subset partial offset',
+)
+s = replace_once(
+    s,
+    "async function runGpuAllActionsPartial(context, { sample, rolloutCount, seed }) {\n  const { adapter, device, pipeline, stageId, stageMove, stageEvent, cardType, cardValue } = context;\n  const actionCount = sample.actionCount;\n  const inputState = createStorageBuffer(device, new Int32Array(sample.state));",
+    "async function runGpuAllActionsPartial(context, { sample, actions, rolloutCount, seed }) {\n  const { adapter, device, pipeline, stageId, stageMove, stageEvent, cardType, cardValue } = context;\n  const requestedActions = Array.isArray(actions) && actions.length > 0\n    ? actions.map(Number)\n    : Array.from({ length: sample.actionCount }, (_, action) => action);\n  const actionCount = requestedActions.length;\n  const directAllActions = actionCount === sample.actionCount && requestedActions.every((action, index) => action === index);\n  let inputValues = new Int32Array(sample.state);\n  if (!directAllActions) {\n    if (sample.state.length < 42) throw new Error('GPU state must contain 42 values.');\n    inputValues = new Int32Array(42 + actionCount);\n    inputValues.set(new Int32Array(sample.state).subarray(0, 42));\n    requestedActions.forEach((action, index) => { inputValues[42 + index] = action; });\n  }\n  const inputState = createStorageBuffer(device, inputValues);",
+    'gpu subset input',
+)
+s = replace_once(
+    s,
+    "  device.queue.writeBuffer(params, 0, new Uint32Array([rolloutCount, 0, seed >>> 0, 512, actionCount, 1, 0, 0]));",
+    "  device.queue.writeBuffer(params, 0, new Uint32Array([rolloutCount, 0, seed >>> 0, 512, actionCount, directAllActions ? 1 : 2, 0, 0]));",
+    'gpu subset mode',
+)
+old_summary = r'''  const summaries = [];
+  for (let action = 0; action < actionCount; action++) {
+    summaries.push({
+      action,
+      ...summaryFromPartials(readResult.values, action * workgroupsPerAction, workgroupsPerAction),
+    });
+  }
+  const bestAction = summaries.reduce((best, summary) => (summary.mean > summaries[best].mean ? summary.action : best), 0);
+'''
+new_summary = r'''  const summaries = new Array(sample.actionCount);
+  for (let batchIndex = 0; batchIndex < actionCount; batchIndex++) {
+    const action = requestedActions[batchIndex];
+    summaries[action] = {
+      action,
+      ...summaryFromPartials(readResult.values, batchIndex * workgroupsPerAction, workgroupsPerAction),
+    };
+  }
+  let bestAction = requestedActions[0] ?? 0;
+  requestedActions.forEach(action => {
+    if (summaries[action].mean > summaries[bestAction].mean) bestAction = action;
+  });
+'''
+s = replace_once(s, old_summary, new_summary, 'gpu subset summaries')
+s = replace_once(
+    s,
+    "    actionCount,\n    rolloutCount,\n    summaries,",
+    "    actionCount: sample.actionCount,\n    batchActionCount: actionCount,\n    actions: requestedActions,\n    rolloutCount,\n    summaries,",
+    'gpu subset return metadata',
+)
+s = replace_once(
+    s,
+    "async function runGpuAllActions({ tables, sample, rolloutCount, seed }) {\n  const context = await getGpuContext(tables);\n  return runGpuAllActionsPartial(context, { sample, rolloutCount, seed });\n}",
+    "async function runGpuAllActions({ tables, sample, rolloutCount, seed }) {\n  const context = await getGpuContext(tables);\n  return runGpuAllActionsPartial(context, { sample, rolloutCount, seed });\n}\n\nasync function runGpuActions({ tables, sample, actions, rolloutCount, seed }) {\n  const context = await getGpuContext(tables);\n  return runGpuAllActionsPartial(context, { sample, actions, rolloutCount, seed });\n}",
+    'public gpu subset runner',
+)
+s = replace_once(
+    s,
+    "  runGpu,\n  runGpuAllActions,\n};",
+    "  runGpu,\n  runGpuAllActions,\n  runGpuActions,\n};",
+    'export gpu subset runner',
+)
+p.write_text(s, encoding='utf-8')
+
+
+# cache bust
+p = Path('index.html')
+s = p.read_text(encoding='utf-8')
+s = replace_once(s, './js/gpu_engine.js?v=20260808103000000000', './js/gpu_engine.js?v=20260808120700000000', 'gpu cache bust')
+s = replace_once(s, './js/adventure.js?v=20260808111600000000', './js/adventure.js?v=20260808120700000000', 'adventure cache bust')
+p.write_text(s, encoding='utf-8')
