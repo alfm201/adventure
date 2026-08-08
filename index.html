@@ -161,5 +161,128 @@
     <script src="./js/cpu_rollout_worker_loader.js?v=20260807203200000000"></script>
     <script src="./js/adventure.js?v=20260509051442377682"></script>
     <script src="./js/fq1_mode.js?v=20260806083700000000"></script>
+    <script>
+        (() => {
+            function isMobileGpuUiEnvironment() {
+                const coarsePointer = typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
+                const touch = (navigator.maxTouchPoints || 0) > 0;
+                const viewportMin = Math.min(
+                    window.innerWidth || document.documentElement.clientWidth || 9999,
+                    window.innerHeight || document.documentElement.clientHeight || 9999
+                );
+                return (coarsePointer || touch) && viewportMin <= 900;
+            }
+
+            const originalCreateGpuDispatchTuner = window.createGpuDispatchTuner;
+            if (typeof originalCreateGpuDispatchTuner === 'function') {
+                window.createGpuDispatchTuner = function (batchIteration, settings = {}) {
+                    if (!isMobileGpuUiEnvironment()) {
+                        return originalCreateGpuDispatchTuner(batchIteration, settings);
+                    }
+
+                    const load = settings.gpuLoad || 'medium';
+                    const profile = load === 'low'
+                        ? { targetChunkMs: 50, yieldMs: 24, cooldownRatio: 0.35, initialChunkPct: 2, minChunkPct: 0.75 }
+                        : load === 'high'
+                            ? { targetChunkMs: 120, yieldMs: 8, cooldownRatio: 0.08, initialChunkPct: 5, minChunkPct: 1.5 }
+                            : { targetChunkMs: 75, yieldMs: 16, cooldownRatio: 0.18, initialChunkPct: 3, minChunkPct: 1 };
+                    const currentTarget = Number(settings.targetChunkMs);
+                    const currentInitial = Number(settings.initialChunkPct);
+                    const currentMin = Number(settings.minChunkPct);
+
+                    return originalCreateGpuDispatchTuner(batchIteration, {
+                        ...settings,
+                        targetChunkMs: Number.isFinite(currentTarget) && currentTarget > 0
+                            ? Math.min(currentTarget, profile.targetChunkMs)
+                            : profile.targetChunkMs,
+                        yieldMs: Math.max(Number(settings.yieldMs) || 0, profile.yieldMs),
+                        cooldownRatio: Math.max(Number(settings.cooldownRatio) || 0, profile.cooldownRatio),
+                        initialChunkPct: Number.isFinite(currentInitial) && currentInitial > 0
+                            ? Math.min(currentInitial, profile.initialChunkPct)
+                            : profile.initialChunkPct,
+                        minChunkPct: Number.isFinite(currentMin) && currentMin > 0
+                            ? Math.min(currentMin, profile.minChunkPct)
+                            : profile.minChunkPct
+                    });
+                };
+            }
+
+            const originalWaitGpuYield = window.waitGpuYield;
+            if (typeof originalWaitGpuYield === 'function') {
+                window.waitGpuYield = function (ms) {
+                    const delay = Math.max(0, Number(ms) || 0);
+                    if (!isMobileGpuUiEnvironment() || document.hidden || delay <= 0 || typeof window.requestAnimationFrame !== 'function') {
+                        return originalWaitGpuYield(delay);
+                    }
+                    return new Promise(resolve => {
+                        window.requestAnimationFrame(() => window.setTimeout(resolve, delay));
+                    });
+                };
+            }
+
+            const originalShowComputeModeModal = window.showComputeModeModal;
+            if (typeof originalShowComputeModeModal !== 'function') return;
+
+            function addManualPerfButton() {
+                const modal = document.getElementById('adventure-compute-modal');
+                if (!modal || modal.querySelector('#compute-measure-perf')) return;
+                const startButton = modal.querySelector('#compute-start');
+                if (!startButton || !startButton.parentNode) return;
+
+                const measureButton = document.createElement('button');
+                measureButton.id = 'compute-measure-perf';
+                measureButton.type = 'button';
+                measureButton.textContent = '추론 시간 측정';
+                measureButton.style.border = '1px solid #2563eb';
+                measureButton.style.borderRadius = '6px';
+                measureButton.style.padding = '9px 14px';
+                measureButton.style.background = '#ffffff';
+                measureButton.style.color = '#2563eb';
+                measureButton.style.fontWeight = '700';
+                measureButton.style.cursor = 'pointer';
+                startButton.parentNode.insertBefore(measureButton, startButton);
+
+                measureButton.addEventListener('click', () => {
+                    if (computePerfBenchmarkRunning || computePerfBenchmarkPromise) return;
+                    const cpuWorkerCandidates = [1, Math.ceil(maxWorkerCount / 2), maxWorkerCount]
+                        .filter((value, index, values) => value >= 1 && values.indexOf(value) === index);
+                    measureButton.disabled = true;
+                    measureButton.style.opacity = '0.7';
+                    measureButton.style.cursor = 'default';
+                    measureButton.textContent = '측정 중...';
+
+                    computePerfBenchmarkPromise = measureComputePerfOptions(isGpuAvailable(), cpuWorkerCandidates)
+                        .catch(error => console.warn('Compute perf benchmark failed.', error))
+                        .finally(() => {
+                            computePerfBenchmarkPromise = null;
+                            if (!modal.isConnected) return;
+                            measureButton.disabled = false;
+                            measureButton.style.opacity = '1';
+                            measureButton.style.cursor = 'pointer';
+                            measureButton.textContent = '다시 측정';
+                            if (typeof scheduleComputeModeModalFit === 'function') scheduleComputeModeModalFit();
+                        });
+                });
+            }
+
+            window.showComputeModeModal = function (onDone) {
+                const before = new URL(window.location.href);
+                const hadSkip = before.searchParams.has('skipPerfBenchmark');
+                const oldSkip = before.searchParams.get('skipPerfBenchmark');
+                const suppressed = new URL(before.href);
+                suppressed.searchParams.set('skipPerfBenchmark', '1');
+                window.history.replaceState(window.history.state, '', suppressed.href);
+                try {
+                    return originalShowComputeModeModal(onDone);
+                } finally {
+                    const restored = new URL(window.location.href);
+                    if (hadSkip) restored.searchParams.set('skipPerfBenchmark', oldSkip);
+                    else restored.searchParams.delete('skipPerfBenchmark');
+                    window.history.replaceState(window.history.state, '', restored.href);
+                    addManualPerfButton();
+                }
+            };
+        })();
+    </script>
 </body>
 </html>
