@@ -1,0 +1,64 @@
+name: run-root-action-equivalence
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  run-payload:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'root-action-equivalence'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: root-action-equivalence
+          fetch-depth: 0
+      - name: Run patch payload once
+        shell: bash
+        run: |
+          if grep -q 'function buildRolloutActionEquivalence' js/adventure.js; then
+            echo 'source already patched'
+            exit 0
+          fi
+          python - <<'PY'
+          from pathlib import Path
+          lines = Path('.github/workflows/root-action-equivalence.yml').read_text(encoding='utf-8').splitlines()
+          start = None
+          for i, line in enumerate(lines):
+              if line.strip() == '- name: Apply canonical root action equivalence':
+                  start = i
+                  break
+          if start is None:
+              raise SystemExit('patch payload step not found')
+          run_line = None
+          for i in range(start + 1, len(lines)):
+              if lines[i].strip() == 'run: |':
+                  run_line = i
+                  break
+          if run_line is None:
+              raise SystemExit('patch payload run block not found')
+          payload = []
+          for line in lines[run_line + 1:]:
+              if line.startswith('          '):
+                  payload.append(line[10:])
+              elif line.strip() == '':
+                  payload.append('')
+              else:
+                  break
+          Path('/tmp/root-action-payload.sh').write_text('\n'.join(payload) + '\n', encoding='utf-8')
+          PY
+          bash /tmp/root-action-payload.sh
+      - name: Commit patched sources
+        shell: bash
+        run: |
+          if git diff --quiet -- js/adventure.js js/gpu_engine.js index.html; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add js/adventure.js js/gpu_engine.js index.html
+          git commit -m "동일 카드 root rollout 통합"
+          git push origin HEAD:root-action-equivalence
