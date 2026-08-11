@@ -252,6 +252,23 @@ class Board {
     return this.diceUse >= 100 && !this.isDouble;
   }
 
+  stepManual(n) {
+    const action = Number(n);
+    const card = action > 0 ? this.cards[action - 1] : undefined;
+    const consumesManualDice = !this.autoProcess && card?.[1] === 2;
+    if (!consumesManualDice) return this.step(action);
+    if (this.diceUse >= 100 && !this.isDouble) return true;
+
+    const consumesDouble = this.isDouble;
+    this.useCard(action);
+    if (consumesDouble) {
+      this.isDouble = false;
+    } else {
+      this.diceUse++;
+    }
+    return this.diceUse >= 100 && !this.isDouble;
+  }
+
   useCard(n) {
     if (n > this.cards.length) return
     n--;

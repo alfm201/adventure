@@ -537,6 +537,10 @@ function getExScoreOverviewRowStyle(statusText, available) {
   return { bg: available ? '#ffffff' : '#f8fafc', border: '#e2e8f0' };
 }
 
+function getExScoreCenterLabel() {
+  return computeSettings.engine === 'gpu' ? '평균' : '중앙값';
+}
+
 function renderExScoreOverviewRoot() {
   if (exScoreOverviewHoverIndex < 0 && !usagePreviewState.exScore) {
     hideExScoreOverviewRoot();
@@ -593,7 +597,7 @@ function renderExScoreOverviewRoot() {
       <thead>
         <tr style="color:#475569;background:#f8fafc;">
           <th style="padding:5px 8px;text-align:left;font-weight:700;">case</th>
-          <th style="padding:5px 8px;text-align:right;font-weight:700;">중앙값</th>
+          <th style="padding:5px 8px;text-align:right;font-weight:700;">${getExScoreCenterLabel()}</th>
           <th style="padding:5px 8px;text-align:right;font-weight:700;">범위</th>
           <th style="padding:5px 8px;text-align:right;font-weight:700;">95% CI</th>
           <th style="padding:5px 8px;text-align:right;font-weight:700;">샘플</th>
@@ -1917,14 +1921,7 @@ function eventCanvasClick(e) {
   } else if (isInsideRegion(x, y, REGION_CARDS)) {
     let action = Math.trunc((x - 379) / 43);
     if (env.cards[action - 1] !== undefined) {
-      if (!env.autoProcess && env.cards[action - 1][1] === 2) {
-        if (env.isDouble) {
-          env.isDouble = false;
-        } else {
-          env.diceUse++;
-        }
-      }
-      done = env.step(action);
+      done = env.stepManual(action);
       clearPredictionInteractionState();
       calcEx();
     } else {
@@ -2035,7 +2032,14 @@ function getUiHoverTarget(x, y) {
   return '';
 }
 
+function shouldIgnoreAdventureGameKeydown() {
+  if (!hasAdventureBlockingDomOverlay()) return false;
+  keyDownCtrl = false;
+  return true;
+}
+
 function eventKeydown(e) {
+  if (shouldIgnoreAdventureGameKeydown()) return;
   if (e.key === 'Control') {
     keyDownCtrl = true;
   } else if (keyDownCtrl && e.key === 'q') {
@@ -2094,14 +2098,7 @@ function eventKeydown(e) {
     e.preventDefault();
     let action = e.key;
     if (env.cards[action - 1] !== undefined) {
-      if (!env.autoProcess && env.cards[action - 1][1] === 2) {
-        if (env.isDouble) {
-          env.isDouble = false;
-        } else {
-          env.diceUse++;
-        }
-      }
-      done = env.step(action);
+      done = env.stepManual(action);
       clearPredictionInteractionState();
       calcEx();
     } else {
@@ -2131,20 +2128,14 @@ function eventKeydown(e) {
 }
 
 function newEventKeydown(e) {
+  if (shouldIgnoreAdventureGameKeydown()) return;
   if (e.key === 'Control') {
     keyDownCtrl = true;
   } else if (keyDownCtrl && e.key >= '1' && e.key <= '5') {
     e.preventDefault();
     let action = e.key;
     if (env.cards[action - 1] !== undefined) {
-      if (!env.autoProcess && env.cards[action - 1][1] === 2) {
-        if (env.isDouble) {
-          env.isDouble = false;
-        } else {
-          env.diceUse++;
-        }
-      }
-      done = env.step(action);
+      done = env.stepManual(action);
       clearPredictionInteractionState();
       calcEx();
     } else {
@@ -5216,7 +5207,7 @@ function initUsageOverlay() {
         '<ul style="margin:0; padding-left:16px; list-style:disc;">' +
         '<li><span style="font-weight:700;color:#1d4ed8;">샘플수</span>: 몇 번 시뮬레이션했는지입니다.</li>' +
         '<li><span style="font-weight:700;color:#1d4ed8;">범위</span>: 나온 결과 중 최저~최고 점수입니다.</li>' +
-        '<li><span style="font-weight:700;color:#1d4ed8;">중앙값</span>: 결과를 줄 세웠을 때 가운데 점수입니다.</li>' +
+        '<li><span style="font-weight:700;color:#1d4ed8;">GPU 평균 / CPU 중앙값</span>: GPU는 평균 점수, CPU는 결과를 줄 세웠을 때 가운데 점수입니다.</li>' +
         '<li><span style="font-weight:700;color:#1d4ed8;">신뢰구간</span> <span style="color:#64748b;">(95% CI)</span>: 평균 예상 점수가 어느 정도 흔들릴 수 있는지 보는 참고 범위입니다.</li>' +
         '</ul>' +
         '<div style="margin-top:6px;color:#334155;">' +

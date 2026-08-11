@@ -401,7 +401,7 @@ fn update_score(
     }
   }
 
-  (*score) = min(2898, (*score) + value);
+  (*score) = clamp((*score) + value, 1, 2898);
 
   for (var guard = 0; guard < 16; guard = guard + 1) {
     let eventType = stage_event_at((*score) - 1);
@@ -410,7 +410,7 @@ fn update_score(
       break;
     }
     if (eventType == 4) {
-      (*score) = min(2898, (*score) + stage_move_at((*score) - 1));
+      (*score) = clamp((*score) + stage_move_at((*score) - 1), 1, 2898);
       continue;
     }
     break;
