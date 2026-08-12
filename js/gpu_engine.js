@@ -7,6 +7,8 @@ const X36_GPU_LUT_LEN = 2899;
 const X36_GPU_NEXT_OFFSET = X36_GPU_STAGE_BASE_LEN;
 const X36_GPU_LOCAL_OFFSET = X36_GPU_NEXT_OFFSET + X36_GPU_LUT_LEN;
 const X36_GPU_SAME50_OFFSET = X36_GPU_LOCAL_OFFSET + X36_GPU_LUT_LEN;
+const X36_GPU_FUTURE_P3_OFFSET = X36_GPU_SAME50_OFFSET + X36_GPU_LUT_LEN;
+const X36_GPU_FUTURE_P3_LEN = 8 * X36_GPU_LUT_LEN;
 
 function log(line) {
   if ($('log')) $('log').textContent += `${line}\n`;
@@ -36,6 +38,9 @@ function buildX36GpuLookupData(tables) {
   const next = new Float32Array(X36_GPU_LUT_LEN);
   const local = new Float32Array(X36_GPU_LUT_LEN);
   const same50 = new Int32Array(X36_GPU_LUT_LEN);
+  const rollProjected = new Uint16Array(X36_GPU_LUT_LEN * 11);
+  const rollGainsCard = new Uint8Array(X36_GPU_LUT_LEN * 11);
+  let futureCardP3 = new Float32Array(X36_GPU_FUTURE_P3_LEN);
   const sid = index => index < 0 || index >= X36_GPU_STAGE_BASE_LEN ? 0 : Number(tables.stageId[index] || 0);
   const mov = index => index < 0 || index >= X36_GPU_STAGE_BASE_LEN ? 0 : Number(tables.stageMove[index] || 0);
   const evt = index => index < 0 || index >= X36_GPU_STAGE_BASE_LEN ? 0 : Number(tables.stageEvent[index] || 0);
@@ -80,8 +85,11 @@ function buildX36GpuLookupData(tables) {
       const land = landing(score, diceSum, true);
       const proj = projected(score, diceSum, true);
       const eventType = evt(land - 1);
+      const rollIndex = score * 11 + diceSum - 2;
+      rollProjected[rollIndex] = proj;
       if (eventType === 2 || (eventType === 4 && evt(proj - 1) === 2)) {
         nextValue += weight;
+        rollGainsCard[rollIndex] = 1;
       }
       if (eventType === 2) {
         localValue += weight;
@@ -102,8 +110,39 @@ function buildX36GpuLookupData(tables) {
     same50[score] = count;
   }
 
+  const futureIndex = (remainingPaid, isDouble, score) => (
+    (remainingPaid * 2 + isDouble) * X36_GPU_LUT_LEN + score
+  );
+  let previous = new Float32Array(X36_GPU_FUTURE_P3_LEN);
+  for (let depth = 1; depth <= 3; depth++) {
+    const current = new Float32Array(X36_GPU_FUTURE_P3_LEN);
+    for (let remainingPaid = 0; remainingPaid <= 3; remainingPaid++) {
+      for (let isDouble = 0; isDouble <= 1; isDouble++) {
+        if (remainingPaid === 0 && isDouble === 0) continue;
+        for (let score = 1; score <= X36_GPU_STAGE_BASE_LEN; score++) {
+          let probability = 0;
+          for (let die1 = 1; die1 <= 6; die1++) {
+            for (let die2 = 1; die2 <= 6; die2++) {
+              const rollIndex = score * 11 + die1 + die2 - 2;
+              const proj = rollProjected[rollIndex];
+              const gained = rollGainsCard[rollIndex] !== 0;
+              const nextRemaining = isDouble ? remainingPaid : Math.max(0, remainingPaid - 1);
+              const nextDouble = isDouble ? 0 : (die1 === die2 ? 1 : 0);
+              probability += gained
+                ? 1
+                : previous[futureIndex(nextRemaining, nextDouble, proj)];
+            }
+          }
+          current[futureIndex(remainingPaid, isDouble, score)] = probability / 36;
+        }
+      }
+    }
+    previous = current;
+    if (depth === 3) futureCardP3 = current;
+  }
+
   const packedStageId = new Int32Array(
-    X36_GPU_STAGE_BASE_LEN + X36_GPU_LUT_LEN * 3
+    X36_GPU_FUTURE_P3_OFFSET + X36_GPU_FUTURE_P3_LEN
   );
   for (let i = 0; i < X36_GPU_STAGE_BASE_LEN; i++) {
     packedStageId[i] = Number(tables.stageId[i] || 0);
@@ -112,6 +151,9 @@ function buildX36GpuLookupData(tables) {
     packedStageId[X36_GPU_NEXT_OFFSET + i] = x36F32ToI32Bits(next[i]);
     packedStageId[X36_GPU_LOCAL_OFFSET + i] = x36F32ToI32Bits(local[i]);
     packedStageId[X36_GPU_SAME50_OFFSET + i] = same50[i];
+  }
+  for (let i = 0; i < futureCardP3.length; i++) {
+    packedStageId[X36_GPU_FUTURE_P3_OFFSET + i] = x36F32ToI32Bits(futureCardP3[i]);
   }
   return packedStageId;
 }
@@ -184,6 +226,8 @@ const PARTIAL_STRIDE = 5u;
 const X36_NEXT_OFFSET: u32 = 2898u;
 const X36_LOCAL_OFFSET: u32 = 5797u;
 const X36_SAME50_OFFSET: u32 = 8696u;
+const X36_FUTURE_P3_OFFSET: u32 = 11595u;
+const X36_FUTURE_STRIDE: u32 = 2899u;
 
 const X36_WEIGHT_SCALE: i32 = 1000;
 const W_ROLL_CARD: i32 = 234154;
@@ -192,6 +236,10 @@ const W_ROLL_JUMP_CARD: i32 = 187074;
 const W_HAND_PRESSURE: i32 = 96072;
 const W_LATE_BONUS: i32 = 4423;
 const W_LATE_THRESHOLD: i32 = 70000;
+const W_LATE_FAMILY_THRESHOLD: i32 = 95000;
+const W_LATE_MOVE: i32 = 52506;
+const W_LATE_MULT: i32 = 59091;
+const W_LATE_STAGE: i32 = 44838;
 const W_MOVE_COST: i32 = 79155;
 const W_MOVE_CARD: i32 = 137845;
 const W_MOVE_JUMP: i32 = 2733;
@@ -203,18 +251,24 @@ const W_MULT_JUMP: i32 = 2787;
 const W_MULT_JUMP_CARD: i32 = 83883;
 const W_STAGE_COST: i32 = 4550;
 const W_STAGE_SAME50: i32 = 1740;
-const W_STAGE_JUMP: i32 = 2000;
 const W_HAND_QUALITY_RETENTION: i32 = 102989;
 const W_NEXT_CARD_PRESSURE: i32 = -30000;
 const W_TERMINAL_CONTINUOUS: i32 = -176;
-const W_CHAIN_LATE_PENALTY: i32 = 17906;
+const W_CHAIN_LATE_PENALTY: i32 = 0;
 const W_STAGE_ALT_MOVE_PENALTY: i32 = 2372;
-const W_STAGE_ACTUAL_MOVE: i32 = 485;
+const W_STAGE_ACTUAL_MOVE: i32 = 0;
 const W_STAGE_DESTINATION: i32 = -43919;
 const W_POOL_QUALITY_CARD: i32 = 325;
+const W_FUTURE_CARD_P3: i32 = 133780;
 
 fn x36_w(value: i32) -> f32 {
   return f32(value);
+}
+
+fn late_family_t_x36(diceUse: i32) -> f32 {
+  let numerator = max(0, diceUse * X36_WEIGHT_SCALE - W_LATE_FAMILY_THRESHOLD);
+  let denominator = max(1, 100 * X36_WEIGHT_SCALE - W_LATE_FAMILY_THRESHOLD);
+  return f32(numerator) / f32(denominator);
 }
 
 fn next_rand(rng: ptr<function, u32>) -> u32 {
@@ -282,6 +336,15 @@ fn local_quality_x36(score: i32) -> f32 {
 
 fn same_stage_count50(score: i32) -> i32 {
   return stageId[X36_SAME50_OFFSET + x36_score_index(score)];
+}
+
+fn future_card_p3_x36(score: i32, remainingPaid: i32, isDouble: i32) -> f32 {
+  let remaining = u32(clamp(remainingPaid, 0, 3));
+  let doubleIndex = u32(select(0, 1, isDouble != 0));
+  let block = remaining * 2u + doubleIndex;
+  return bitcast<f32>(
+    stageId[X36_FUTURE_P3_OFFSET + block * X36_FUTURE_STRIDE + x36_score_index(score)]
+  );
 }
 
 ${poolQualityWgsl}
@@ -491,6 +554,51 @@ fn stage_card_move(score: i32, cValue: i32) -> i32 {
   return value;
 }
 
+fn future_card_p3_at_successor_x36(score: i32, diceUse: i32, isDouble: i32) -> f32 {
+  return future_card_p3_x36(score, max(0, 100 - diceUse), isDouble);
+}
+
+fn successor_future_card_p3_x36(
+  score: i32,
+  diceUse: i32,
+  isDouble: i32,
+  action: u32,
+  hand: ptr<function, array<i32, 5>>,
+) -> f32 {
+  var total = 0.0;
+  if (action == 0u) {
+    for (var die1 = 1; die1 <= 6; die1 = die1 + 1) {
+      for (var die2 = 1; die2 <= 6; die2 = die2 + 1) {
+        let position = projected_score_after_move(score, die1 + die2, true);
+        let nextDiceUse = select(diceUse + 1, diceUse, isDouble != 0);
+        let nextDouble = select(select(0, 1, die1 == die2), 0, isDouble != 0);
+        total = total + future_card_p3_at_successor_x36(position, nextDiceUse, nextDouble);
+      }
+    }
+    return total;
+  }
+
+  let cardId = u32((*hand)[action - 1u]);
+  let cardKind = cardType[cardId];
+  let cardAmount = cardValue[cardId];
+  if (cardKind == 2) {
+    for (var die1 = 1; die1 <= 6; die1 = die1 + 1) {
+      for (var die2 = 1; die2 <= 6; die2 = die2 + 1) {
+        let position = projected_score_after_move(score, (die1 + die2) * cardAmount, false);
+        let nextDiceUse = select(diceUse + 1, diceUse, isDouble != 0);
+        let nextDouble = select(select(0, 1, die1 == die2), 0, isDouble != 0);
+        total = total + future_card_p3_at_successor_x36(position, nextDiceUse, nextDouble);
+      }
+    }
+    return total;
+  }
+
+  var rawValue = cardAmount;
+  if (cardKind == 3) { rawValue = stage_card_move(score, cardAmount); }
+  let position = projected_score_after_move(score, rawValue, false);
+  return 36.0 * future_card_p3_at_successor_x36(position, diceUse, isDouble);
+}
+
 fn dice_sum_weight(sum: i32) -> i32 {
   if (sum == 2 || sum == 12) { return 1; }
   if (sum == 3 || sum == 11) { return 2; }
@@ -530,7 +638,14 @@ fn move_chain_card_option(score: i32, action: u32, hand: ptr<function, array<i32
   return false;
 }
 
-fn current_best_roll_value_x36(score: i32, handCount: i32, obtained: u32) -> f32 {
+fn current_best_roll_value_x36(
+  score: i32,
+  diceUse: i32,
+  isDouble: i32,
+  hand: ptr<function, array<i32, 5>>,
+  handCount: i32,
+  obtained: u32,
+) -> f32 {
   let canGainCard = handCount < 5;
   let poolQ = pool_quality_x36(obtained);
   var total: f32 = 0.0;
@@ -548,6 +663,8 @@ fn current_best_roll_value_x36(score: i32, handCount: i32, obtained: u32) -> f32
       }
     }
   }
+  total = total + successor_future_card_p3_x36(score, diceUse, isDouble, 0u, hand)
+    * x36_w(W_FUTURE_CARD_P3);
   return total;
 }
 
@@ -584,6 +701,7 @@ fn current_best_move_value_x36(
   let landing = raw_landing_after_move(score, cValue, false);
   let eventType = stage_event_at(landing - 1);
   var total = current_best_card_post_x36(score, diceUse, hand, handCount) - 36.0 * x36_w(W_MOVE_COST);
+  total = total + 36.0 * late_family_t_x36(diceUse) * x36_w(W_LATE_MOVE);
   if (eventType == 2) {
     total = total + 36.0 * x36_w(W_MOVE_CARD);
   } else if (eventType == 4) {
@@ -609,6 +727,7 @@ fn current_best_mult_value_x36(
   cValue: i32,
 ) -> f32 {
   var total = current_best_card_post_x36(score, diceUse, hand, handCount) - 36.0 * x36_w(W_MULT_COST);
+  total = total + 36.0 * late_family_t_x36(diceUse) * x36_w(W_LATE_MULT);
   for (var diceSum = 2; diceSum <= 12; diceSum = diceSum + 1) {
     let rawValue = diceSum * cValue;
     let landing = raw_landing_after_move(score, rawValue, false);
@@ -639,10 +758,8 @@ fn current_best_stage_value_x36(
   let landing = raw_landing_after_move(score, rawValue, false);
   let projected = projected_score_after_move(score, rawValue, false);
   var total = current_best_card_post_x36(score, diceUse, hand, handCount) - 36.0 * x36_w(W_STAGE_COST);
+  total = total + 36.0 * late_family_t_x36(diceUse) * x36_w(W_LATE_STAGE);
   total = total + 36.0 * f32(same_stage_count50(score)) * x36_w(W_STAGE_SAME50);
-  if (stage_event_at(landing - 1) == 4) {
-    total = total + 36.0 * f32(max(0, stage_move_at(landing - 1))) * x36_w(W_STAGE_JUMP);
-  }
   total = total - 36.0 * f32(positiveMoveCount) * x36_w(W_STAGE_ALT_MOVE_PENALTY);
   total = total + 36.0 * f32(max(0, projected - score)) * x36_w(W_STAGE_ACTUAL_MOVE);
   total = total + 36.0 * local_quality_x36(projected) * x36_w(W_STAGE_DESTINATION);
@@ -652,6 +769,7 @@ fn current_best_stage_value_x36(
 fn current_best_card_value_x36(
   score: i32,
   diceUse: i32,
+  isDouble: i32,
   action: u32,
   hand: ptr<function, array<i32, 5>>,
   handCount: i32,
@@ -660,26 +778,29 @@ fn current_best_card_value_x36(
   let cardId = u32((*hand)[action - 1u]);
   let cType = cardType[cardId];
   let cValue = cardValue[cardId];
-  if (cType == 1) { return current_best_move_value_x36(score, diceUse, action, hand, handCount, cValue); }
-  if (cType == 2) { return current_best_mult_value_x36(score, diceUse, hand, handCount, cValue); }
-  if (cType == 3) { return current_best_stage_value_x36(score, diceUse, hand, handCount, cValue, positiveMoveCount); }
-  return -3.402823466e+38;
+  var total = -3.402823466e+38;
+  if (cType == 1) { total = current_best_move_value_x36(score, diceUse, action, hand, handCount, cValue); }
+  if (cType == 2) { total = current_best_mult_value_x36(score, diceUse, hand, handCount, cValue); }
+  if (cType == 3) { total = current_best_stage_value_x36(score, diceUse, hand, handCount, cValue, positiveMoveCount); }
+  return total + successor_future_card_p3_x36(score, diceUse, isDouble, action, hand)
+    * x36_w(W_FUTURE_CARD_P3);
 }
 
 fn choose_action(
   score: i32,
   diceUse: i32,
+  isDouble: i32,
   hand: ptr<function, array<i32, 5>>,
   handCount: i32,
   obtained: u32,
 ) -> u32 {
   var bestAction = 0u;
-  var bestValue = current_best_roll_value_x36(score, handCount, obtained);
+  var bestValue = current_best_roll_value_x36(score, diceUse, isDouble, hand, handCount, obtained);
   if (handCount <= 0) { return 0u; }
   let positiveMoveCount = positive_move_count_x36(hand, handCount);
   let actionCount = u32(handCount + 1);
   for (var action = 1u; action < actionCount; action = action + 1u) {
-    let value = current_best_card_value_x36(score, diceUse, action, hand, handCount, positiveMoveCount);
+    let value = current_best_card_value_x36(score, diceUse, isDouble, action, hand, handCount, positiveMoveCount);
     if (value > bestValue) {
       bestValue = value;
       bestAction = action;
@@ -760,7 +881,7 @@ fn main(
     var done = step_once(&score, &diceUse, &isDouble, &hand, &handCount, &obtained, &rng, actionIndex);
     for (var step = 0u; step < params.maxSteps; step = step + 1u) {
       if (done) { break; }
-      let action = choose_action(score, diceUse, &hand, handCount, obtained);
+      let action = choose_action(score, diceUse, isDouble, &hand, handCount, obtained);
       done = step_once(&score, &diceUse, &isDouble, &hand, &handCount, &obtained, &rng, action);
     }
     let scoreValue = u32(score);

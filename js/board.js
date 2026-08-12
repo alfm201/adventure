@@ -1,3 +1,4 @@
+const X36_POLICY_VERSION = 'X36-G3';
 const X36_WEIGHTS = Object.freeze({
   rollCard: 234.154,
   rollJump: 2.474,
@@ -5,6 +6,10 @@ const X36_WEIGHTS = Object.freeze({
   handPressure: 96.072,
   lateBonus: 4.423,
   lateThreshold: 70,
+  lateFamilyThreshold: 95,
+  lateMove: 52.506,
+  lateMult: 59.091,
+  lateStage: 44.838,
   moveCost: 79.155,
   moveCard: 137.845,
   moveJump: 2.733,
@@ -16,15 +21,15 @@ const X36_WEIGHTS = Object.freeze({
   multJumpCard: 83.883,
   stageCost: 4.55,
   stageSame50: 1.74,
-  stageJump: 2,
   handQualityRetention: 102.989,
   nextCardPressure: -30,
   terminalContinuous: -0.176,
-  chainLatePenalty: 17.906,
+  chainLatePenalty: 0,
   stageAltMovePenalty: 2.372,
-  stageActualMove: 0.485,
+  stageActualMove: 0,
   stageDestination: -43.919,
   poolQualityCard: 0.325,
+  futureCardP3: 133.78,
 });
 
 const X36_DICE_SUM_WEIGHT = Object.freeze({
@@ -43,10 +48,14 @@ function x36StaticCardQuality(cardId) {
 
 function buildX36CpuLuts() {
   const size = 2898;
+  const stride = size + 1;
   const nextCardProbability = new Float64Array(size + 1);
   const localQuality = new Float64Array(size + 1);
   const sameStage50 = new Uint8Array(size + 1);
   const staticCardQuality = new Float64Array(31);
+  const rollProjected = new Uint16Array((size + 1) * 11);
+  const rollGainsCard = new Uint8Array((size + 1) * 11);
+  let futureCardP3 = new Float32Array(8 * stride);
   let totalCardQuality = 0;
 
   const stageIdAt = index => index < 0 || index >= size ? 0 : Number(stage[index][1] || 0);
@@ -91,8 +100,11 @@ function buildX36CpuLuts() {
       const landing = rawLandingAfterMove(score, diceSum, true);
       const projected = projectedScoreAfterMove(score, diceSum, true);
       const eventType = stageEventAt(landing - 1);
+      const rollIndex = score * 11 + diceSum - 2;
+      rollProjected[rollIndex] = projected;
       if (eventType === 2 || (eventType === 4 && stageEventAt(projected - 1) === 2)) {
         nextCard += weight;
+        rollGainsCard[rollIndex] = 1;
       }
       if (eventType === 2) {
         local += weight;
@@ -113,12 +125,44 @@ function buildX36CpuLuts() {
     sameStage50[score] = count;
   }
 
+  const futureIndex = (remainingPaid, isDouble, score) => (
+    (remainingPaid * 2 + isDouble) * stride + score
+  );
+  let previous = new Float32Array(8 * stride);
+  for (let depth = 1; depth <= 3; depth++) {
+    const current = new Float32Array(8 * stride);
+    for (let remainingPaid = 0; remainingPaid <= 3; remainingPaid++) {
+      for (let isDouble = 0; isDouble <= 1; isDouble++) {
+        if (remainingPaid === 0 && isDouble === 0) continue;
+        for (let score = 1; score <= size; score++) {
+          let probability = 0;
+          for (let die1 = 1; die1 <= 6; die1++) {
+            for (let die2 = 1; die2 <= 6; die2++) {
+              const rollIndex = score * 11 + die1 + die2 - 2;
+              const projected = rollProjected[rollIndex];
+              const gained = rollGainsCard[rollIndex] !== 0;
+              const nextRemaining = isDouble ? remainingPaid : Math.max(0, remainingPaid - 1);
+              const nextDouble = isDouble ? 0 : (die1 === die2 ? 1 : 0);
+              probability += gained
+                ? 1
+                : previous[futureIndex(nextRemaining, nextDouble, projected)];
+            }
+          }
+          current[futureIndex(remainingPaid, isDouble, score)] = probability / 36;
+        }
+      }
+    }
+    previous = current;
+    if (depth === 3) futureCardP3 = current;
+  }
+
   return {
     nextCardProbability,
     localQuality,
     sameStage50,
     staticCardQuality,
     totalCardQuality,
+    futureCardP3,
   };
 }
 
@@ -471,6 +515,46 @@ class Board {
       return projected;
     };
 
+    const futureCardP3At = (position, nextDiceUse, nextDouble) => {
+      const remainingPaid = Math.max(0, Math.min(3, 100 - nextDiceUse));
+      const index = (remainingPaid * 2 + (nextDouble ? 1 : 0)) * 2899
+        + Math.max(1, Math.min(2898, position));
+      return Number(luts.futureCardP3[index] || 0);
+    };
+
+    const successorFutureCardP3 = (action, card) => {
+      let total = 0;
+      const addRolledSuccessor = (rawValue, stop, die1, die2) => {
+        const position = projectedScoreAfterMove(score, rawValue, stop);
+        const nextDiceUse = this.isDouble ? diceUse : diceUse + 1;
+        const nextDouble = this.isDouble ? false : die1 === die2;
+        total += futureCardP3At(position, nextDiceUse, nextDouble);
+      };
+
+      if (action === 0 || card[1] === 2) {
+        for (let die1 = 1; die1 <= 6; die1++) {
+          for (let die2 = 1; die2 <= 6; die2++) {
+            const multiplier = action === 0 ? 1 : Number(card[2] || 0);
+            addRolledSuccessor((die1 + die2) * multiplier, action === 0, die1, die2);
+          }
+        }
+        return total;
+      }
+
+      let rawValue = Number(card[2] || 0);
+      if (card[1] === 3) {
+        const targetStage = stageIdAt(score - 1) + rawValue;
+        for (let i = score; i < 2897; i++) {
+          if (stageIdAt(i) === targetStage) {
+            rawValue = i - score + 1;
+            break;
+          }
+        }
+      }
+      const position = projectedScoreAfterMove(score, rawValue, false);
+      return 36 * futureCardP3At(position, diceUse, this.isDouble);
+    };
+
     const cardOrJumpCardOption = (landing, projected) => (
       stageEventAt(landing - 1) === 2
       || (stageEventAt(landing - 1) === 4 && stageEventAt(projected - 1) === 2)
@@ -526,6 +610,7 @@ class Board {
         }
       }
     }
+    rollValue += successorFutureCardP3(0, null) * W.futureCardP3;
 
     if (handCount === 0) return 0;
 
@@ -546,6 +631,10 @@ class Board {
 
     let bestAction = 0;
     let bestValue = rollValue;
+    const lateFamily = Math.max(
+      0,
+      (diceUse - W.lateFamilyThreshold) / Math.max(0.001, 100 - W.lateFamilyThreshold),
+    );
 
     for (let action = 1; action <= handCount; action++) {
       const card = cards[action - 1];
@@ -555,6 +644,7 @@ class Board {
         const landing = rawLandingAfterMove(score, card[2], false);
         const eventType = stageEventAt(landing - 1);
         value = cardPost - 36 * W.moveCost;
+        value += 36 * lateFamily * W.lateMove;
         if (eventType === 2) {
           value += 36 * W.moveCard;
         } else if (eventType === 4) {
@@ -568,6 +658,7 @@ class Board {
         }
       } else if (card[1] === 2) {
         value = cardPost - 36 * W.multCost;
+        value += 36 * lateFamily * W.lateMult;
         for (let diceSum = 2; diceSum <= 12; diceSum++) {
           const weight = X36_DICE_SUM_WEIGHT[diceSum];
           const rawValue = diceSum * card[2];
@@ -593,14 +684,14 @@ class Board {
         const landing = rawLandingAfterMove(score, rawValue, false);
         const projected = projectedScoreAfterMove(score, rawValue, false);
         value = cardPost - 36 * W.stageCost;
+        value += 36 * lateFamily * W.lateStage;
         value += 36 * luts.sameStage50[score] * W.stageSame50;
-        if (stageEventAt(landing - 1) === 4) {
-          value += 36 * Math.max(0, stageMoveAt(landing - 1)) * W.stageJump;
-        }
         value -= 36 * positiveMoveCount * W.stageAltMovePenalty;
         value += 36 * Math.max(0, projected - score) * W.stageActualMove;
         value += 36 * luts.localQuality[projected] * W.stageDestination;
       }
+
+      value += successorFutureCardP3(action, card) * W.futureCardP3;
 
       if (value > bestValue) {
         bestValue = value;
@@ -619,3 +710,6 @@ class Board {
     this.rankReg = true;
   }
 }
+
+globalThis.X36_POLICY_VERSION = X36_POLICY_VERSION;
+globalThis.X36_G3_CHOOSE_ACTION = Board.prototype.chooseActionQuality;

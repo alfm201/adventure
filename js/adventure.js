@@ -2552,6 +2552,8 @@ class Board {
   }
 
   chooseActionQuality() {
+    return globalThis.X36_G3_CHOOSE_ACTION.call(this);
+
     const handCount = this.cards.length;
     const score = this.score;
     const diceUse = this.diceUse;
