@@ -1,0 +1,199 @@
+import { dialog, confirmAction } from "./dialogs.js";
+import { showDiagnostics } from "./diagnostics.js";
+function helpSteps() {
+  const alternate = new URLSearchParams(location.search).get("CtrlYn")?.toUpperCase() === "Y";
+  const vela = document.querySelector("#settings-button").dataset.model === "vela";
+  const keys = alternate ? ["1", "2", "3"] : ["Ctrl+Q", "Ctrl+E", "Ctrl+G"];
+  return [
+    ["수동 / 자동 모드", "#mode-button",
+      "<strong>수동</strong>은 실제 게임의 위치·주사위·카드를 직접 입력하는 모드입니다.",
+      "<strong>자동</strong>은 누른 주사위와 카드의 결과를 게임 규칙대로 처리합니다. 추천을 자동으로 실행하지는 않습니다.",
+      "<strong>모드변경</strong>으로 전환해도 현재 상태는 유지됩니다."],
+    ["위치와 스테이지 이동", "#position-button",
+      `현재 <strong>칸 번호</strong>를 누르면 위치를 입력할 수 있습니다. 수동 모드 단축키는 <kbd>${keys[0]}</kbd>입니다.`,
+      `수동 모드에서는 캐릭터를 끌거나 <strong>스테이지 화살표</strong>${alternate ? "" : "·방향키 ←/→"}로 이동할 수 있습니다.`],
+    ["주사위와 더블", "#roll-button",
+      "<strong>수동</strong>에서는 주사위 버튼으로 더블 여부를 바꾸고, <strong>+2~+12</strong>로 나온 눈의 합을 입력합니다.",
+      "<strong>자동</strong>에서는 주사위 버튼으로 두 개를 굴립니다. 더블이면 다음 주사위는 횟수를 소모하지 않습니다.",
+      `<strong>주사위 사용 횟수</strong>를 눌러 수정할 수 있습니다. 수동 모드 단축키는 <kbd>${keys[1]}</kbd>입니다.`],
+    ...(vela ? [["행동별 평가와 추천", "#estimates",
+      "<strong>평가값이 높을수록 유리한 선택</strong>입니다. 추천은 가장 높은 값을 가진 선택이며 최종 점수 예측은 아닙니다.",
+      "목록에 마우스를 올리면 행동별 값을 비교합니다. 클릭 또는 <kbd>Ctrl+R</kbd>로 다시 계산합니다.",
+      "작은 화면에서는 <strong>비교</strong> 버튼을 누르세요. 터치에서는 목록을 길게 눌러도 열립니다.",
+      "<strong>행동별 평가 제목</strong>을 누르면 모델을 바꿀 수 있습니다."]] : [["예상 점수와 추천", "#estimates",
+      "각 선택 이후의 <strong>예상 최종 점수</strong>입니다. ‘추천’은 평균이 가장 높은 선택, ‘근접’은 추천과 차이가 뚜렷하지 않은 선택입니다.",
+      "점수 목록에 마우스를 올리면 전체 비교 표가 열립니다. 목록을 누르거나 <kbd>Ctrl+R</kbd>로 다시 계산합니다.",
+      "작은 화면에서는 <strong>비교</strong> 버튼을 누르세요. 터치에서는 목록을 길게 눌러도 열립니다.",
+      "<strong>예상 점수 제목</strong>을 누르면 모델·계산 방식을 바꿀 수 있습니다.",
+      { label: "통계 읽는 법", html: '<dl class="help-reference"><dt>표본 수</dt><dd>해당 선택을 시뮬레이션한 횟수</dd><dt>평균 / 중앙값</dt><dd>평균은 모든 결과의 평균, 중앙값은 결과를 정렬했을 때 가운데 값입니다. 비교 표의 대표값은 GPU 평균·CPU 중앙값이며 추천은 둘 다 평균 기준입니다.</dd><dt>범위</dt><dd>시뮬레이션에서 나온 최저~최고 점수</dd><dt>95% 신뢰구간</dt><dd>평균 추정의 불확실성을 나타냅니다. 한 판의 점수가 이 안에 나온다는 뜻은 아닙니다.</dd></dl>' }]]),
+    ["카드 사용과 추가", "#hand",
+      "<strong>카드를 누르면 사용</strong>합니다. <kbd>Ctrl+1~5</kbd>로 해당 슬롯을 선택할 수도 있습니다.",
+      "<strong>우클릭하면 이동 없이 바로 버립니다.</strong> 터치에서는 길게 누른 뒤 ‘버리기’를 선택하세요.",
+      `수동 모드에서 <strong>빈 슬롯</strong>이나 <kbd>${keys[2]}</kbd>로 카드를 검색해 추가합니다. 자동 모드에서는 카드 획득 칸에서 뽑습니다.`,
+      { label: "카드 검색 예시", html: '<dl class="help-reference"><dt>이름 일부</dt><dd>카드 이름에 포함된 글자로 검색</dd><dt>+10 또는 10</dt><dd>앞으로 10칸</dd><dt>-5</dt><dd>뒤로 5칸</dd><dt>*2</dt><dd>주사위 2배</dd><dt>&gt;</dt><dd>다음 스테이지</dd></dl>' }],
+    ["도착 미리보기", "#roll-button",
+      "보드에는 <strong>주사위 눈의 합별 도착 확률</strong>이 표시됩니다.",
+      "주사위나 카드에 마우스를 올리면 카드칸·점프칸·멈춤칸 확률을 볼 수 있습니다. 현재 스테이지의 도착 위치는 보드 위에 표시됩니다."],
+    ["전체 카드와 획득 표시", "#card-info-button",
+      "<strong>?</strong> 버튼으로 전체 카드 목록을 열고 닫습니다.",
+      "수동 모드에서는 목록의 카드를 눌러 획득 표시를 바꾸고, 우클릭하면 손패에 추가할 수 있습니다.",
+      "획득 표시만 바꾸는 것과 손패에 카드를 추가하는 것은 별개입니다. 자동 모드에서는 카드 추가와 새 획득 표시가 제한됩니다."],
+    ["다시 시작", "#reset-button",
+      "<strong>재시작</strong>을 누르고 확인하면 위치·주사위·카드가 초기화됩니다. 이 페이지를 열어 둔 동안의 최고 기록은 유지됩니다.",
+      "조작이 헷갈리면 <strong>도움말</strong>에서 다시 확인하세요."],
+  ].map(([title, target, ...content]) => ({
+    title, target,
+    paragraphs: content.filter((item) => typeof item === "string"),
+    detail: content.find((item) => typeof item === "object"),
+  }));
+}
+export function showHelp() {
+  const steps = helpSteps();
+  if (document.querySelector("dialog")) return;
+  let index = 0,
+    drag = null,
+    confirming = false;
+  const body = document.createElement("div");
+  body.innerHTML =
+    '<div class="help-spotlight" aria-hidden="true"></div><section class="help-bubble"><div class="help-arrow" aria-hidden="true"></div><header class="help-title"><span class="help-progress"></span><h3></h3></header><div class="help-content"><div class="help-copy"></div><button type="button" data-nav="detail" class="help-more" aria-controls="help-extra" aria-expanded="false" hidden>자세히</button><div id="help-extra" class="help-extra" hidden></div></div><footer><button data-nav="close" class="help-skip">건너뛰기</button><span></span><button data-nav="back" aria-label="이전 안내">이전</button><button data-nav="next" class="primary">다음</button></footer><div class="help-support"><span>문제가 있나요?</span><button type="button" class="help-diagnostics">진단 정보 저장</button></div></section>';
+  const node = dialog("Adventure 사용 안내", body, { className: "help-tour" }),
+    bubble = body.querySelector(".help-bubble"),
+    spot = body.querySelector(".help-spotlight"),
+    extra = body.querySelector(".help-extra"),
+    arrow = body.querySelector(".help-arrow");
+  body.querySelector(".help-diagnostics").onclick = showDiagnostics;
+  const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
+  function place() {
+    const target = document.querySelector(steps[index].target),
+      r = target?.getBoundingClientRect(),
+      w = bubble.offsetWidth,
+      h = bubble.offsetHeight;
+    spot.hidden = !r;
+    if (r)
+      Object.assign(spot.style, {
+        left: r.left - 5 + "px",
+        top: r.top - 5 + "px",
+        width: r.width + 10 + "px",
+        height: r.height + 10 + "px",
+      });
+    let x = (innerWidth - w) / 2,
+      y = (innerHeight - h) / 2,
+      side = "none";
+    if (r) {
+      if (r.right + 22 + w <= innerWidth - 12) {
+        x = r.right + 22;
+        y = r.top;
+        side = "left";
+      } else if (r.left - 22 - w >= 12) {
+        x = r.left - 22 - w;
+        y = r.top;
+        side = "right";
+      } else {
+        x = r.left + (r.width - w) / 2;
+        y = r.top - h - 22;
+        side = "bottom";
+        if (y < 12) {
+          y = r.bottom + 22;
+          side = "top";
+        }
+      }
+    }
+    x = clamp(x, 12, innerWidth - w - 12);
+    y = clamp(y, 12, innerHeight - h - 12);
+    Object.assign(bubble.style, { left: x + "px", top: y + "px" });
+    arrow.dataset.side = side;
+    if (r) {
+      arrow.style.setProperty(
+        "--arrow-x",
+        clamp(r.left + r.width / 2 - x, 20, w - 20) + "px",
+      );
+      arrow.style.setProperty(
+        "--arrow-y",
+        clamp(r.top + r.height / 2 - y, 20, h - 20) + "px",
+      );
+    }
+  }
+  function render() {
+    const { title, paragraphs, detail } = steps[index];
+    bubble.querySelector("h3").textContent = title;
+    bubble.querySelector(".help-copy").innerHTML = paragraphs.map((line) => `<p>${line}</p>`).join("");
+    bubble.querySelector(".help-progress").textContent = `${index + 1} / ${steps.length}`;
+    extra.innerHTML = detail?.html ?? "";
+    extra.hidden = true;
+    bubble.querySelector(".help-content").scrollTop = 0;
+    const more = bubble.querySelector("[data-nav=detail]");
+    more.hidden = !detail;
+    more.textContent = detail?.label ?? "";
+    more.setAttribute("aria-expanded", "false");
+    bubble.querySelector("[data-nav=back]").disabled = index === 0;
+    bubble.querySelector("[data-nav=next]").textContent =
+      index === steps.length - 1 ? "완료" : "다음";
+    place();
+  }
+  async function exit() {
+    if (confirming) return;
+    confirming = true;
+    const close = await confirmAction(
+      "도움말 종료",
+      "도움말을 종료할까요? 도움말 버튼으로 언제든 다시 열 수 있습니다.",
+    );
+    confirming = false;
+    if (close) node.close();
+  }
+  node.addEventListener("cancel", (e) => {
+    e.preventDefault();
+    exit();
+  });
+  body.onclick = (e) => {
+    const nav = e.target.closest("[data-nav]")?.dataset.nav;
+    if (nav === "close") exit();
+    else if (nav === "detail") {
+      extra.hidden = !extra.hidden;
+      e.target.setAttribute("aria-expanded", String(!extra.hidden));
+      e.target.textContent = extra.hidden ? steps[index].detail.label : "설명 접기";
+      place();
+    } else if (nav === "next") {
+      if (index === steps.length - 1) node.close();
+      else {
+        index++;
+        render();
+      }
+    } else if (nav === "back" && index) {
+      index--;
+      render();
+    }
+  };
+  const heading = body.querySelector(".help-title");
+  heading.onpointerdown = (e) => {
+    if (e.button !== 0 || e.target.closest("button")) return;
+    const r = bubble.getBoundingClientRect();
+    drag = { x: e.clientX, y: e.clientY, left: r.left, top: r.top };
+    heading.setPointerCapture(e.pointerId);
+  };
+  heading.onpointermove = (e) => {
+    if (!drag) return;
+    arrow.dataset.side = "none";
+    bubble.style.left =
+      clamp(
+        drag.left + e.clientX - drag.x,
+        12,
+        innerWidth - bubble.offsetWidth - 12,
+      ) + "px";
+    bubble.style.top =
+      clamp(
+        drag.top + e.clientY - drag.y,
+        12,
+        innerHeight - bubble.offsetHeight - 12,
+      ) + "px";
+  };
+  heading.onpointerup = heading.onpointercancel = () => (drag = null);
+  window.addEventListener("resize", place);
+  node.addEventListener(
+    "close",
+    () => window.removeEventListener("resize", place),
+    { once: true },
+  );
+  render();
+  bubble.querySelector("[data-nav=next]").focus({ preventScroll: true });
+  return node;
+}

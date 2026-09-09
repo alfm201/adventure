@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&display=swap" rel="stylesheet">
+    <style>
+        html,
+        body {
+            width: 100%;
+            min-height: 100%;
+            margin: 0;
+            background: #ffffff;
+        }
+        body {
+            min-height: 100vh;
+            min-height: 100dvh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+        #game_screen {
+            display: block;
+            width: min(100vw, 177.81vh);
+            width: min(100dvw, 177.81dvh);
+            height: min(100vh, 56.24vw);
+            height: min(100dvh, 56.24dvw);
+            touch-action: none;
+        }
+        #temp_canvas {
+            display: none;
+        }
+        #current-version-link {
+            position: fixed;
+            z-index: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-sizing: border-box;
+            width: 90px;
+            height: 38px;
+            border: 2px solid rgb(53, 79, 108);
+            border-radius: 12px;
+            background: rgb(45, 137, 195);
+            color: white;
+            font: 12px Arial, "Malgun Gothic", sans-serif;
+            text-decoration: none;
+            transform-origin: top left;
+            -webkit-user-select: none;
+            user-select: none;
+            touch-action: manipulation;
+        }
+        #current-version-link::before {
+            content: "";
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            right: 6px;
+            height: 9.5px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, .1);
+            pointer-events: none;
+        }
+        #current-version-link:hover {
+            border-color: rgb(255, 218, 122);
+            background: rgb(65, 165, 225);
+            box-shadow: 0 0 12px rgba(255, 184, 70, .75);
+        }
+        #adventure-compute-modal {
+            box-sizing: border-box;
+            padding: 16px;
+        }
+        #adventure-compute-modal *,
+        #adventure-usage-root * {
+            box-sizing: border-box;
+        }
+        @media (max-width: 640px) {
+            #compute-engine-options,
+            #fq1-engine-options {
+                grid-template-columns: 1fr !important;
+            }
+        }
+        #adventure-loading {
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background:
+                linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+                #111318;
+            background-size: 28px 28px, 28px 28px, auto;
+            color: #f7f3ea;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+        #adventure-loading-card {
+            width: min(440px, calc(100vw - 40px));
+            padding: 24px;
+            border: 1px solid rgba(247, 243, 234, 0.16);
+            border-radius: 8px;
+            background: rgba(22, 24, 29, 0.92);
+            box-shadow: 0 24px 70px rgba(0, 0, 0, 0.36);
+            box-sizing: border-box;
+        }
+        #adventure-loading-title {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            margin-bottom: 10px;
+        }
+        #adventure-loading-title strong {
+            font-size: 18px;
+            letter-spacing: 0;
+        }
+        #adventure-loading-percent {
+            min-width: 44px;
+            text-align: right;
+            color: #f0b35a;
+            font-variant-numeric: tabular-nums;
+            font-weight: 800;
+        }
+        #adventure-loading-status {
+            margin-bottom: 16px;
+            color: #c9c2b4;
+            font-size: 13px;
+            line-height: 1.55;
+        }
+        #adventure-loading-track {
+            height: 10px;
+            overflow: hidden;
+            border-radius: 999px;
+            background: #2a2d35;
+            border: 1px solid rgba(247, 243, 234, 0.1);
+        }
+        #adventure-loading-fill {
+            width: 8%;
+            height: 100%;
+            border-radius: inherit;
+            background: #37c6a3;
+            transition: width 240ms ease;
+        }
+        #adventure-loading-detail {
+            margin-top: 12px;
+            color: #9ea7a3;
+            font-size: 12px;
+            min-height: 18px;
+        }
+        #adventure-loading-steps {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 6px;
+            margin-top: 18px;
+        }
+        .adventure-loading-step {
+            height: 3px;
+            border-radius: 999px;
+            background: #343842;
+        }
+        .adventure-loading-step.is-active {
+            background: #37c6a3;
+        }
+    </style>
+    <title>Adventure</title>
+</head>
+<body>
+    <div id="adventure-loading">
+        <div id="adventure-loading-card">
+            <div id="adventure-loading-title">
+                <strong>Adventure 준비 중</strong>
+                <span id="adventure-loading-percent">0%</span>
+            </div>
+            <div id="adventure-loading-status">보드 이미지와 계산 엔진을 준비하고 있습니다.</div>
+            <div id="adventure-loading-track" aria-hidden="true">
+                <div id="adventure-loading-fill"></div>
+            </div>
+            <div id="adventure-loading-detail">초기화 시작</div>
+            <div id="adventure-loading-steps" aria-hidden="true">
+                <span class="adventure-loading-step is-active"></span>
+                <span class="adventure-loading-step"></span>
+                <span class="adventure-loading-step"></span>
+            </div>
+        </div>
+    </div>
+    <canvas id="temp_canvas" width="1234" height="694"></canvas>
+    <canvas id="game_screen" width="1234" height="694"></canvas>
+    <a id="current-version-link" href="../../" tabindex="-1" aria-label="신규 버전으로 이동">신규 버전</a>
+    <script src="./js/stageName.js?v=20260509051442377682"></script>
+    <script src="./js/stage.js?v=20260509051442377682"></script>
+    <script src="./js/cardInfo.js?v=20260509051442377682"></script>
+    <script src="./js/userCardInfo.js?v=20260509051442377682"></script>
+    <script src="./js/board.js?v=20260812000000000000"></script>
+    <script src="./js/gpu_engine.js?v=20260812000000000000"></script>
+    <script src="./js/cpu_rollout_worker_loader.js?v=20260807203200000000"></script>
+    <script src="./js/adventure.js?v=20260909-assets"></script>
+    <script src="./js/navigation.js?v=20260909"></script>
+</body>
+</html>

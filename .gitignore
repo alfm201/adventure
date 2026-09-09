@@ -1,0 +1,5 @@
+temp/
+node_modules/
+.cache/
+.tools/
+public/models/**/*.gz

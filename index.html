@@ -1,165 +1,159 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ko">
-<head>
-    <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&display=swap" rel="stylesheet">
-    <style>
-        html,
-        body {
-            width: 100%;
-            min-height: 100%;
-            margin: 0;
-            background: #ffffff;
-        }
-        body {
-            min-height: 100vh;
-            min-height: 100dvh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            overflow: hidden;
-        }
-        #game_screen {
-            display: block;
-            width: min(100vw, 177.81vh);
-            width: min(100dvw, 177.81dvh);
-            height: min(100vh, 56.24vw);
-            height: min(100dvh, 56.24dvw);
-            touch-action: none;
-        }
-        #temp_canvas {
-            display: none;
-        }
-        #adventure-compute-modal {
-            box-sizing: border-box;
-            padding: 16px;
-        }
-        #adventure-compute-modal *,
-        #adventure-usage-root * {
-            box-sizing: border-box;
-        }
-        @media (max-width: 640px) {
-            #compute-engine-options,
-            #fq1-engine-options {
-                grid-template-columns: 1fr !important;
-            }
-        }
-        #adventure-loading {
-            position: fixed;
-            inset: 0;
-            z-index: 9999;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background:
-                linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
-                #111318;
-            background-size: 28px 28px, 28px 28px, auto;
-            color: #f7f3ea;
-            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        }
-        #adventure-loading-card {
-            width: min(440px, calc(100vw - 40px));
-            padding: 24px;
-            border: 1px solid rgba(247, 243, 234, 0.16);
-            border-radius: 8px;
-            background: rgba(22, 24, 29, 0.92);
-            box-shadow: 0 24px 70px rgba(0, 0, 0, 0.36);
-            box-sizing: border-box;
-        }
-        #adventure-loading-title {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 14px;
-            margin-bottom: 10px;
-        }
-        #adventure-loading-title strong {
-            font-size: 18px;
-            letter-spacing: 0;
-        }
-        #adventure-loading-percent {
-            min-width: 44px;
-            text-align: right;
-            color: #f0b35a;
-            font-variant-numeric: tabular-nums;
-            font-weight: 800;
-        }
-        #adventure-loading-status {
-            margin-bottom: 16px;
-            color: #c9c2b4;
-            font-size: 13px;
-            line-height: 1.55;
-        }
-        #adventure-loading-track {
-            height: 10px;
-            overflow: hidden;
-            border-radius: 999px;
-            background: #2a2d35;
-            border: 1px solid rgba(247, 243, 234, 0.1);
-        }
-        #adventure-loading-fill {
-            width: 8%;
-            height: 100%;
-            border-radius: inherit;
-            background: #37c6a3;
-            transition: width 240ms ease;
-        }
-        #adventure-loading-detail {
-            margin-top: 12px;
-            color: #9ea7a3;
-            font-size: 12px;
-            min-height: 18px;
-        }
-        #adventure-loading-steps {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 6px;
-            margin-top: 18px;
-        }
-        .adventure-loading-step {
-            height: 3px;
-            border-radius: 999px;
-            background: #343842;
-        }
-        .adventure-loading-step.is-active {
-            background: #37c6a3;
-        }
-    </style>
-    <title>Adventure</title>
-</head>
-<body>
-    <div id="adventure-loading">
-        <div id="adventure-loading-card">
-            <div id="adventure-loading-title">
-                <strong>Adventure 준비 중</strong>
-                <span id="adventure-loading-percent">0%</span>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Adventure v2</title>
+    <link rel="stylesheet" href="./src/presentation/styles/game.css" />
+    <link rel="stylesheet" href="./src/presentation/styles/models.css">
+  </head>
+  <body>
+    <div id="frame" inert>
+      <main id="game" class="game-shell" aria-label="Adventure">
+        <aside class="status-panel" aria-label="게임 상태와 주사위">
+          <section class="profile-panel">
+            <button
+              class="position-button"
+              id="position-button"
+              aria-label="현재 칸 변경"
+            >
+              <output id="position">1</output> <span>칸</span>
+            </button>
+            <div class="portrait" role="img" aria-label="캐릭터"></div>
+            <div id="stage-name" class="stage-name"></div>
+            <output id="stage-position" class="stage-position">1</output>
+          </section>
+          <section class="estimate-panel">
+            <div class="estimate-heading">
+            <button id="settings-button" class="panel-heading">
+              예상 점수
+            </button>
+            <button id="compare-button" aria-label="행동 전체 비교" title="행동 전체 비교" disabled>비교</button>
             </div>
-            <div id="adventure-loading-status">보드 이미지와 계산 엔진을 준비하고 있습니다.</div>
-            <div id="adventure-loading-track" aria-hidden="true">
-                <div id="adventure-loading-fill"></div>
+            <div
+              id="estimates"
+              class="estimate-list"
+              aria-label="예상 점수 목록"
+            ></div>
+          </section>
+          <section class="dice-panel">
+            <div class="dice-heading">주사위 이동</div>
+            <div id="dice-buttons" class="dice-buttons"></div>
+          </section>
+          <button
+            id="roll-button"
+            class="roll-button"
+            aria-label="더블 여부 변경"
+          ></button>
+          <div class="dice-remaining">
+            주사위 보유 : <output id="remaining"></output>
+          </div>
+          <button id="dice-used-button" class="dice-used">
+            주사위 사용 횟수 <output id="dice-used">0</output> / 100
+          </button>
+        </aside>
+        <section class="board-viewport" aria-label="보드">
+          <canvas
+            id="board-canvas"
+            width="1024"
+            height="694"
+            aria-hidden="true"
+          ></canvas>
+          <button
+            id="character-target"
+            class="character-target"
+            aria-label="캐릭터 위치 편집"
+          ></button>
+          <p id="board-description" class="sr-only" aria-live="polite"></p>
+          <nav class="toolbar" aria-label="게임 도구">
+            <div class="record">
+              최고 기록: <output id="high-score">1 칸</output>
             </div>
-            <div id="adventure-loading-detail">초기화 시작</div>
-            <div id="adventure-loading-steps" aria-hidden="true">
-                <span class="adventure-loading-step is-active"></span>
-                <span class="adventure-loading-step"></span>
-                <span class="adventure-loading-step"></span>
+            <div id="hand" class="hand" aria-label="행운 카드"></div>
+            <button
+              id="card-info-button"
+              class="card-info-button"
+              aria-label="카드 정보"
+              aria-expanded="false"
+            >
+              ?
+            </button>
+            <button id="reset-button" class="blue-button">재시작</button>
+            <button id="mode-button" class="blue-button">모드변경</button>
+            <button id="help-button" class="blue-button">도움말</button>
+            <div class="stage-navigation">
+              <button id="prev-stage" aria-label="이전 스테이지"></button
+              ><button id="next-stage" aria-label="다음 스테이지"></button>
             </div>
-        </div>
+          </nav>
+          <section
+            id="card-info"
+            class="card-info"
+            aria-label="카드 획득 정보"
+            hidden
+          >
+            <div id="card-info-list" class="card-info-list"></div>
+          </section>
+        </section>
+      </main>
     </div>
-    <canvas id="temp_canvas" width="1234" height="694"></canvas>
-    <canvas id="game_screen" width="1234" height="694"></canvas>
-    <script src="./js/stageName.js?v=20260509051442377682"></script>
-    <script src="./js/stage.js?v=20260509051442377682"></script>
-    <script src="./js/cardInfo.js?v=20260509051442377682"></script>
-    <script src="./js/userCardInfo.js?v=20260509051442377682"></script>
-    <script src="./js/board.js?v=20260812000000000000"></script>
-    <script src="./js/gpu_engine.js?v=20260812000000000000"></script>
-    <script src="./js/cpu_rollout_worker_loader.js?v=20260807203200000000"></script>
-    <script src="./js/adventure.js?v=20260812000000000000"></script>
-    <script src="./js/fq1_mode.js?v=20260806083700000000"></script>
-</body>
+    <section
+      id="score-overview"
+      class="popover overview"
+      aria-label="예상 점수 전체 비교"
+      hidden
+    >
+      <header><strong>예상 점수 전체 비교</strong><span>6개 case</span></header>
+      <p class="legend">
+        <b class="recommended">추천</b>: 현재 평균이 가장 높은 선택 ·
+        <b class="near">근접</b>: 차이가 작아 우열이 애매한 선택 ·
+        <b class="candidate">후보</b>: 아직 제외되지 않은 선택
+      </p>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>case</th>
+              <th id="center-label">평균</th>
+              <th>범위</th>
+              <th>95% CI</th>
+              <th>샘플</th>
+              <th>추천차</th>
+              <th>상태</th>
+            </tr>
+          </thead>
+          <tbody id="overview-body"></tbody>
+        </table>
+      </div>
+      <div id="evaluation-detail" class="evaluation-detail"></div>
+    </section>
+    <section
+      id="prediction"
+      class="popover prediction"
+      aria-label="도착 예측"
+      hidden
+    >
+      <div id="prediction-content"></div>
+    </section>
+    <div id="loading" class="loading">
+      <section class="loading-card" aria-label="게임 준비">
+        <p class="loading-brand">Adventure</p>
+        <header>
+          <strong>모험을 준비하고 있어요</strong
+          ><output id="loading-percent">0%</output>
+        </header>
+        <p id="loading-status">잠시 후 게임이 시작됩니다.</p>
+        <progress id="loading-progress" max="100" value="0"></progress>
+        <p id="loading-detail">화면 준비 중</p>
+        <div class="loading-links"><button id="boot-retry" hidden>다시 시도</button><button id="boot-diagnostics" title="현재 오류와 브라우저 정보를 파일로 저장합니다. 자동 전송되지 않습니다." hidden>진단 정보 저장</button><a id="legacy-link" class="legacy-access" href="./old/v1/" aria-label="기존 화면으로 이동"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2.5" y="3.5" width="15" height="13" rx="2"/><path d="M3 7h14"/></svg><span>기존 화면</span><span class="legacy-arrow" aria-hidden="true">→</span></a></div>
+      </section>
+    </div>
+    <div id="notification-stack" class="notification-stack" hidden>
+      <div id="toast" class="notification toast" role="status" aria-atomic="true" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v1"/></svg><span class="notification-message"></span></div>
+      <div id="asset-notice" class="notification asset-notice" role="status" aria-atomic="true" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 10 18H2L12 3Z"/><path d="M12 9v5M12 17v1"/></svg><span class="notification-message"></span><button type="button">다시 시도</button></div>
+      <div id="debug-notice" class="notification" role="status" aria-atomic="true" hidden><span class="notification-message">문제가 반복되면 진단 정보를 함께 전달해 주세요.</span><button type="button">진단 정보</button></div>
+    </div>
+    <script src="./src/platform/diagnostics.js"></script>
+    <script src="./src/bootstrap/loader.js"></script>
+  </body>
 </html>
