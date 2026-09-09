@@ -6,6 +6,7 @@ import { compatibilityMessage } from "../../content/compatibility.js";
 import { showSupport } from "../components/support.js";
 import { diagnostics } from "../../platform/report.js";
 import { showDiagnostics } from "./diagnostics.js";
+import { downloadProgress } from "./download-progress.js";
 
 const megabytes = bytes => `${Math.round(bytes / 1e6).toLocaleString()} MB`;
 const transferLabel = localModel ? "파일 읽기" : "다운로드";
@@ -140,7 +141,7 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
     const resident = coordinator.vela?.ready && sameModel(coordinator.vela.info.manifest, manifest);
     const supported = coordinator.velaSupport.storage !== false && !!navigator.storage?.getDirectory && !issue;
     body.innerHTML = `<p class="model-intro">${resident ? "모델은 준비되어 있습니다. 다음 접속을 위한 저장 여부를 선택하세요." : localModel ? "이 PC의 모델 파일을 불러와 준비합니다." : "전체 모델을 한 번 내려받아 준비합니다."}</p>
-      <div class="model-size"><strong>${megabytes(manifest.bytes)} <span>${resident || localModel ? "모델 파일" : "다운로드"}</span></strong><span>${resident ? localModel ? "저장 시 파일을 다시 읽습니다" : "저장 시 다시 다운로드" : `저장 시 약 ${megabytes(manifest.bytes)}`}</span></div>
+      <div class="model-size"><strong>${megabytes(manifest.bytes)} <span>${resident || localModel ? "모델 파일" : "다운로드"}</span></strong>${resident ? `<span>${localModel ? "저장 시 파일을 다시 읽습니다" : "저장 시 다시 다운로드"}</span>` : ""}</div>
       <p class="model-memory">${memoryText(manifest)}</p>
       <p class="model-question">${localModel ? "모델을 브라우저에도 저장할까요?" : "다음에도 다운로드 없이 사용할까요?"}</p>
       <div class="cache-options" role="radiogroup" aria-label="모델 저장 동의">
@@ -173,6 +174,7 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
     heading.textContent = title;
     body.innerHTML = `<div class="model-loading" aria-live="polite"><p class="model-loading-title">준비하고 있습니다.</p><p class="model-loading-detail">잠시만 기다려 주세요.</p>
       <div class="model-meter"><span>${transferLabel}</span><strong class="model-transfer">준비 중</strong></div><progress class="model-download" max="1" value="0" aria-label="모델 ${transferLabel}"></progress>
+      <p class="model-transfer-detail" aria-live="off" hidden></p>
       <div class="model-meter"><span>모델 준비</span><strong class="model-prepared">대기 중</strong></div><progress class="model-prepare" max="1" value="0" aria-label="모델 준비"></progress>
       </div>${manifest ? `<p class="model-memory">${memoryText(manifest)}</p>` : ""}<footer><button class="model-back">이전</button><span></span><button class="model-cancel">취소</button></footer>`;
     body.querySelector(".model-back").onclick = select; body.querySelector(".model-cancel").onclick = () => node.close();
@@ -180,10 +182,13 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
   }
   async function loadVela(persist, manifest, cachedOnly = false) {
     const current = progressScreen("VELA 준비", manifest), signal = controller.signal;
+    const transfer = localModel ? null : downloadProgress(body.querySelector(".model-transfer-detail"));
+    signal.addEventListener("abort", () => transfer?.dispose(), { once: true });
     let downloaded = false;
     try {
       const info = await coordinator.prepareVela({ persist, manifest, cachedOnly, signal, onProgress: data => {
         if (current !== epoch || !node.open) return;
+        transfer?.update(data);
         const cached = data.phase === "cache";
         body.querySelector(".model-loading-title").textContent = cached ? "모델을 메모리에 준비하는 중" : data.phase === "download" ? localModel ? "VELA를 불러오는 중" : "VELA를 내려받는 중" : data.phase === "retry" ? localModel ? "모델 파일을 다시 읽는 중" : "모델을 다시 내려받는 중" : "VELA를 준비하는 중";
         body.querySelector(".model-loading-detail").textContent = data.phase === "retry" ? localModel ? "브라우저 저장본 대신 이 PC의 모델 파일을 읽습니다." : "저장된 파일을 확인하지 못해 새로 받습니다." : "준비가 끝나면 바로 사용할 수 있습니다.";
@@ -193,6 +198,10 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
           body.querySelector(".model-transfer").textContent = data.total ? `${megabytes(data.received)} / ${megabytes(data.total)}` : "준비 중";
           body.querySelector(".model-download").value = data.fraction || 0;
           if (data.phase === "download") downloaded = true;
+        }
+        if (downloaded && data.phase === "prepare") {
+          body.querySelector(".model-transfer").textContent = `${megabytes(manifest.bytes)} / ${megabytes(manifest.bytes)}`;
+          body.querySelector(".model-download").value = 1;
         }
         body.querySelector(".model-prepare").value = data.prepared || 0;
         body.querySelector(".model-prepared").textContent = data.prepared ? `${Math.round(data.prepared * 100)}%` : "대기 중";
@@ -205,6 +214,7 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
       body.querySelector(".primary").onclick = () => leave(() => coordinator.configure({ model: "vela" }));
       focusPrimary();
     } catch (error) { if (!signal.aborted && current === epoch && node.open) failure(error, inspectVela); }
+    finally { transfer?.dispose(); }
   }
   async function loadX36() {
     const current = progressScreen("X36 준비"), signal = controller.signal;

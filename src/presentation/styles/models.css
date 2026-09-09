@@ -60,6 +60,7 @@
 .model-loading-detail { color: #647579; font-size: 12px; margin: 0 0 22px; }
 .model-meter { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; margin: 14px 0 7px; }
 .model-meter strong { font-weight: 400; color: #617673; font-variant-numeric: tabular-nums; }
+.model-transfer-detail { margin: 6px 0 0; color: #617673; font-size: 11px; line-height: 1.5; text-align: right; font-variant-numeric: tabular-nums; }
 .model-dialog progress { width: 100%; height: 8px; display: block; border: 0; border-radius: 4px; overflow: hidden; accent-color: #358a7a; }
 .model-dialog progress::-webkit-progress-bar { background: #e2ede7; border-radius: 4px; }
 .model-dialog progress::-webkit-progress-value { background: #358a7a; border-radius: 4px; }
