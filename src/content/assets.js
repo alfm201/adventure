@@ -18,7 +18,12 @@ export class Assets extends EventTarget {
       };
       const timer = setTimeout(() => finish(Error("Image timed out")), this.timeout);
       record.cancel = () => finish(new DOMException("Cancelled", "AbortError"));
-      image.onload = () => finish(); image.onerror = () => finish(Error("Image unavailable"));
+      image.decoding = "async";
+      image.onload = () => {
+        if (typeof image.decode === "function") image.decode().then(() => finish(), finish);
+        else finish();
+      };
+      image.onerror = () => finish(Error("Image unavailable"));
       image.src = new URL(`../../public/assets/${id}.png`, import.meta.url).href;
     });
   }
@@ -58,11 +63,10 @@ export class Assets extends EventTarget {
     this.changed();
   }
   get missing() { return [...this.records.values()].filter(r => r.state !== "loaded"); }
-  async initial(onProgress = () => {}, wait = 2000) {
-    const ids = [1, 76, 77, 78, 79, 82]; let finished = 0, timer;
+  async initial(onProgress = () => {}) {
+    const ids = Array.from({ length: 82 }, (_, index) => index + 1); let finished = 0;
     const tasks = ids.map(id => this.load(id).finally(() => onProgress(++finished, ids.length)));
-    try { await Promise.race([Promise.allSettled(tasks), new Promise(resolve => timer = setTimeout(resolve, wait))]); }
-    finally { clearTimeout(timer); }
+    await Promise.allSettled(tasks);
   }
   dispose() { this.disposed = true; for (const record of this.records.values()) record.cancel?.(); }
 }
