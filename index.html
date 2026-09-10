@@ -26,10 +26,11 @@
           <section class="estimate-panel">
             <div class="estimate-heading">
             <button id="settings-button" class="panel-heading">
-              예상 점수
+              모델 선택
             </button>
             <button id="compare-button" aria-label="행동 전체 비교" title="행동 전체 비교" disabled>비교</button>
             </div>
+            <div class="score-forecast" id="score-forecast"><span id="forecast-label">예상 최종 점수</span><output id="forecast-value">—</output><small id="forecast-delta"></small></div>
             <div
               id="estimates"
               class="estimate-list"
@@ -45,9 +46,6 @@
             class="roll-button"
             aria-label="더블 여부 변경"
           ></button>
-          <div class="dice-remaining">
-            주사위 보유 : <output id="remaining"></output>
-          </div>
           <button id="dice-used-button" class="dice-used">
             주사위 사용 횟수 <output id="dice-used">0</output> / 100
           </button>

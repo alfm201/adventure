@@ -29,6 +29,8 @@ export function bindOverview(coordinator, prediction) {
   button.setAttribute("aria-haspopup", "dialog"); button.setAttribute("aria-expanded", "false");
   estimates.addEventListener("pointerenter", show);
   estimates.addEventListener("pointerleave", hide);
+  document.querySelector("#score-forecast").addEventListener("pointerenter", show);
+  document.querySelector("#score-forecast").addEventListener("pointerleave", hide);
   estimates.addEventListener("focusin", show);
   estimates.addEventListener("focusout", hide);
   estimates.addEventListener("pointerdown", event => {

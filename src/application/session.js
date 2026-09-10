@@ -173,7 +173,7 @@ export class Session extends EventTarget {
     restore(b, snapshot(b));
     this.highScore = Math.max(this.highScore, b.score);
     this.revision++;
-    this.dispatchEvent(new Event("change"));
+    this.dispatchEvent(new CustomEvent("change", { detail: { type } }));
     return true;
   }
 }

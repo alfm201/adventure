@@ -153,7 +153,7 @@ button:disabled {
 }
 .estimate-panel {
   margin-top: 7px;
-  height: 145px;
+  height: 180px;
   flex-shrink: 0;
   background: white;
   border-radius: 4px;
@@ -244,19 +244,12 @@ button:disabled {
     0 0 0 2px #ffedbf,
     inset 0 4px 0 5px #ffffff22;
 }
-.dice-remaining {
-  height: 26px;
-  flex-shrink: 0;
-  margin-top: 9px;
-  border-radius: 8px;
-  background: rgb(209, 57, 73);
-  font-size: 12px;
-  color: white;
-  display: flex;
-  align-items: center;
-  padding: 0 9px;
-  gap: 8px;
-}
+.score-forecast { height: 35px; display: flex; align-items: center; gap: 4px; padding: 0 3px; border-bottom: 1px solid #e3ecee; color: #56686b; white-space: nowrap; }
+.score-forecast > span { font-size: 10px; margin-right: auto; }
+.score-forecast output { font-size: 14px; font-weight: 700; color: #243f43; font-variant-numeric: tabular-nums; }
+.score-forecast small { font-size: 10px; font-variant-numeric: tabular-nums; }
+.score-forecast small[data-direction="up"] { color: #377b72; }
+.score-forecast small[data-direction="down"] { color: #a36159; }
 .dice-used {
   height: 26px;
   flex-shrink: 0;
@@ -845,14 +838,10 @@ dialog input[type="text"] {
   border-radius: 4px;
   background: #ffffff26;
 }
-.dice-remaining,
 .dice-used {
   margin-left: 2px;
   margin-right: 0;
   width: 190px;
-}
-.dice-remaining output {
-  display: none;
 }
 .hand-button {
   position: relative;

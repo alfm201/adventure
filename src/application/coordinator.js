@@ -5,10 +5,12 @@ import { sameModel, LOCAL_MODEL } from "../compute/vela/model.js";
 import { velaRequirements, probeVela } from "../compute/vela/support.js";
 import { compatibilityMessage } from "../content/compatibility.js";
 import { diagnostics } from "../platform/report.js";
+import { Forecast } from "./forecast.js";
 export class Coordinator extends EventTarget {
   constructor(session) {
     super();
     this.session = session;
+    this.forecast = new Forecast();
     this.settings = {
       model: "x36",
       engine: "gpu",
@@ -23,12 +25,14 @@ export class Coordinator extends EventTarget {
     this.gpuEpoch = 0;
     this.gpuSupport = { state: "unchecked" };
     this.velaSupport = { state: "unchecked" };
-    session.addEventListener("change", () => {
+    session.addEventListener("change", (event) => {
+      if (event.detail?.type === "reset") this.forecast.clear();
       this.cancel();
       if (this.enabled) this.recalculate();
     });
   }
   publish(result) {
+    result.forecast = this.forecast.update(this.session.state, result);
     this.result = result;
     if (result.status === "complete" || result.status === "error") diagnostics.record("calculation.result", result);
     this.dispatchEvent(new Event("change"));
@@ -271,6 +275,7 @@ export class Coordinator extends EventTarget {
     }
   }
   async configure(settings) {
+    this.forecast.clear();
     diagnostics.record("model.apply", settings);
     this.cancel();
     const requestId = this.requestId;

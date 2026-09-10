@@ -1,6 +1,4 @@
 import { cards } from "../rules/index.js";
-// Removing separated duplicates can change continuation order. Group only equal
-// effects with an equal remaining ordered effect sequence (GAP-06).
 export function actionGroups(s) {
   const bySignature = new Map(),
     canonical = [],
@@ -9,7 +7,7 @@ export function actionGroups(s) {
   const effects = s.hand.map((id) => `${cards[id].type}:${cards[id].value}`);
   for (let a = 0; a <= s.hand.length; a++) {
     const signature = a
-      ? effects[a - 1] + "|" + effects.filter((_, i) => i !== a - 1).join(",")
+      ? effects[a - 1]
       : "roll";
     let rep = bySignature.get(signature);
     if (rep === undefined) {

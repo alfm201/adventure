@@ -55,7 +55,7 @@ export class GameView {
       vela = result.model === "vela" || result.profile?.model === "vela";
     const text = (id, value) =>
       (document.getElementById(id).textContent = value);
-    text("settings-button", disabled ? "모델 선택" : vela ? "행동별 평가" : "예상 점수");
+    text("settings-button", "모델 선택");
     document.querySelector("#settings-button").dataset.model = vela ? "vela" : "x36";
     const overview = document.querySelector("#score-overview");
     document.querySelector("#compare-button").disabled = disabled;
@@ -69,7 +69,13 @@ export class GameView {
     text("stage-name", `${t.stage}.${stageNames[t.stage - 1]}`);
     text("stage-position", t.ordinal);
     text("dice-used", s.diceUsed);
-    text("remaining", 100 - s.diceUsed);
+    const forecast = result.forecast || {};
+    text("forecast-label", forecast.terminal ? "최종 점수" : "예상 최종 점수");
+    text("forecast-value", Number.isFinite(forecast.value) ? number(forecast.value, 0) + "점" : forecast.pending ? "계산 중…" : "—");
+    text("forecast-delta", forecast.delta ? `(${forecast.delta > 0 ? "+" : ""}${number(forecast.delta, 0)})` : "");
+    document.querySelector("#forecast-delta").dataset.direction = forecast.delta > 0 ? "up" : "down";
+    if (vela) overview.querySelector(".legend").append(document.createElement("br"), document.createTextNode(
+      "예상 최종 점수는 VELA를 계속 따를 때의 예측입니다. 괄호는 직전 상태 대비 변화입니다."));
     text("high-score", session.highScore + " 칸");
     text(
       "board-description",

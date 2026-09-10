@@ -13,6 +13,7 @@ export async function evaluateVela({ snapshot, backend, signal, requestId, revis
     modelName: backend.info?.manifest?.name ?? "VELA v4",
     modelVersion: backend.info?.manifest?.version,
     elapsedMs: result.elapsedMs,
+    expectedFinalScore: terminal ? snapshot.position : result.expectedFinalScore,
     best: result.best, recommended,
     actions: result.values.map((value, action) => ({
       action, value, gap: highest - value,

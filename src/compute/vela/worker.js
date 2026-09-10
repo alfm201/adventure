@@ -3,8 +3,11 @@ import { modelDirectory, writeJson, selectCachedModel, pruneCachedModels, hasCac
 import { fileWriter, checkStorage, storageIssue } from "./files.js";
 import { consumeModel, gunzipStream } from "./streams.js";
 import { responseFor, runtimeFiles, createRuntime, saveRuntime } from "./runtime.js";
+import { fetchJson } from "../../platform/requests.js";
+import { createPredictor } from "../../policies/vela/predictor.mjs";
+import { createValueFeatures } from "../../policies/vela/value-features.js";
 
-let module, ready = false, loadedInfo;
+let module, ready = false, loadedInfo, predict, valueFeatures;
 const post = (type, data = {}) => self.postMessage({ type, ...data });
 async function cachedBundle(manifest, includeStaged = true) {
   const directory = await modelDirectory(manifest);
@@ -116,6 +119,11 @@ async function prepare({ persist, manifest, cachedOnly = false }) {
         } catch (error) { cacheIssue = storageIssue(error); }
       }
       ready = true;
+      try {
+        if (manifest.decodedSha256 !== "14740e47cb2a967e95463cb3615a5abaedeb5a7f371460a65d1a6401fca1b736") throw Error("No score predictor for this model version");
+        predict = createPredictor(await fetchJson(new URL("../../../public/models/vela-v4/predictor.json", import.meta.url)));
+        valueFeatures = createValueFeatures(module, ptr);
+      } catch (error) { predict = null; console.error("Score predictor unavailable", error); }
       loadedInfo = { fromCache, cacheSaved, cacheFailed: !!cacheIssue, cacheIssue, manifest, memoryBytes: module.HEAPU8.byteLength };
       post("ready", loadedInfo);
       return;
@@ -165,6 +173,10 @@ self.onmessage = async ({ data }) => {
     const best = module._evaluate_state();
     if (best < 0) throw Error(module.UTF8ToString(module._last_error()));
     const offset = module._values_ptr() / 8;
-    post("result", { id: data.id, best, values: Array.from(module.HEAPF64.subarray(offset, offset + s.hand.length + 1)), elapsedMs: performance.now() - start });
+    const values = Array.from(module.HEAPF64.subarray(offset, offset + s.hand.length + 1));
+    let expectedFinalScore;
+    try { if (predict) expectedFinalScore = predict(values[best], valueFeatures(s, values[best])); }
+    catch (error) { console.error("Score prediction failed", error); }
+    post("result", { id: data.id, best, values, expectedFinalScore, elapsedMs: performance.now() - start });
   } catch (error) { post("error", { id: data.id, message: error.message, stack: error.stack, code: error.code || (error.name === "CompileError" ? "wasm" : "network") }); }
 };
