@@ -1,3 +1,5 @@
+import { BOARD_SIZE } from "../rules/index.js";
+
 export async function evaluateVela({ snapshot, backend, signal, requestId, revision }) {
   const terminal = snapshot.diceUsed >= 100 && !snapshot.bonusRoll;
   const result = terminal
@@ -13,7 +15,8 @@ export async function evaluateVela({ snapshot, backend, signal, requestId, revis
     modelName: backend.info?.manifest?.name ?? "VELA v4",
     modelVersion: backend.info?.manifest?.version,
     elapsedMs: result.elapsedMs,
-    expectedFinalScore: terminal ? snapshot.position : result.expectedFinalScore,
+    expectedFinalScore: terminal ? snapshot.position : Number.isFinite(result.expectedFinalScore)
+      ? Math.min(BOARD_SIZE, result.expectedFinalScore) : undefined,
     best: result.best, recommended,
     actions: result.values.map((value, action) => ({
       action, value, gap: highest - value,
