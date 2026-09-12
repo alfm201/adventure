@@ -11,6 +11,7 @@ import {
 } from "./statistics.js";
 import { actionGroups } from "./actions.js";
 import { streamSeed } from "../environment/random.js";
+import { predictG3Score } from "./g3-score.js";
 const cancelled = (signal) => {
   if (signal?.aborted) throw new DOMException("Cancelled", "AbortError");
 };
@@ -39,11 +40,14 @@ export async function evaluate({
     );
   let active = [...groups.representatives],
     batchId = 0;
+  let expectedFinalScore;
   function result(status, reason) {
     const d = decide(stats, active),
       best = d.best;
     return {
       status,
+      model: "x36",
+      expectedFinalScore,
       reason,
       requestId,
       revision,
@@ -87,6 +91,7 @@ export async function evaluate({
   if (snapshot.diceUsed >= 100 && !snapshot.bonusRoll) {
     return {
       ...result("terminal", "terminal"),
+      expectedFinalScore: snapshot.position,
       best: undefined,
       recommended: [],
       actions: stats.map((_, action) => ({
@@ -183,6 +188,8 @@ export async function evaluate({
     cancelled(signal);
     onProgress(result("running", null));
   }
+  expectedFinalScore = await predictG3Score(snapshot);
+  cancelled(signal);
   await run(active, Math.min(profile.initial, profile.max), true);
   while (true) {
     cancelled(signal);

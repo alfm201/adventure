@@ -6,6 +6,7 @@ import { velaRequirements, probeVela } from "../compute/vela/support.js";
 import { compatibilityMessage } from "../content/compatibility.js";
 import { diagnostics } from "../platform/report.js";
 import { Forecast } from "./forecast.js";
+import { loadG3Predictor } from "../evaluation/g3-score.js";
 export class Coordinator extends EventTarget {
   constructor(session) {
     super();
@@ -117,6 +118,7 @@ export class Coordinator extends EventTarget {
   async prepare({ signal } = {}) {
     const { CpuBackend } = await this.loadX36();
     if (signal?.aborted) throw new DOMException("Cancelled", "AbortError");
+    void loadG3Predictor();
     if (this.cpu && !this.cpu.disposed) return;
     const cpu = this.cpu = new CpuBackend(this.maxWorkers);
     const cancel = () => cpu.dispose();

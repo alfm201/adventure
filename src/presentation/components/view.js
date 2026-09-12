@@ -74,8 +74,8 @@ export class GameView {
     text("forecast-value", Number.isFinite(forecast.value) ? number(forecast.value, 0) + "점" : forecast.pending ? "계산 중…" : "—");
     text("forecast-delta", forecast.delta ? `(${forecast.delta > 0 ? "+" : ""}${number(forecast.delta, 0)})` : "");
     document.querySelector("#forecast-delta").dataset.direction = forecast.delta > 0 ? "up" : "down";
-    if (vela) overview.querySelector(".legend").append(document.createElement("br"), document.createTextNode(
-      "예상 최종 점수는 VELA를 계속 따를 때의 예측입니다. 괄호는 직전 상태 대비 변화입니다."));
+    overview.querySelector(".legend").append(document.createElement("br"), document.createTextNode(
+      `예상 최종 점수는 ${vela ? "VELA" : "G3-R100K"}를 계속 따를 때의 예측입니다. 괄호는 직전 상태 대비 변화입니다.`));
     text("high-score", session.highScore + " 칸");
     text(
       "board-description",
