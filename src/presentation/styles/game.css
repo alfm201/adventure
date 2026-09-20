@@ -1150,3 +1150,19 @@ dialog.help-tour.dialog-fallback[open] { inset:0; transform:none; max-height:non
 .card-fallback { display:block; font-size:11px; line-height:1.1; word-break:keep-all; color:#183c47; }
 .missing-portrait .portrait { background:#dde8df; border-radius:50%; }
 .missing-portrait .portrait::after { content:'모험가'; display:grid; height:100%; place-items:center; font-size:12px; color:#527168; }
+.multiplier-dialog { padding: 14px; }
+dialog.multiplier-dialog.multiplier-anchored { position: fixed; inset: auto; margin: 0; transform: none; }
+.multiplier-anchored::backdrop { background: #193c3624; }
+.multiplier-dialog .dialog-header { margin-bottom: 10px; }
+.multiplier-field { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--dialog-muted); font-size: 13px; }
+.multiplier-dialog input[type="text"] { width: 76px; height: 36px; margin: 0; padding: 4px 8px; border: 1px solid #c7dbd2; border-radius: 7px; background: #f3f8f3; color: var(--dialog-text); text-align: center; font-size: 16px; font-variant-numeric: tabular-nums; }
+.multiplier-dialog input:focus { outline: 0; border-color: var(--dialog-focus); background: white; box-shadow: 0 0 0 3px #297d7818; }
+.multiplier-dialog input[aria-invalid="true"] { border-color: #ad6759; }
+.multiplier-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; margin-top: 10px; }
+.multiplier-grid button { min-width: 0; min-height: 42px; padding: 0; border: 1px solid #c7dbd2; border-radius: 7px; background: #f3f8f3; color: var(--dialog-heading); font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.multiplier-grid button.is-selected { border-color: var(--dialog-accent); background: #e0f0e9; }
+@media (hover: hover) { .multiplier-grid button:hover { border-color: var(--dialog-accent); background: #e0f0e9; } }
+.multiplier-grid .multiplier-cancel { background: transparent; color: var(--dialog-muted); font-size: 12px; font-weight: 400; }
+.multiplier-detail { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 12px; font-size: 12px; line-height: 1.4; }
+.multiplier-detail output { color: var(--dialog-heading); font-variant-numeric: tabular-nums; }
+.multiplier-detail > span { flex-shrink: 0; color: #73887e; font-size: 11px; }

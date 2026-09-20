@@ -34,7 +34,7 @@ function helpSteps() {
     ["카드 사용과 추가", "#hand",
       "<strong>카드를 누르면 사용</strong>합니다. <kbd>Ctrl+1~5</kbd>로 해당 슬롯을 선택할 수도 있습니다.",
       "<strong>우클릭하면 이동 없이 바로 버립니다.</strong> 터치에서는 길게 누른 뒤 ‘버리기’를 선택하세요.",
-      "수동 모드에서도 <strong>배수 카드는 임의의 주사위 결과로 이동</strong>합니다. 실제 결과와 다르면 위치를 수정하세요.",
+      "수동 모드에서 <strong>배수 카드는 실제 주사위 눈의 합(2~12)</strong>을 선택해 사용합니다. 숫자 버튼을 누르거나 입력 후 <kbd>Enter</kbd>로 적용하며, <kbd>Esc</kbd> 또는 취소로 돌아갑니다.",
       `수동 모드에서 <strong>빈 슬롯</strong>이나 <kbd>${keys[2]}</kbd>로 카드를 검색해 추가합니다. 자동 모드에서는 카드 획득 칸에서 뽑습니다.`,
       { label: "카드 검색 예시", html: '<dl class="help-reference"><dt>이름 일부</dt><dd>카드 이름에 포함된 글자로 검색</dd><dt>+10 또는 10</dt><dd>앞으로 10칸</dd><dt>-5</dt><dd>뒤로 5칸</dd><dt>*2</dt><dd>주사위 2배</dd><dt>&gt;</dt><dd>다음 스테이지</dd></dl>' }],
     ["도착 미리보기", "#roll-button",

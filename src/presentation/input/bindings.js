@@ -1,9 +1,10 @@
 import { askValue, confirmAction, toast, dialog } from "../overlays/dialogs.js";
 import { showModelSelection } from "../overlays/models.js";
 import { showHelp } from "../overlays/help.js";
+import { askMultiplierRoll } from "../overlays/multiplier.js";
 import { bindOverview } from "../overlays/overview.js";
 import { characterRect, positionAt } from "../board/geometry.js";
-import { tiles } from "../../rules/index.js";
+import { tiles, cards } from "../../rules/index.js";
 import { cardLabels } from "../../content/cards.js";
 
 export function bindInputs(session, coordinator, renderer, prediction) {
@@ -41,10 +42,21 @@ export function bindInputs(session, coordinator, renderer, prediction) {
       );
     if (value !== null) execute(type, value, source);
   };
-  const use = (slot, source = "pointer") =>
-    slot <= session.state.hand.length
-      ? execute("card", slot, source)
-      : search(source);
+  const use = async (slot, source = "pointer") => {
+    if (document.querySelector("dialog")) return;
+    const card = cards[session.state.hand[slot - 1]];
+    if (!card) return search(source);
+    if (session.view.terminal) return;
+    if (session.mode !== "manual" || card.type !== 2) return execute("card", slot, source);
+    prediction.hide();
+    const revision = session.revision, controller = new AbortController();
+    const cancel = () => controller.abort();
+    session.addEventListener("change", cancel, { once: true });
+    try {
+      const sum = await askMultiplierRoll(card.value, $(`#hand [data-slot="${slot}"]`), controller.signal);
+      if (sum !== null && revision === session.revision) execute("card", { slot, sum }, source);
+    } finally { session.removeEventListener("change", cancel); }
+  };
   const discard = (slot) => {
     if (session.state.hand[slot - 1]) execute("discard", slot);
   };

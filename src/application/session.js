@@ -45,7 +45,8 @@ export class Session extends EventTarget {
   }
   execute(type, value, source = "pointer") {
     const before = this.view, draws = this.commandDraws = [];
-    const command = { type, value: typeof value === "number" ? value : undefined, source };
+    const command = { type, value: typeof value === "number" ? value :
+      type === "card" && value ? { slot: value.slot, sum: value.sum } : undefined, source };
     try {
       const changed = this.applyCommand(type, value, source);
       diagnostics.record("game.command", { command, changed, before, after: this.view, random: draws });
@@ -93,15 +94,17 @@ export class Session extends EventTarget {
       else b.diceUse++;
       b.score = resolveLanding(rawDestination(b.score, value, true));
     } else if (type === "card") {
-      integer(value, 1, b.cardCount);
+      const slot = typeof value === "number" ? value : value?.slot;
+      integer(slot, 1, b.cardCount);
       if (b.terminal) return false;
-      if (automatic) b.step(value);
+      if (automatic) b.step(slot);
       else {
-        const card = cards[b.removeCard(value)],
+        const card = cards[(b.cards >>> ((slot - 1) * 5)) & 31],
           start = b.score;
+        if (card.type === 2) integer(value?.sum, 2, 12);
+        b.removeCard(slot);
         if (card.type === 2) {
-          const sum = ((b.random() * 6 + 1) | 0) + ((b.random() * 6 + 1) | 0);
-          b.score = resolveLanding(start + sum * card.value);
+          b.score = resolveLanding(start + value.sum * card.value);
           if (b.isDouble) b.isDouble = false;
           else b.diceUse++;
         } else

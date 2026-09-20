@@ -54,7 +54,7 @@
       try { snapshots[name] = copy(providers[name]()); }
       catch (error) { snapshots[name] = { unavailable: true, error: copy(error) }; }
     });
-    return copy({ schemaVersion: 2, app: "Adventure v2", build: "2026.09.09.2", startedAt: startedAt,
+    return copy({ schemaVersion: 2, app: "Adventure v2", build: "2026.09.20.1", startedAt: startedAt,
       exportedAt: new Date().toISOString(), page: { path: location.pathname || "", secureContext: !!scope.isSecureContext },
       browser: { userAgent: nav.userAgent, language: nav.language, online: nav.onLine, hardwareConcurrency: nav.hardwareConcurrency,
         deviceMemoryEstimateGiB: nav.deviceMemory, deviceMemorySource: "navigator.deviceMemory",
