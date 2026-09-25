@@ -197,13 +197,21 @@ export class GameRecognizer {
     this.data = image.data;
     if (!this.visible()) return { visible: false, issue: "covered", anchorScore: Math.round((this.lastAnchorScore || 0) * 1000) / 1000 };
     const position = this.number("score"), diceUsed = this.number("dice"), hand = this.hand();
-    let blue = 0, yellow = 0;
-    for (let y = 544; y < 607; y += 8) for (const x of [24, 31, 177, 184]) {
-      const [r, g, b] = this.pixel(x, y);
-      if (b > r * 1.2 && g > r) blue++;
-      if (r > b * 1.5 && g > b * 1.1) yellow++;
+    let blue = 0, yellow = 0, magenta = 0;
+    for (let y = 544; y < 607; y += 7) {
+      for (const x of [22, 28, 180, 186]) {
+        const [r, g, b] = this.pixel(x, y);
+        if ((b > r * 1.2 && b > 115) || (g > r * 1.25 && b > r * 1.1)) blue++;
+        if (r > b * 1.4 && g > b * 1.05 && r > 175) yellow++;
+      }
     }
-    const bonusRoll = blue > 18 ? true : yellow > 18 ? false : null;
+    for (let y = 566; y <= 586; y += 5) {
+      for (let x = 55; x <= 95; x += 8) {
+        const [r, g, b] = this.pixel(x, y);
+        if (r > 180 && b > 150 && g < 130) magenta++;
+      }
+    }
+    const bonusRoll = (magenta >= 2 || blue > yellow + 5) ? true : (yellow > blue + 5) ? false : null;
     return { visible: true, position, diceUsed, hand, bonusRoll, deck: this.deck(),
       issue: position === null ? "score" : diceUsed === null ? "dice" : hand === null ? "hand" : bonusRoll === null ? "bonus" : null,
       anchorScore: Math.round(this.lastAnchorScore * 1000) / 1000 };

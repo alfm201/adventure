@@ -169,23 +169,29 @@ export class AssistVoice extends EventTarget {
     const cue = this.cue();
     if (cue?.key === this.desired?.key) return;
 
-    if (this.speaking && this.desired?.key?.startsWith("action:")) {
-      if (this.session.mode !== "assist" || cue?.clip === "disconnected") {
-        this.stop(); this.desired = cue;
-        if (cue && cue.key !== this.delivered) {
-          this.timer = setTimeout(() => this.speak(cue), cue.delay);
+    if (this.speaking) {
+      if (cue?.clip && cue.clip === this.desired?.clip) {
+        this.desired = cue;
+        return;
+      }
+      if (this.desired?.key?.startsWith("action:")) {
+        if (this.session.mode !== "assist" || cue?.clip === "disconnected") {
+          this.stop(); this.desired = cue;
+          if (cue && cue.key !== this.delivered) {
+            this.timer = setTimeout(() => this.speak(cue), cue.delay);
+          }
+          return;
+        }
+        const currentContext = this.assist.epoch + ":" + JSON.stringify(this.session.state);
+        if (!this.desired.key.includes(currentContext)) {
+          this.stop(); this.desired = cue;
+          if (cue && cue.key !== this.delivered) {
+            this.timer = setTimeout(() => this.speak(cue), cue.delay);
+          }
+          return;
         }
         return;
       }
-      const currentContext = this.assist.epoch + ":" + JSON.stringify(this.session.state);
-      if (!this.desired.key.includes(currentContext)) {
-        this.stop(); this.desired = cue;
-        if (cue && cue.key !== this.delivered) {
-          this.timer = setTimeout(() => this.speak(cue), cue.delay);
-        }
-        return;
-      }
-      return;
     }
 
     this.stop(); this.desired = cue;

@@ -30,14 +30,24 @@ export function reconcileState(previous, observed) {
   if (previous.diceUsed >= 100 && !previous.bonusRoll) return candidates;
   for (let action = 0; action <= previous.hand.length; action++) {
     const projection = project(previous, action), spec = action ? cards[previous.hand[action - 1]] : null;
-    if (observed.diceUsed !== previous.diceUsed + projection.diceDelta) continue;
     const outcome = projection.outcomes.find(outcome => outcome.score === observed.position);
     if (!outcome) continue;
-    const bonusPossible = projection.random
-      ? previous.bonusRoll ? !observed.bonusRoll
-        : outcome.sums.some(sum => observed.bonusRoll ? sum % 2 === 0 : sum > 2 && sum < 12)
-      : observed.bonusRoll === previous.bonusRoll;
-    if (!bonusPossible) continue;
+
+    const normalDice = observed.diceUsed === previous.diceUsed + projection.diceDelta;
+    const doublePossible = outcome.sums.some(sum => sum % 2 === 0);
+    const bonusReconcile = !action && (observed.diceUsed === previous.diceUsed) && doublePossible;
+    if (!normalDice && !bonusReconcile) continue;
+
+    if (bonusReconcile) {
+      if (tiles[observed.position - 1].event === 2) continue;
+      if (observed.hand.length !== previous.hand.length || !same(classes(previous.hand), observed.hand)) continue;
+    } else {
+      const bonusPossible = projection.random
+        ? previous.bonusRoll ? !observed.bonusRoll
+          : outcome.sums.some(sum => observed.bonusRoll ? sum % 2 === 0 : sum > 2 && sum < 12)
+        : observed.bonusRoll === previous.bonusRoll;
+      if (!bonusPossible) continue;
+    }
     const hand = [...previous.hand];
     if (action) hand.splice(action - 1, 1);
     let mask = previous.deckAvailable, reset = false;
@@ -167,7 +177,7 @@ export class AssistTracker {
   }
   update(observation, at) {
     if (!Number.isFinite(at) || at <= this.lastAt) return this.result("waiting");
-    if (this.state && this.verified && at - this.lastAt > 3500) this.requireDeck("gap");
+    if (this.state && this.verified && at - this.lastAt > 5000) this.requireDeck("gap");
     this.lastAt = at;
     this.lastObservation = observation;
     if (!observation.visible) {
@@ -227,7 +237,7 @@ export class AssistTracker {
       directCandidates: candidates.length, multiStepCandidates: resolved.length,
       diceDelta, timeInPending: Math.round(at - this.pendingSince)
     };
-    const settlingLimit = diceDelta >= 0 && diceDelta <= 2 ? 12000 : 2500;
+    const settlingLimit = diceDelta >= 0 && diceDelta <= 2 ? 4500 : 2500;
     if (at - this.pendingSince < settlingLimit) return this.result("settling");
     this.requireDeck("gap");
     this.collectDeck(observed, key);

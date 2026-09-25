@@ -1,7 +1,7 @@
 export const LANGUAGES = [{ id: "ko", name: "한국어" }, { id: "en", name: "English" }, { id: "ja", name: "日本語" }, { id: "zh", name: "中文" }];
 export const VOICES = ["F", "M"];
 export const CACHE_PREFIX = "adventure-voice-";
-export const CACHE_NAME = CACHE_PREFIX + "audio-gemini-v1";
+export const CACHE_NAME = CACHE_PREFIX + "audio-gemini-v2";
 const ROOT = new URL("../../public/voice/", import.meta.url);
 export const packUrl = pack => new URL(pack.file, ROOT).href;
 
