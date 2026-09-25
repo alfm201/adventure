@@ -5,11 +5,29 @@ import { recommendationId, requestCue } from "../speech/messages.js";
 import { diagnostics } from "../platform/report.js";
 
 const PREFERENCES = "adventure.voice.settings.v2";
+export const DEFAULT_CUES = {
+  recommendation: true,
+  calculating: true,
+  obstruction: true,
+  deck: true,
+  connection: true,
+};
+
+export function cueCategory(clip) {
+  if (clip === "roll" || clip?.startsWith("card-") || clip === "preview") return "recommendation";
+  if (clip === "calculating") return "calculating";
+  if (clip?.startsWith("deck-")) return "deck";
+  if (clip === "disconnected" || clip === "reader") return "connection";
+  if (["covered", "window", "small", "stale", "score", "dice", "hand", "bonus"].includes(clip)) return "obstruction";
+  return "recommendation";
+}
+
 function readPreferences() { try { return JSON.parse(localStorage.getItem(PREFERENCES)) || {}; } catch { return {}; } }
 function settings(value) {
   return { language: LANGUAGES.some(lang => lang.id === value.language) ? value.language : "ko",
     voice: VOICES.includes(value.voice) ? value.voice : typeof value.voice === "string" && value.voice.startsWith("M") ? "M" : "F",
-    volume: Number.isFinite(value.volume) ? Math.min(1, Math.max(0, value.volume)) : .25, persist: value.persist === true };
+    volume: Number.isFinite(value.volume) ? Math.min(1, Math.max(0, value.volume)) : .25, persist: value.persist === true,
+    cues: { ...DEFAULT_CUES, ...(typeof value.cues === "object" && value.cues !== null ? value.cues : {}) } };
 }
 export class AssistVoice extends EventTarget {
   constructor(session, coordinator, assist, { load = loadVoicePack, audio = new VoiceAudio() } = {}) {
@@ -63,10 +81,20 @@ export class AssistVoice extends EventTarget {
       this.inspect(); this.publish(); this.sync(); return false;
     }
   }
+  isCueEnabled(clip) {
+    const category = cueCategory(clip);
+    return this.settings.cues?.[category] !== false;
+  }
   change(values) {
-    this.settings = settings({ ...this.settings, volume: values.volume ?? this.settings.volume }); this.save();
-    this.audio.volume(this.settings.volume);
+    this.settings = settings({
+      ...this.settings,
+      volume: values.volume ?? this.settings.volume,
+      cues: values.cues ? { ...this.settings.cues, ...values.cues } : this.settings.cues,
+    });
+    this.save();
+    if (values.volume !== undefined) this.audio.volume(this.settings.volume);
     this.publish();
+    this.sync();
   }
   stop() {
     clearTimeout(this.timer); this.timer = null;
@@ -96,20 +124,25 @@ export class AssistVoice extends EventTarget {
     const request = requestCue(this.assist);
     if (request) {
       if (request.key.startsWith("deck-")) this.deckVerifying = true;
+      if (!this.isCueEnabled(request.key)) return null;
       return { key: "request:" + context + ":" + request.key, clip: request.key, delay: request.delay };
     }
     if (this.deckVerifying && this.assist.reading.ready) {
       this.deckVerifying = false;
+      if (!this.isCueEnabled("deck-ready")) return null;
       return { key: "deck-ready:" + context, clip: "deck-ready", delay: 100 };
     }
     if (!this.assist.reading.ready || !this.session.canRecommend || this.session.view.terminal) return null;
     const result = this.coordinator.result;
-    if (result.status === "running") return { key: "calculating:" + context, clip: "calculating", delay: 900 };
+    if (result.status === "running") {
+      if (!this.isCueEnabled("calculating")) return null;
+      return { key: "calculating:" + context, clip: "calculating", delay: 900 };
+    }
     if (result.status !== "complete" || result.revision !== this.session.revision || result.requestId !== this.coordinator.requestId) return null;
     const action = result.best;
     if (!Number.isInteger(action) || !result.recommended?.includes(action)) return null;
     const clip = recommendationId(action, this.session.state.hand);
-    return clip ? { key: "action:" + context + ":" + result.model + ":" + action, clip, delay: 200 } : null;
+    return clip && this.isCueEnabled(clip) ? { key: "action:" + context + ":" + result.model + ":" + action, clip, delay: 200 } : null;
   }
   sync() {
     if (!this.available) { if (this.enabled || this.preparing) this.disable(); else this.publish(); return; }
@@ -192,7 +225,7 @@ export class AssistVoice extends EventTarget {
   }
   stopPreview() { this.stop(); this.publish(); this.sync(); }
   async speakNotice(clip) {
-    if (!this.enabled || !this.available || this.preparing || !this.pack) return;
+    if (!this.enabled || !this.available || this.preparing || !this.pack || !this.isCueEnabled(clip)) return;
     this.stop();
     this.speakingNotice = clip;
     const controller = this.playback = new AbortController();
