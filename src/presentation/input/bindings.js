@@ -1,15 +1,17 @@
 import { askValue, confirmAction, toast, dialog } from "../overlays/dialogs.js";
 import { showModelSelection } from "../overlays/models.js";
 import { showHelp } from "../overlays/help.js";
+import { showModes } from "../overlays/modes.js";
+import { showNotice } from "../overlays/notice.js";
 import { askMultiplierRoll } from "../overlays/multiplier.js";
 import { bindOverview } from "../overlays/overview.js";
 import { characterRect, positionAt } from "../board/geometry.js";
 import { tiles, cards } from "../../rules/index.js";
 import { cardLabels } from "../../content/cards.js";
 
-export function bindInputs(session, coordinator, renderer, prediction) {
+export function bindInputs(session, coordinator, renderer, prediction, assist, voice) {
   const recalculate = () =>
-    coordinator.enabled ? coordinator.recalculate() : showModelSelection(coordinator);
+    session.canRecommend && (coordinator.enabled ? coordinator.recalculate() : showModelSelection(coordinator));
   const $ = (s) => document.querySelector(s),
     execute = (type, value, source) => {
       prediction.hide();
@@ -21,7 +23,7 @@ export function bindInputs(session, coordinator, renderer, prediction) {
       }
     };
   const search = async (source = "pointer") => {
-    if (session.mode === "automatic" || session.state.hand.length >= 5) return;
+    if (session.mode !== "manual" || session.state.hand.length >= 5) return;
     const value = await askValue(
       "카드 검색",
       { text: true, label: "이름 또는 효과", hint: "+숫자 · -숫자 · *배수 · >", placeholder: "카드 이름이나 효과 입력" },
@@ -29,6 +31,7 @@ export function bindInputs(session, coordinator, renderer, prediction) {
     if (value !== null) execute("search", value, source);
   };
   const edit = async (type, source = "pointer") => {
+    if (session.mode === "assist") return;
     if (source === "keyboard" && session.mode === "automatic") return;
     const position = type === "position",
       value = await askValue(
@@ -43,7 +46,7 @@ export function bindInputs(session, coordinator, renderer, prediction) {
     if (value !== null) execute(type, value, source);
   };
   const use = async (slot, source = "pointer") => {
-    if (document.querySelector("dialog")) return;
+    if (session.mode === "assist" || document.querySelector("dialog")) return;
     const card = cards[session.state.hand[slot - 1]];
     if (!card) return search(source);
     if (session.view.terminal) return;
@@ -73,20 +76,18 @@ export function bindInputs(session, coordinator, renderer, prediction) {
   };
   $("#estimates").onclick = recalculate;
   $("#reset-button").onclick = async () => {
+    if (session.mode === "assist") return;
     if (await confirmAction("재시작", "현재 게임을 초기화할까요?"))
       execute("reset");
   };
-  $("#mode-button").onclick = async () => {
-    if (
-      await confirmAction(
-        "모드변경",
-        `${session.mode === "automatic" ? "수동" : "자동"} 모드로 전환할까요? 현재 상태는 유지됩니다.`,
-      )
-    ) {
-      execute("mode");
-      toast(session.mode === "automatic" ? "자동 모드" : "수동 모드");
-    }
+  $("#mode-button").onclick = () => {
+    prediction.hide();
+    showModes(session, assist, { voice });
   };
+  $("#notice-button") && ($("#notice-button").onclick = () => {
+    prediction.hide();
+    showNotice();
+  });
   $("#help-button").onclick = () => {
     prediction.hide();
     showHelp();
@@ -94,6 +95,14 @@ export function bindInputs(session, coordinator, renderer, prediction) {
   $("#prev-stage").onclick = () => execute("stage", -1);
   $("#next-stage").onclick = () => execute("stage", 1);
   $("#card-info-button").onclick = () => {
+    if (session.mode === "assist" && (!assist.reading?.ready || assist.issue?.startsWith("deck-") || assist.reading?.issue?.startsWith("deck-"))) {
+      toast("웹 화면이 아닌 공유 중인 실제 게임 화면의 물음표(?)를 눌러주세요.");
+      voice?.speakNotice?.("deck-ingame");
+      const panel = $("#card-info");
+      panel.hidden = true;
+      $("#card-info-button").setAttribute("aria-expanded", "false");
+      return;
+    }
     const panel = $("#card-info");
     panel.hidden = !panel.hidden;
     $("#card-info-button").setAttribute("aria-expanded", String(!panel.hidden));
@@ -142,7 +151,7 @@ export function bindInputs(session, coordinator, renderer, prediction) {
   );
   const cardMenu = (slot) => {
     const id = session.state.hand[slot - 1];
-    if (!id || document.querySelector("dialog")) return;
+    if (session.mode === "assist" || !id || document.querySelector("dialog")) return;
     const revision = session.revision,
       body = document.createElement("div");
     body.innerHTML =
@@ -292,7 +301,7 @@ export function bindInputs(session, coordinator, renderer, prediction) {
     const r = characterRect(session.state.position);
     target.style.left = r.x + "px";
     target.style.top = r.y + "px";
-    target.disabled = session.mode === "automatic";
+    target.disabled = session.mode !== "manual";
   };
   session.addEventListener("change", () => {
     drag = null;
@@ -302,7 +311,7 @@ export function bindInputs(session, coordinator, renderer, prediction) {
   });
   positionTarget();
   target.addEventListener("pointerdown", (e) => {
-    if (session.mode === "automatic" || e.button !== 0) return;
+    if (session.mode !== "manual" || e.button !== 0) return;
     drag = {
       id: e.pointerId,
       position: session.state.position,

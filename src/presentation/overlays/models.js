@@ -17,7 +17,7 @@ const comparison = model => {
 };
 export function showModelSelection(coordinator, { initial = false, selectedModel } = {}) {
   if (document.querySelector("dialog")) return;
-  coordinator.cancel();
+  const resume = coordinator.suspend();
   const body = document.createElement("div");
   const node = dialog("모델 선택", body, { className: "model-dialog" });
   let controller, epoch = 0, handedOff = false, deletingCache = false, selected = selectedModel ?? (coordinator.enabled ? coordinator.settings.model : "vela");
@@ -25,6 +25,7 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
   const focusPrimary = () => body.querySelector(".primary:not(:disabled)")?.focus({ preventScroll: true });
   const leave = next => { handedOff = true; node.addEventListener("close", next, { once: true }); node.close(); };
   node.addEventListener("close", () => {
+    resume();
     epoch++; controller?.abort(); coordinator.removeEventListener("capabilities", refreshSupport);
     if (handedOff) return;
     coordinator.cancelModelPreparation();

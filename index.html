@@ -6,12 +6,28 @@
     <title>Adventure v2</title>
     <link rel="stylesheet" href="./src/presentation/styles/game.css" />
     <link rel="stylesheet" href="./src/presentation/styles/models.css">
+    <link rel="stylesheet" href="./src/presentation/styles/modes.css">
+    <link rel="stylesheet" href="./src/presentation/styles/voice.css">
+    <link rel="stylesheet" href="./src/presentation/styles/notice.css">
   </head>
   <body>
     <div id="frame" inert>
       <main id="game" class="game-shell" aria-label="Adventure">
         <aside class="status-panel" aria-label="게임 상태와 주사위">
           <section class="profile-panel">
+            <button
+              type="button"
+              id="notice-button"
+              class="notice-button"
+              aria-label="공지사항"
+              title="공지사항"
+            >
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M11 5L6 9H2v6h4l5 4V5z"/>
+                <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+              </svg>
+            </button>
             <button
               class="position-button"
               id="position-button"
@@ -146,11 +162,7 @@
         <div class="loading-links"><button id="boot-retry" hidden>다시 시도</button><button id="boot-diagnostics" title="현재 오류와 브라우저 정보를 파일로 저장합니다. 자동 전송되지 않습니다." hidden>진단 정보 저장</button><a id="legacy-link" class="legacy-access" href="./old/v1/" aria-label="기존 화면으로 이동"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2.5" y="3.5" width="15" height="13" rx="2"/><path d="M3 7h14"/></svg><span>기존 화면</span><span class="legacy-arrow" aria-hidden="true">→</span></a></div>
       </section>
     </div>
-    <div id="notification-stack" class="notification-stack" hidden>
-      <div id="toast" class="notification toast" role="status" aria-atomic="true" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v1"/></svg><span class="notification-message"></span></div>
-      <div id="asset-notice" class="notification asset-notice" role="status" aria-atomic="true" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 10 18H2L12 3Z"/><path d="M12 9v5M12 17v1"/></svg><span class="notification-message"></span><button type="button">다시 시도</button></div>
-      <div id="debug-notice" class="notification" role="status" aria-atomic="true" hidden><span class="notification-message">문제가 반복되면 진단 정보를 함께 전달해 주세요.</span><button type="button">진단 정보</button></div>
-    </div>
+    <div id="notification-stack" class="notification-stack" aria-label="알림" hidden></div>
     <script src="./src/platform/diagnostics.js"></script>
     <script src="./src/bootstrap/loader.js"></script>
   </body>

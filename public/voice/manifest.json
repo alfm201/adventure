@@ -1,0 +1,87 @@
+{
+  "schema": 2,
+  "version": "a888ed7fc18e",
+  "model": "Gemini 3.8 Flash TTS (LUFS -16.0)",
+  "packs": [
+    {
+      "id": "ko-F",
+      "language": "ko",
+      "voice": "F",
+      "version": "a888ed7fc18e",
+      "file": "ko-F-d9b597d1796b.voice",
+      "bytes": 5913926,
+      "sha256": "d9b597d1796bd113d5a0addc9c2f0a9b93c46129ecea640d30bf3e1317586a36",
+      "clips": 135
+    },
+    {
+      "id": "ko-M",
+      "language": "ko",
+      "voice": "M",
+      "version": "a888ed7fc18e",
+      "file": "ko-M-2442e73c8fce.voice",
+      "bytes": 5870350,
+      "sha256": "2442e73c8fceb6542ec5f9658e3cb8a0155fe1aedfed62e6fab08d0cbf5899cd",
+      "clips": 135
+    },
+    {
+      "id": "en-F",
+      "language": "en",
+      "voice": "F",
+      "version": "a888ed7fc18e",
+      "file": "en-F-88bd9f3060ef.voice",
+      "bytes": 5275709,
+      "sha256": "88bd9f3060ef051f4e86ba614008f9263ea687e103d4d1d4d8aeea259913e21e",
+      "clips": 135
+    },
+    {
+      "id": "en-M",
+      "language": "en",
+      "voice": "M",
+      "version": "a888ed7fc18e",
+      "file": "en-M-9f8ff5db32c2.voice",
+      "bytes": 5341236,
+      "sha256": "9f8ff5db32c2abe12fb20ff7346c8f7df10b181312fc17d33c8c783f21260f8f",
+      "clips": 135
+    },
+    {
+      "id": "ja-F",
+      "language": "ja",
+      "voice": "F",
+      "version": "a888ed7fc18e",
+      "file": "ja-F-09446a705cc6.voice",
+      "bytes": 5892931,
+      "sha256": "09446a705cc64298282ecd51df7da1e72bc823ecda32e5a39263e5e7129d1642",
+      "clips": 135
+    },
+    {
+      "id": "ja-M",
+      "language": "ja",
+      "voice": "M",
+      "version": "a888ed7fc18e",
+      "file": "ja-M-54ef4fb85b5f.voice",
+      "bytes": 5820193,
+      "sha256": "54ef4fb85b5f58fbb404de32392df4a789c83eaf34220770cc651230e8665d6a",
+      "clips": 135
+    },
+    {
+      "id": "zh-F",
+      "language": "zh",
+      "voice": "F",
+      "version": "a888ed7fc18e",
+      "file": "zh-F-f36beb7a7abd.voice",
+      "bytes": 5819897,
+      "sha256": "f36beb7a7abd9223fa8f800c8722581ce6d120d10f3c33c13ad6da17b22066ae",
+      "clips": 135
+    },
+    {
+      "id": "zh-M",
+      "language": "zh",
+      "voice": "M",
+      "version": "a888ed7fc18e",
+      "file": "zh-M-7600426334ee.voice",
+      "bytes": 5696374,
+      "sha256": "7600426334ee4a0b0762ab76ece79217b2f81c19f4f40b9a07a71f79a22db858",
+      "clips": 135
+    }
+  ]
+}

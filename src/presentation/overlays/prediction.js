@@ -20,7 +20,7 @@ export class Prediction {
     this.renderer.setPreview(null);
   }
   show(action, anchor) {
-    if (this.session.view.terminal || document.querySelector("dialog")) return;
+    if (!this.session.canRecommend || this.session.view.terminal || document.querySelector("dialog")) return;
     const state = this.session.state;
     if (action > state.hand.length) return;
     const analysis = project(state, action);

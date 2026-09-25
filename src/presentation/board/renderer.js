@@ -26,7 +26,7 @@ export class BoardRenderer {
   }
   update(view) {
     if (this.view?.revision !== view.revision)
-      this.defaultPreview = project(view.state, 0);
+      this.defaultPreview = view.canRecommend ? project(view.state, 0) : null;
     this.view = view;
     this.draw();
   }
@@ -141,12 +141,12 @@ export class BoardRenderer {
       if (marker) ctx.drawImage(marker, 2, 923, 92, 92, r.x, r.y, 92, 92);
     }
     const analysis = this.preview || this.defaultPreview;
-    if (!this.view.terminal)
+    if (analysis && !this.view.terminal)
       for (const outcome of analysis.outcomes) {
         if (tiles[outcome.score - 1].stage !== stage) continue;
         this.pulse(ctx, outcome, analysis.random);
       }
-    if (!this.reduced.matches && !this.view.terminal)
+    if (analysis && !this.reduced.matches && !this.view.terminal)
       this.frame = requestAnimationFrame(() => this.draw());
   }
   pulse(ctx, o, random) {

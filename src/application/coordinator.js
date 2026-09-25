@@ -22,18 +22,20 @@ export class Coordinator extends EventTarget {
     this.requestId = 0;
     this.result = { status: "disabled", actions: [] };
     this.enabled = false;
+    this.suspensions = 0;
     this.modelEpoch = 0;
     this.gpuEpoch = 0;
     this.gpuSupport = { state: "unchecked" };
     this.velaSupport = { state: "unchecked" };
     session.addEventListener("change", (event) => {
-      if (event.detail?.type === "reset") this.forecast.clear();
+      if (["reset", "assist-sync", "mode"].includes(event.detail?.type)) this.forecast.clear();
+      if (this.suspensions) return;
       this.cancel();
       if (this.enabled) this.recalculate();
     });
   }
   publish(result) {
-    result.forecast = this.forecast.update(this.session.state, result);
+    result.forecast = !this.session.canRecommend ? {} : this.forecast.update(this.session.state, result);
     this.result = result;
     if (result.status === "complete" || result.status === "error") diagnostics.record("calculation.result", result);
     this.dispatchEvent(new Event("change"));
@@ -67,6 +69,12 @@ export class Coordinator extends EventTarget {
       return result;
     });
     this.gpuCheck = task; return task;
+  }
+  suspend() {
+    this.suspensions++;
+    this.cancel();
+    let active = true;
+    return () => { if (active) { active = false; this.suspensions--; } };
   }
   checkVela(force = false) {
     if (!force && this.velaCheck) return this.velaCheck;
@@ -186,11 +194,11 @@ export class Coordinator extends EventTarget {
     if (this.result.status === "running") diagnostics.record("calculation.cancel", { requestId: this.requestId });
     this.requestId++;
     this.controller?.abort();
-    this.publish({ status: this.enabled ? "idle" : "disabled", model: this.settings.model, actions: [] });
+    this.publish({ status: !this.session.canRecommend ? "paused" : this.enabled ? "idle" : "disabled", model: this.settings.model, actions: [] });
   }
   async recalculate() {
     this.cancel();
-    if (!this.enabled) return;
+    if (!this.enabled || this.suspensions || !this.session.canRecommend) return;
     const id = this.requestId,
       revision = this.session.revision,
       controller = (this.controller = new AbortController());
@@ -277,38 +285,42 @@ export class Coordinator extends EventTarget {
     }
   }
   async configure(settings) {
-    this.forecast.clear();
-    diagnostics.record("model.apply", settings);
-    this.cancel();
-    const requestId = this.requestId;
-    const current = () => requestId === this.requestId;
-    this.settings = { ...this.settings, ...settings };
-    if (this.settings.model === "x36") { this.vela?.dispose(); this.vela = null; this.cancelModelPreparation(); }
-    else {
-      if (this.preparedVela?.ready) {
-        this.vela?.dispose(); this.vela = this.preparedVela; this.preparedVela = null;
+    const resume = this.suspend();
+    try {
+      this.forecast.clear();
+      diagnostics.record("model.apply", settings);
+      this.cancel();
+      const requestId = this.requestId;
+      const current = () => requestId === this.requestId;
+      this.settings = { ...this.settings, ...settings };
+      if (this.settings.model === "x36") { this.vela?.dispose(); this.vela = null; this.cancelModelPreparation(); }
+      else {
+        if (this.preparedVela?.ready) {
+          this.vela?.dispose(); this.vela = this.preparedVela; this.preparedVela = null;
+        }
+        this.cpu?.dispose(); this.cpu = null;
+        const gpu = this.gpu; this.gpu = null;
+        this.gpuEpoch++;
+        this.gpuCheck = null; this.gpuSupport = { state: "unchecked" };
+        gpu?.dispose().catch(error => console.error("GPU cleanup failed", error));
+        this.restoreVela = null;
+        this.enabled = true;
+        if (this.vela?.ready) {
+          const backend = this.vela, epoch = this.modelEpoch;
+          const active = () => current() && this.vela === backend && epoch === this.modelEpoch;
+          try {
+            const committed = await backend.commit({ persist: this.velaCacheAllowed && backend.info.cacheSaved });
+            if (!active()) return;
+            if (committed.cacheIssue) this.notice(compatibilityMessage(committed.cacheIssue).title);
+          } catch (error) { if (!active()) return; diagnostics.capture(error, "model.commit"); this.notice("모델은 사용할 수 있지만 저장 상태를 확인하지 못했습니다."); }
+        }
       }
-      this.cpu?.dispose(); this.cpu = null;
-      const gpu = this.gpu; this.gpu = null;
-      this.gpuEpoch++;
-      this.gpuCheck = null; this.gpuSupport = { state: "unchecked" };
-      gpu?.dispose().catch(error => console.error("GPU cleanup failed", error));
+      if (!current()) return;
       this.restoreVela = null;
       this.enabled = true;
-      if (this.vela?.ready) {
-        const backend = this.vela, epoch = this.modelEpoch;
-        const active = () => current() && this.vela === backend && epoch === this.modelEpoch;
-        try {
-          const committed = await backend.commit({ persist: this.velaCacheAllowed && backend.info.cacheSaved });
-          if (!active()) return;
-          if (committed.cacheIssue) this.notice(compatibilityMessage(committed.cacheIssue).title);
-        } catch (error) { if (!active()) return; diagnostics.capture(error, "model.commit"); this.notice("모델은 사용할 수 있지만 저장 상태를 확인하지 못했습니다."); }
-      }
-    }
-    if (!current()) return;
-    this.restoreVela = null;
-    this.enabled = true;
-    return this.recalculate();
+      resume();
+      return this.recalculate();
+    } finally { resume(); }
   }
   async dispose() {
     this.enabled = false;

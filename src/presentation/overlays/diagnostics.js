@@ -1,6 +1,6 @@
 import { diagnostics } from "../../platform/report.js";
 import { dialog, toast } from "./dialogs.js";
-import { syncNotifications } from "./notifications.js";
+import { notify, dismissNotification } from "./notifications.js";
 
 export function showDiagnostics() {
   if (document.querySelector(".diagnostics-dialog")) return;
@@ -15,11 +15,10 @@ export function showDiagnostics() {
   return node;
 }
 export function bindDiagnostics() {
-  const notice = document.querySelector("#debug-notice");
-  let timer;
-  notice.querySelector("button").onclick = () => { notice.hidden = true; syncNotifications(); showDiagnostics(); };
   diagnostics.subscribe(() => {
-    notice.hidden = false; syncNotifications(); clearTimeout(timer);
-    timer = setTimeout(() => { notice.hidden = true; syncNotifications(); }, 8000);
+    notify("diagnostics", "문제가 반복되면 진단 정보를 함께 전달해 주세요.", {
+      tone: "warning", duration: 8000, actionLabel: "진단 정보",
+      action: () => { dismissNotification("diagnostics"); showDiagnostics(); },
+    });
   });
 }

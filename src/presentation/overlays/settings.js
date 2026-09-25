@@ -8,6 +8,7 @@ const usageOptions = [
 ];
 export function showSettings(coordinator, { initial = false, onBack, onCancel } = {}) {
   if (document.querySelector("dialog")) return;
+  const resume = coordinator.suspend();
   const settings = coordinator.settings,
     defaultWorkers = Math.ceil(coordinator.maxWorkers / 2),
     workers = [
@@ -73,6 +74,7 @@ export function showSettings(coordinator, { initial = false, onBack, onCancel } 
   let applied = false, returning = false;
   body.querySelector(".compute-cancel").onclick = () => node.close();
   node.addEventListener("close", () => {
+    resume();
     coordinator.removeEventListener("capabilities", refreshSupport);
     if (applied || returning) return;
     if (onCancel) onCancel();
@@ -87,7 +89,7 @@ export function showSettings(coordinator, { initial = false, onBack, onCancel } 
       usage: body.elements.usage.value,
       workers: Number(body.elements.workers.value),
     };
-    node.close();
+    resume(); node.close();
     coordinator.configure(next);
   };
   return node;

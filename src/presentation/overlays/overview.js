@@ -9,11 +9,11 @@ export function bindOverview(coordinator, prediction) {
   const hide = () => { if (!opened) overview.hidden = true; };
   const show = event => {
     if (event?.pointerType && event.pointerType !== "mouse") return;
-    if (!wide.matches || !coordinator.enabled || document.querySelector("dialog")) return;
+    if (!wide.matches || !coordinator.enabled || !coordinator.session.canRecommend || document.querySelector("dialog")) return;
     prediction.hide(); overview.hidden = false; placePopover(overview, estimates, anchor);
   };
   const expand = () => {
-    if (!coordinator.enabled || document.querySelector("dialog")) return;
+    if (!coordinator.enabled || !coordinator.session.canRecommend || document.querySelector("dialog")) return;
     prediction.hide(); overview.hidden = false; overview.classList.add("overview-expanded");
     overview.style.removeProperty("left"); overview.style.removeProperty("top");
     const marker = document.createComment(""); overview.before(marker);

@@ -29,7 +29,9 @@ export class Session extends EventTarget {
     this.revision = 0;
     this.highScore = 1;
     this.edited = false;
+    this.assistReady = false;
   }
+  get canRecommend() { return this.mode !== "assist" || this.assistReady; }
   get state() {
     return snapshot(this.board);
   }
@@ -37,15 +39,29 @@ export class Session extends EventTarget {
     return {
       state: this.state,
       mode: this.mode,
+      canRecommend: this.canRecommend,
       revision: this.revision,
       highScore: this.highScore,
       edited: this.edited,
       terminal: this.board.terminal,
     };
   }
+  observe(state, { ready = false, synchronized = false } = {}) {
+    if (this.mode !== "assist") return false;
+    const changed = ready && state && JSON.stringify(this.state) !== JSON.stringify(state);
+    if (changed) restore(this.board, state);
+    if (!changed && this.assistReady === ready && !synchronized) return false;
+    this.assistReady = ready;
+    this.edited = true;
+    this.highScore = Math.max(this.highScore, this.board.score);
+    this.revision++;
+    diagnostics.record("assist.state", { ready, synchronized, state: this.state });
+    this.dispatchEvent(new CustomEvent("change", { detail: { type: synchronized ? "assist-sync" : "assist-state" } }));
+    return true;
+  }
   execute(type, value, source = "pointer") {
     const before = this.view, draws = this.commandDraws = [];
-    const command = { type, value: typeof value === "number" ? value :
+    const command = { type, value: typeof value === "number" || type === "mode" ? value :
       type === "card" && value ? { slot: value.slot, sum: value.sum } : undefined, source };
     try {
       const changed = this.applyCommand(type, value, source);
@@ -59,6 +75,7 @@ export class Session extends EventTarget {
     } finally { this.commandDraws = null; }
   }
   applyCommand(type, value, source) {
+    if (this.mode === "assist" && type !== "mode") return false;
     const b = this.board,
       automatic = this.mode === "automatic";
     const integer = (n, min, max) => {
@@ -82,7 +99,11 @@ export class Session extends EventTarget {
       b.resetBoard();
       this.edited = false;
     } else if (type === "mode") {
-      this.mode = automatic ? "manual" : "automatic";
+      const mode = value ?? (automatic ? "manual" : "automatic");
+      if (!["manual", "automatic", "assist"].includes(mode)) throw RangeError("사용할 수 없는 모드입니다.");
+      if (mode === this.mode) return false;
+      this.mode = mode;
+      this.assistReady = false;
       this.edited = true;
     } else if (type === "roll") {
       if (automatic) b.step(0);

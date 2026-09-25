@@ -51,6 +51,8 @@ export class GameView {
     const s = session.state,
       t = tiles[s.position - 1],
       automatic = session.mode === "automatic",
+      assisting = session.mode === "assist",
+      modeName = { automatic: "자동", manual: "수동", assist: "어시스트" }[session.mode],
       disabled = result.status === "disabled",
       vela = result.model === "vela" || result.profile?.model === "vela";
     const text = (id, value) =>
@@ -58,7 +60,9 @@ export class GameView {
     text("settings-button", "모델 선택");
     document.querySelector("#settings-button").dataset.model = vela ? "vela" : "x36";
     const overview = document.querySelector("#score-overview");
-    document.querySelector("#compare-button").disabled = disabled;
+    document.querySelector("#compare-button").disabled = disabled || !session.canRecommend;
+    for (const id of ["position-button", "dice-used-button", "reset-button", "prev-stage", "next-stage"])
+      document.getElementById(id).disabled = assisting;
     overview.classList.toggle("vela-overview", vela);
     overview.setAttribute("aria-label", vela ? "행동별 평가 비교" : "예상 점수 전체 비교");
     overview.querySelector("header strong").textContent = vela ? "행동별 평가" : "예상 점수 전체 비교";
@@ -79,7 +83,7 @@ export class GameView {
     text("high-score", session.highScore + " 칸");
     text(
       "board-description",
-      `${stageNames[t.stage - 1]}, 현재 ${s.position}칸, 스테이지 ${t.ordinal}번째 칸, 주사위 ${s.diceUsed}회 사용. ${automatic ? "자동" : "수동"} 모드.`,
+      `${stageNames[t.stage - 1]}, 현재 ${s.position}칸, 스테이지 ${t.ordinal}번째 칸, 주사위 ${s.diceUsed}회 사용. ${modeName} 모드.`,
     );
     const roll = document.querySelector("#roll-button");
     roll.classList.toggle("is-double", s.bonusRoll);
@@ -89,17 +93,18 @@ export class GameView {
         ? "주사위 굴리기"
         : `더블 여부 변경 (${s.bonusRoll ? "더블" : "일반"})`,
     );
-    roll.disabled = automatic && session.terminal;
+    roll.disabled = assisting || automatic && session.terminal;
     document
       .querySelector("#mode-button")
       .setAttribute(
         "aria-label",
-        `모드변경 (현재 ${automatic ? "자동" : "수동"})`,
+        `모드변경 (현재 ${modeName})`,
       );
     document
       .querySelectorAll("[data-sum]")
-      .forEach((b) => (b.disabled = automatic || session.terminal));
+      .forEach((b) => (b.disabled = assisting || automatic || session.terminal));
     this.hand.forEach((b, i) => {
+      b.disabled = assisting;
       const id = s.hand[i],
         icon = b.firstElementChild;
       b.setAttribute(
@@ -119,6 +124,7 @@ export class GameView {
       }
     });
     this.info.forEach((b, i) => {
+      b.disabled = assisting;
       const obtained = !(s.deckAvailable & (1 << i));
       b.classList.toggle("obtained", obtained);
       b.textContent = (obtained ? "✔ " : "■ ") + cardLabels[i];
@@ -133,10 +139,11 @@ export class GameView {
       evaluated: "비교",
     };
     this.rows.forEach((b, a) => {
+      b.disabled = !session.canRecommend;
       const available = a === 0 || a <= s.hand.length,
         r = result.actions?.[a],
         score = vela ? r?.value : r?.mean;
-      let value = disabled ? "—" : !available
+      let value = disabled || !session.canRecommend ? "—" : !available
         ? (vela ? "—" : "0.000점")
         : result.status === "error"
           ? "오류"

@@ -15,6 +15,7 @@
     if (typeof value === "number") return isFinite(value) ? value : String(value);
     if (typeof value === "boolean") return value;
     if (typeof value !== "object") return "[unsupported]";
+    if (value instanceof ArrayBuffer || ArrayBuffer.isView(value) || (typeof ImageData !== "undefined" && value instanceof ImageData) || (typeof ImageBitmap !== "undefined" && value instanceof ImageBitmap) || (typeof HTMLCanvasElement !== "undefined" && value instanceof HTMLCanvasElement) || (typeof HTMLVideoElement !== "undefined" && value instanceof HTMLVideoElement) || (typeof MediaStream !== "undefined" && value instanceof MediaStream) || (typeof MediaStreamTrack !== "undefined" && value instanceof MediaStreamTrack) || (typeof OffscreenCanvas !== "undefined" && value instanceof OffscreenCanvas)) return "[binary/media omitted]";
     if (depth > 7) return "[depth limit]";
     if (seen.indexOf(value) >= 0) return "[circular]";
     seen.push(value);
@@ -54,7 +55,7 @@
       try { snapshots[name] = copy(providers[name]()); }
       catch (error) { snapshots[name] = { unavailable: true, error: copy(error) }; }
     });
-    return copy({ schemaVersion: 2, app: "Adventure v2", build: "2026.09.20.1", startedAt: startedAt,
+    return copy({ schemaVersion: 2, app: "Adventure v2", build: "2026.09.24.5", startedAt: startedAt,
       exportedAt: new Date().toISOString(), page: { path: location.pathname || "", secureContext: !!scope.isSecureContext },
       browser: { userAgent: nav.userAgent, language: nav.language, online: nav.onLine, hardwareConcurrency: nav.hardwareConcurrency,
         deviceMemoryEstimateGiB: nav.deviceMemory, deviceMemorySource: "navigator.deviceMemory",
