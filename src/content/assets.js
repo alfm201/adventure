@@ -1,21 +1,25 @@
 import { diagnostics } from "../platform/report.js";
+import { imageSource } from "./image-cache.js";
 const INITIAL_IMAGES = [1, 76, 77, 78, 79, 82];
 export class Assets extends EventTarget {
   constructor({ timeout = 8000, delays = [1000, 3000, 7000], imageFactory = () => new Image() } = {}) {
     super();
     this.images = new Map(); this.records = new Map();
     this.timeout = timeout; this.delays = delays; this.imageFactory = imageFactory;
-    this.revision = 0; this.disposed = false;
+    this.revision = 0; this.disposed = false; this.releases = new Set();
   }
   changed() { this.revision++; this.dispatchEvent(new Event("change")); }
   attempt(id, record) {
     return new Promise((resolve, reject) => {
       const image = this.imageFactory();
+      const controller = new AbortController();
+      let release;
       let done = false;
       const finish = (error) => {
         if (done) return; done = true;
         clearTimeout(timer); image.onload = image.onerror = null; record.cancel = null;
-        if (error) { image.src = ""; reject(error); } else resolve(image);
+        if (error) { controller.abort(); image.src = ""; release?.(); reject(error); }
+        else { if (release) this.releases.add(release); resolve(image); }
       };
       const timer = setTimeout(() => finish(Error("Image timed out")), this.timeout);
       record.cancel = () => finish(new DOMException("Cancelled", "AbortError"));
@@ -26,7 +30,10 @@ export class Assets extends EventTarget {
         else finish();
       };
       image.onerror = () => finish(Error("Image unavailable"));
-      image.src = new URL(`../../public/assets/${id}.png`, import.meta.url).href;
+      imageSource(id, { signal: controller.signal, priority: image.fetchPriority }).then(source => {
+        if (done) { source.release?.(); return; }
+        release = source.release; image.src = source.url;
+      }, finish);
     });
   }
   load(id) {
@@ -77,5 +84,5 @@ export class Assets extends EventTarget {
     for (let id = 1; id <= 82; id++) if (!this.records.has(id)) this.load(id);
     await Promise.all(tasks);
   }
-  dispose() { this.disposed = true; for (const record of this.records.values()) record.cancel?.(); }
+  dispose() { this.disposed = true; for (const record of this.records.values()) record.cancel?.(); for (const release of this.releases) release(); this.releases.clear(); }
 }

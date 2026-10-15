@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "assets:generate": "node scripts/image-manifest.mjs",
+    "assets:check": "node scripts/image-manifest.mjs --check",
     "start": "node scripts/serve.mjs",
     "test": "node tests/run.mjs",
     "test:assist": "node tests/run.mjs assist",

@@ -2,6 +2,8 @@ import http from "node:http";
 import { stat, realpath } from "node:fs/promises";
 import { createReadStream } from "node:fs";
 import { resolve, extname, sep, basename } from "node:path";
+import { imageManifest } from "./image-manifest.mjs";
+await imageManifest();
 const root = await realpath(resolve(import.meta.dirname, ".."));
 const port = Number(process.env.PORT || (basename(root).toLowerCase() === "adventure_v2" ? 4174 : 4173));
 const mime = {
