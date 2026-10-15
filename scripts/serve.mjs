@@ -59,6 +59,7 @@ const server = http.createServer(async (req, res) => {
       stream.pipe(res);
     }
   } catch {
+    if(res.headersSent){res.destroy();return;}
     res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
     res.end("Not found");
   }

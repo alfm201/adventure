@@ -2,7 +2,7 @@ export class Forecast {
   clear() { this.key = undefined; this.value = undefined; this.previous = undefined; }
   update(state, result) {
     const model = result.model || result.profile?.model;
-    if (!["vela", "x36"].includes(model) || result.status === "disabled") {
+    if (!["vela", "x36", "lyra"].includes(model) || result.status === "disabled") {
       this.clear();
       return {};
     }

@@ -1,6 +1,10 @@
-# VELA Value Table Generation Guide
+# Model Reproduction Guide
 
 English | [한국어](README.ko.md)
+
+## LYRA v1 — V₂₀ neural value model
+
+The [LYRA package](lyra-v1/README.md) contains the V₂₀ training chain, board data, frozen checkpoint and browser FP32 conversion code. Training can start without LYRA checkpoints; the frozen VELA v4.2 teacher weights are a separate prerequisite. The application uses the π₂₀ 1-step policy.
 
 ## VELA v4.2 — COMPACT100 Hinge
 

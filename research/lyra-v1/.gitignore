@@ -1,0 +1,7 @@
+__pycache__/
+output/
+training/**/__pycache__/
+training/data/
+training/runs/
+training/kernel/*.dll
+training/kernel/*.exe

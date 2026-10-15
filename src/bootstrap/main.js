@@ -113,7 +113,7 @@ try {
     document.querySelector("#loading-detail").textContent =
       completed === total ? "준비 완료" : "게임 화면을 준비하고 있습니다.";
   };
-  coordinator.checkGpu();
+  coordinator.checkLyraGpu();
   removeRetiredModelCaches().catch(error => { diagnostics.capture(error, "model.cache.cleanup"); console.error("Model cache cleanup failed", error); });
   await assets.initial(advance);
   render();

@@ -67,11 +67,12 @@ export class GameView {
       assisting = session.mode === "assist",
       modeName = { automatic: "자동", manual: "수동", assist: "어시스트" }[session.mode],
       disabled = result.status === "disabled",
-      vela = result.model === "vela" || result.profile?.model === "vela";
+      lyra = result.model === "lyra" || result.profile?.model === "lyra",
+      vela = lyra || result.model === "vela" || result.profile?.model === "vela";
     const text = (id, value) =>
       (document.getElementById(id).textContent = value);
     text("settings-button", "모델 선택");
-    document.querySelector("#settings-button").dataset.model = vela ? "vela" : "x36";
+    document.querySelector("#settings-button").dataset.model = lyra ? "lyra" : vela ? "vela" : "x36";
     const overview = document.querySelector("#score-overview");
     document.querySelector("#compare-button").disabled = disabled || !session.canRecommend;
     for (const id of ["position-button", "dice-used-button", "reset-button", "prev-stage", "next-stage"])
@@ -93,7 +94,9 @@ export class GameView {
     document.getElementById("forecast-value").title = holding ? "직전 확정 상태의 예상 점수입니다." : "";
     text("forecast-delta", forecast.delta ? `(${forecast.delta > 0 ? "+" : ""}${number(forecast.delta, 0)})` : "");
     document.querySelector("#forecast-delta").dataset.direction = forecast.delta > 0 ? "up" : "down";
-    overview.querySelector(".legend").append(document.createElement("br"), document.createTextNode(vela
+    overview.querySelector(".legend").append(document.createElement("br"), document.createTextNode(lyra
+      ? "예상 최종 점수는 LYRA를 계속 따를 때의 예측입니다. 괄호는 직전 상태 대비 변화입니다."
+      : vela
       ? "예상 최종 점수는 VELA를 계속 따를 때의 예측입니다. 괄호는 직전 상태 대비 변화입니다."
       : "예상 최종 점수는 G3-R100K를 계속 따를 때의 예측입니다. 괄호는 직전 상태 대비 변화입니다."));
     text("high-score", session.highScore + " 칸");
@@ -212,12 +215,23 @@ export class GameView {
       values.forEach((v, i) => { row.children[i].textContent = v; row.children[i].dataset.label = labels[i]; });
     });
     text("center-label", vela ? "평가값" : result.profile?.engine === "cpu" ? "중앙값" : "평균");
+    clearTimeout(this.detailTimer);
+    if (lyra && result.status === "running" && Number.isFinite(result.startedAt)) {
+      const updateDetail = () => {
+        const elapsed = Math.max(0, performance.now() - result.startedAt);
+        text("evaluation-detail", translate(`${result.modelName ?? 'LYRA v1'} · ${result.profile?.device === 'auto' ? '자동 · ' : ''}${(result.profile?.engine ?? 'cpu').toUpperCase()} · ${number(elapsed / 1000, 1)}초 · 계산중`));
+        // Refresh only this line; do not redraw the board or restart inference.
+        this.detailTimer = setTimeout(updateDetail, 100);
+      };
+      updateDetail();
+      return;
+    }
     text(
       "evaluation-detail",
       result.status === "error"
         ? result.message
         : result.elapsedMs !== undefined
-          ? vela ? `${result.modelName} · ${number(result.elapsedMs / 1000, 3)}초` : `${result.profile?.engine.toUpperCase()} · G3 · ${number(result.elapsedMs / 1000, 2)}초 · 실제 ${number(result.totalSamples, 0)}회${result.status === "running" ? " · 계산중" : ""}`
+          ? vela ? `${result.modelName}${lyra ? ` · ${result.profile?.device === 'auto' ? '자동 · ' : ''}${result.profile?.engine.toUpperCase()}` : ''} · ${number(result.elapsedMs / 1000, 3)}초` : `${result.profile?.engine.toUpperCase()} · G3 · ${number(result.elapsedMs / 1000, 2)}초 · 실제 ${number(result.totalSamples, 0)}회${result.status === "running" ? " · 계산중" : ""}`
           : "",
     );
   }

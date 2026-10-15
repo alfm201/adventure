@@ -3,7 +3,8 @@ import { showDiagnostics } from "./diagnostics.js";
 import { translateMarkup } from "../../localization/index.js";
 function helpSteps() {
   const alternate = new URLSearchParams(location.search).get("CtrlYn")?.toUpperCase() === "Y";
-  const vela = document.querySelector("#settings-button").dataset.model === "vela";
+  const model = document.querySelector("#settings-button").dataset.model;
+  const lyra = model === 'lyra', vela = lyra || model === "vela";
   const keys = alternate ? ["1", "2", "3"] : ["Ctrl+Q", "Ctrl+E", "Ctrl+G"];
   return [
     ["플레이 모드", "#mode-button",
@@ -33,7 +34,7 @@ function helpSteps() {
       "<strong>모델 선택</strong>을 누르면 모델·계산 방식을 바꿀 수 있습니다.",
       { label: "통계 읽는 법", html: '<dl class="help-reference"><dt>표본 수</dt><dd>해당 선택을 시뮬레이션한 횟수</dd><dt>평균 / 중앙값</dt><dd>평균은 모든 결과의 평균, 중앙값은 결과를 정렬했을 때 가운데 값입니다. 비교 표의 대표값은 GPU 평균·CPU 중앙값이며 추천은 둘 다 평균 기준입니다.</dd><dt>범위</dt><dd>시뮬레이션에서 나온 최저~최고 점수</dd><dt>95% 신뢰구간</dt><dd>평균 추정의 불확실성을 나타냅니다. 한 판의 점수가 이 안에 나온다는 뜻은 아닙니다.</dd></dl>' }]]),
     ["예상 최종 점수", "#score-forecast",
-      `현재 상태에서 <strong>${vela ? "VELA" : "G3-R100K"} 추천을 계속 따를 때</strong>의 최종 점수 예측입니다. 실제 결과를 보장하지 않으며 행동별 평가와 별도로 계산합니다.`,
+      `현재 상태에서 <strong>${lyra ? "LYRA" : vela ? "VELA" : "G3-R100K"} 추천을 계속 따를 때</strong>의 최종 점수 예측입니다. 실제 결과를 보장하지 않으며 행동별 평가와 별도로 계산합니다.`,
       "괄호는 직전 상태 대비 변화입니다. 위치·카드 등을 직접 수정해도 변하므로 한 번의 행동 효과만 뜻하지는 않습니다.",
       "게임이 끝나면 실제 최종 점수를 표시합니다. 예측할 수 없으면 <strong>—</strong>로 표시합니다."],
     ["카드 사용과 추가", "#hand",
