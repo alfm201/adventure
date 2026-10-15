@@ -1,6 +1,7 @@
 // Korean source messages map to English, Japanese and Simplified Chinese.
 // Stage names use descriptive translations/transliterations, not verified regional game names.
 globalThis.adventureMessages = {
+  "페이지 버전": ["Page version", "ページのバージョン", "页面版本"],
   "매우 빠름": ["Very fast", "非常に速い", "非常快"],
   "느림": ["Slow", "遅い", "较慢"],
   "이전 모델을 다시 준비하고 있습니다.": [

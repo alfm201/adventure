@@ -1,6 +1,7 @@
 (function (scope) {
   "use strict";
   if (scope.adventureDiagnostics) return;
+  var build = "2026.10.15.6";
   var events = [], errors = [], providers = {}, listeners = [], startedAt = new Date().toISOString();
   var eventLimit = 160, errorLimit = 24, dropped = 0, sequence = 0;
   function cleanText(value) {
@@ -55,7 +56,7 @@
       try { snapshots[name] = copy(providers[name]()); }
       catch (error) { snapshots[name] = { unavailable: true, error: copy(error) }; }
     });
-    return copy({ schemaVersion: 2, app: "Adventure v2", build: "2026.10.15.5", startedAt: startedAt,
+    return copy({ schemaVersion: 2, app: "Adventure v2", build: build, startedAt: startedAt,
       exportedAt: new Date().toISOString(), page: { path: location.pathname || "", secureContext: !!scope.isSecureContext },
       browser: { userAgent: nav.userAgent, language: nav.language, online: nav.onLine, hardwareConcurrency: nav.hardwareConcurrency,
         deviceMemoryEstimateGiB: nav.deviceMemory, deviceMemorySource: "navigator.deviceMemory",
@@ -83,6 +84,7 @@
     }
   }
   scope.adventureDiagnostics = {
+    get build() { return build; },
     record: record, capture: capture, report: report, download: download,
     provide: function (name, provider) { providers[name] = provider; },
     subscribe: function (listener) { listeners.push(listener); return function () { var index = listeners.indexOf(listener); if (index >= 0) listeners.splice(index, 1); }; }

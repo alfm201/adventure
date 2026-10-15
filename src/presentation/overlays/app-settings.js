@@ -1,3 +1,4 @@
+import { diagnostics } from "../../platform/report.js";
 import { dialog } from './dialogs.js';
 import { showModes } from './modes.js';
 import { showVoiceSettings } from './voice.js';
@@ -20,7 +21,8 @@ export function showAppSettings(session, assist, voice, { parent = null } = {}) 
   <div class="settings-destinations">
     <button type="button" class="settings-destination" data-mode-settings><span class="settings-symbol">${icon('mode')}</span><span class="settings-destination-copy"><strong>모드 변경</strong><small data-current-mode></small></span><span class="settings-chevron" aria-hidden="true">›</span></button>
     <button type="button" class="settings-destination" data-voice-settings><span class="settings-symbol">${icon('voice')}</span><span class="settings-destination-copy"><strong>음성 설정</strong><small>안내 언어·목소리·볼륨</small></span><span class="settings-voice-state"></span><span class="settings-chevron" aria-hidden="true">›</span></button>
-  </div><p class="settings-footnote">페이지 언어를 바꿔도 게임 상태와 화면 연결은 유지됩니다.</p>`;
+  </div><p class="settings-footnote">페이지 언어를 바꿔도 게임 상태와 화면 연결은 유지됩니다.</p><p class="settings-footnote settings-version"><span>페이지 버전</span> · <span data-page-version translate="no"></span></p>`;
+  body.querySelector('[data-page-version]').textContent = diagnostics.build;
   body.querySelector('[data-current-mode]').textContent = `현재 모드: ${{manual:'수동',automatic:'자동',assist:'어시스트'}[session.mode]}`;
   body.querySelector('.settings-voice-state').textContent = voice?.enabled ? '켜짐' : '꺼짐';
   const update = () => {
