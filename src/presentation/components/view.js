@@ -170,11 +170,14 @@ export class GameView {
               : "—";
       b.textContent = (a ? `${a}번카드` : "주사위") + ": " + value;
       b.title = holding ? "직전 확정 상태의 평가값입니다." : "";
-      b.classList.toggle("is-near", session.canRecommend && (!!r?.near || (vela && result.recommended?.includes(a))));
+      const evaluated = available && session.canRecommend && Number.isFinite(score) && result.status !== 'error';
+      // An omitted recommendation produces undefined. DOMTokenList.toggle
+      // treats an undefined force as omitted and flips the previous class.
+      b.classList.toggle("is-near", Boolean(evaluated && (r?.near || (vela && result.recommended?.includes(a)))));
       b.setAttribute("aria-label", `${b.textContent}, ${disabled ? "모델 선택" : "다시 계산"}`);
       const row = this.tableRows[a],
-        recommended = session.canRecommend && result.recommended?.includes(a),
-        near = session.canRecommend && r?.near && !recommended;
+        recommended = evaluated && result.recommended?.includes(a),
+        near = evaluated && r?.near && !recommended;
       row.className = recommended ? "recommended" : near ? "near" : "";
       row.dataset.available = String(available);
       const center = vela ? r?.value : result.profile?.engine === "cpu" ? r?.median : r?.mean;
