@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="./src/presentation/styles/modes.css">
     <link rel="stylesheet" href="./src/presentation/styles/voice.css">
     <link rel="stylesheet" href="./src/presentation/styles/notice.css">
+    <link rel="stylesheet" href="./src/presentation/styles/app-settings.css">
   </head>
   <body>
     <div id="frame" inert>
@@ -46,7 +47,7 @@
               id="position-button"
               aria-label="현재 칸 변경"
             >
-              <output id="position">1</output> <span>칸</span>
+              <output id="position">1</output> <span id="position-unit" translate="no">칸</span>
             </button>
             <div class="portrait" role="img" aria-label="캐릭터"></div>
             <div id="stage-name" class="stage-name"></div>
@@ -106,7 +107,7 @@
               ?
             </button>
             <button id="reset-button" class="blue-button">재시작</button>
-            <button id="mode-button" class="blue-button">모드변경</button>
+            <button id="mode-button" class="blue-button">설정</button>
             <button id="help-button" class="blue-button">도움말</button>
             <div class="stage-navigation">
               <button id="prev-stage" aria-label="이전 스테이지"></button
@@ -176,6 +177,8 @@
       </section>
     </div>
     <div id="notification-stack" class="notification-stack" aria-label="알림" hidden></div>
+    <script src="./src/localization/messages.js"></script>
+    <script src="./src/localization/runtime.js"></script>
     <script src="./src/platform/diagnostics.js"></script>
     <script src="./src/platform/feedback.js"></script>
     <script src="./src/bootstrap/loader.js"></script>

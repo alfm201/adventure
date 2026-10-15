@@ -1179,7 +1179,7 @@ dialog.dialog-fallback[aria-hidden="true"] { pointer-events:none; }
 dialog.help-tour.dialog-fallback[open] { inset:0; transform:none; max-height:none; }
 .card-fallback { display:block; font-size:11px; line-height:1.1; word-break:keep-all; color:#183c47; }
 .missing-portrait .portrait { background:#dde8df; border-radius:50%; }
-.missing-portrait .portrait::after { content:'모험가'; display:grid; height:100%; place-items:center; font-size:12px; color:#527168; }
+.missing-portrait .portrait::after { content:attr(data-fallback-label); display:grid; height:100%; place-items:center; font-size:12px; color:#527168; }
 .multiplier-dialog { padding: 14px; }
 dialog.multiplier-dialog.multiplier-anchored { position: fixed; inset: auto; margin: 0; transform: none; }
 .multiplier-anchored::backdrop { background: #193c3624; }

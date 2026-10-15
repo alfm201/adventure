@@ -1,9 +1,10 @@
 import { tiles } from "../../rules/index.js";
 import { stageNames } from "../../content/board-layout.js";
 import { cardLabels, cardIcons } from "../../content/cards.js";
+import { numberLocale, pageLanguage, translate } from "../../localization/index.js";
 export const number = (n, digits = 1) =>
   Number.isFinite(n)
-    ? n.toLocaleString("ko-KR", { maximumFractionDigits: digits })
+    ? n.toLocaleString(numberLocale(), { maximumFractionDigits: digits })
     : "—";
 export class GameView {
   constructor(assets) {
@@ -82,6 +83,7 @@ export class GameView {
       ? "<b class=recommended>추천</b>: 평가가 가장 높은 선택. 값이 클수록 유리하며, 최종 점수 예측은 아닙니다."
       : "<b class=recommended>추천</b>: 현재 평균이 가장 높은 선택 · <b class=near>근접</b>: 차이가 작아 우열이 애매한 선택 · <b class=candidate>후보</b>: 아직 제외되지 않은 선택";
     text("position", s.position);
+    text("position-unit", pageLanguage() === "en" ? "Tile" : translate("칸"));
     text("stage-name", `${t.stage}.${stageNames[t.stage - 1]}`);
     text("stage-position", t.ordinal);
     text("dice-used", s.diceUsed);
@@ -112,7 +114,7 @@ export class GameView {
       .querySelector("#mode-button")
       .setAttribute(
         "aria-label",
-        `모드변경 (현재 ${modeName})`,
+        `설정 (현재 ${modeName})`,
       );
     document
       .querySelectorAll("[data-sum]")

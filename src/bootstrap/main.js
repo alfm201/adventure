@@ -22,7 +22,7 @@ import { bindAssistBar } from "../presentation/overlays/assist.js";
 document.addEventListener("contextmenu", event => event.preventDefault(), { capture: true });
 
 document.addEventListener("keydown", event => {
-  if (event.key === "Tab") {
+  if (event.key === "Tab" && !document.querySelector("dialog[open]")) {
     event.preventDefault();
     event.stopImmediatePropagation();
   }
@@ -50,6 +50,12 @@ const render = () => {
   renderer.update(session.view);
 };
 session.addEventListener("change", render);
+// A page language change updates presentation only: no session command,
+// coordinator reset, voice setting change or screen reconnection.
+addEventListener("adventurelanguagechange", () => {
+  renderer.staticKey = null;
+  render();
+});
 let imagesPending = false;
 assets.addEventListener("change", () => {
   for (const [id, variable] of [[77, "--portrait-image"], [78, "--card-image"], [82, "--arrows-image"]]) {

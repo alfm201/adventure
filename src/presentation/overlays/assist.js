@@ -164,7 +164,10 @@ export function bindAssistBar(session, assist, prediction, voice) {
     bar.querySelector(".assist-status").textContent = assist.stream ? r.ready ? "공유 중 · 연동됨" : "공유 중 · 확인 중" : "공유 중지";
     const [title, detail] = guidance(assist, performance.now() - issueSince);
     const request = bar.querySelector(".assist-request");
-    if (request.textContent !== title) request.textContent = title;
+    if (request.dataset.sourceMessage !== title) {
+      request.dataset.sourceMessage = title;
+      request.textContent = title;
+    }
     bar.querySelector(".assist-request-detail").textContent = detail;
     const scanning = !!assist.stream && r.issue?.startsWith("deck-");
     const count = bar.querySelector(".assist-count");

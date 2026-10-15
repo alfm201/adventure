@@ -3,6 +3,7 @@ import { tileLayout } from "../../content/board-layout.js";
 import { project } from "../../environment/projection.js";
 import { cellRect, characterRect } from "./geometry.js";
 import { roundedRect } from "./path.js";
+import { translate } from "../../localization/index.js";
 export class BoardRenderer {
   constructor(canvas, assets, onError = () => {}) {
     this.canvas = canvas;
@@ -68,18 +69,19 @@ export class BoardRenderer {
           89,
         );
       if (!events && t.event) {
-        ctx.fillStyle = "#435c50"; ctx.font = "bold 15px Arial";
-        ctx.fillText(({2:"카드",6:"멈춤",9:"멈춤"})[t.event] || "", r.x + 8, r.y + 43);
+        ctx.fillStyle = "#435c50"; ctx.font = `${this.compactText ? 'normal' : 'bold'} 15px Arial`;
+        ctx.fillText(translate(({2:"카드",6:"멈춤",9:"멈춤"})[t.event] || ""), r.x + 8, r.y + 43);
       }
       if (t.jump) {
-        ctx.font = "bold 50px Arial";
+        ctx.font = `${this.compactText ? 'normal' : 'bold'} 50px Arial`;
         ctx.textBaseline = "alphabetic";
         ctx.textAlign = "left";
         ctx.fillStyle = "white";
         ctx.strokeStyle = t.jump > 0 ? "blue" : "red";
         const text = (t.jump > 0 ? "+" : "") + t.jump;
-        ctx.fillText(text, r.x, r.y + 46);
+        ctx.lineWidth = 1;
         ctx.strokeText(text, r.x, r.y + 46);
+        ctx.fillText(text, r.x, r.y + 46);
       }
     }
   }
@@ -100,10 +102,12 @@ export class BoardRenderer {
       this.canvas.height = h;
     }
     const ctx = this.ctx;
+    // Use displayed size, not DPR: a dense phone screen is still visually small.
+    this.compactText = rect.width < 1024 * 0.75;
     ctx.setTransform(scale, 0, 0, scale, 0, 0);
     ctx.clearRect(0, 0, 1024, 694);
     this.assets.ensure(stage);
-    const key = stage + ":" + !!this.assets.get(stage);
+    const key = stage + ":" + !!this.assets.get(stage) + ":" + this.compactText;
     if (this.staticKey !== key) {
       this.drawStatic(this.staticCanvas.getContext("2d"), stage);
       this.staticKey = key;
@@ -133,7 +137,7 @@ export class BoardRenderer {
     if (character) ctx.drawImage(character, 90, 0, 90, 120, r.x, r.y, 90, 120);
     else {
       ctx.fillStyle = "#296f70"; ctx.beginPath(); ctx.arc(r.x + 45, r.y + 62, 19, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = "white"; ctx.font = "bold 16px Arial"; ctx.textAlign = "center"; ctx.fillText("현재", r.x + 45, r.y + 68);
+      ctx.fillStyle = "white"; ctx.font = `${this.compactText ? 'normal' : 'bold'} 16px Arial`; ctx.textAlign = "center"; ctx.fillText(translate("현재"), r.x + 45, r.y + 68);
     }
     if (this.dragPosition && this.dragPosition !== s.position) {
       const r = cellRect(this.dragPosition),
@@ -169,7 +173,7 @@ export class BoardRenderer {
     const pct = (o.count / o.denominator) * 100,
       text =
         o.denominator === 1
-          ? "확정"
+          ? translate("확정")
           : pct >= 10
             ? Math.round(pct) + "%"
             : pct.toFixed(1) + "%";
@@ -181,7 +185,7 @@ export class BoardRenderer {
           ? "#f97316"
           : "#475569";
     ctx.save();
-    ctx.font = "bold 18px Arial";
+    ctx.font = `${this.compactText ? 'normal' : 'bold'} 18px Arial`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     const width = Math.max(58, ctx.measureText(text).width + 20),
@@ -200,7 +204,7 @@ export class BoardRenderer {
     ctx.stroke();
     ctx.fillStyle = "white";
     ctx.strokeStyle = "#000e";
-    ctx.lineWidth = 3;
+    ctx.lineWidth = this.compactText ? 0.75 : 1;
     ctx.strokeText(text, x + width / 2, y + 16);
     ctx.fillText(text, x + width / 2, y + 16);
     ctx.restore();

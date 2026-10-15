@@ -28,6 +28,7 @@ export function attachDiagnostics(session, coordinator, assets) {
   diagnostics.provide("page", () => {
     const params = new URLSearchParams(location.search);
     return { loading: !document.querySelector("#loading").hidden, visibility: document.visibilityState,
+      language: globalThis.adventureI18n?.language ?? "ko",
       ctrlProfile: params.get("CtrlYn")?.toUpperCase() === "Y", noEarlyStop: params.get("noEarlyStop") === "1",
       dialogs: [...document.querySelectorAll("dialog[open]")].map(node => node.className) };
   });

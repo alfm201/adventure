@@ -57,7 +57,7 @@ export function showNotice({ onClose } = {}) {
           <strong class="notice-title">자유로운 모드 전환 & 도움말</strong>
         </div>
         <p class="notice-desc">
-          하단 <strong>[모드변경]</strong> 버튼을 통해 <strong>수동 / 자동 / 어시스트</strong> 모드를 언제든 손쉽게 전환할 수 있습니다. 좌상단 확성기 아이콘을 누르면 언제든지 이 공지를 다시 볼 수 있습니다.
+          하단 <strong>[설정 → 모드 변경]</strong> 버튼을 통해 <strong>수동 / 자동 / 어시스트</strong> 모드를 언제든 손쉽게 전환할 수 있습니다. 좌상단 확성기 아이콘을 누르면 언제든지 이 공지를 다시 볼 수 있습니다.
         </p>
       </section>
     </div>

@@ -1,5 +1,6 @@
 import { dialog, confirmAction } from "./dialogs.js";
 import { showDiagnostics } from "./diagnostics.js";
+import { translateMarkup } from "../../localization/index.js";
 function helpSteps() {
   const alternate = new URLSearchParams(location.search).get("CtrlYn")?.toUpperCase() === "Y";
   const vela = document.querySelector("#settings-button").dataset.model === "vela";
@@ -9,10 +10,10 @@ function helpSteps() {
       "<strong>어시스트</strong>는 연결한 게임 화면에서 위치·주사위·카드를 읽어 추천에 반영합니다. 실제 게임은 직접 조작하세요.",
       "<strong>수동</strong>은 실제 게임의 위치·주사위·카드를 직접 입력하는 모드입니다.",
       "<strong>자동</strong>은 실제 게임 규칙으로 직접 플레이합니다. 실제 게임을 대신 조작하지 않습니다.",
-      "중간부터 연결하면 실제 게임의 <strong>카드 획득 이력</strong>을 열고 위부터 아래까지 천천히 스크롤하세요. 새 게임은 바로 시작하며, 덱 초기화나 놓친 행동이 있으면 다시 확인을 요청합니다.",
+      "중간부터 연결하면 실제 게임의 <strong>카드 획득 이력</strong>을 열고 위부터 아래까지 천천히 스크롤하세요. 새 게임은 바로 시작하며, 놓친 변화로 덱 상태가 불명확할 때 다시 확인을 요청합니다.",
       "읽기 어려운 값은 <strong>상단 안내의 직접 입력</strong>으로 보완할 수 있습니다. 확인 중에는 추천을 잠시 멈춥니다.",
       "추천 모델을 선택한 뒤 상단 <strong>음성</strong>에서 음성 안내를 켤 수 있습니다. 한국어·영어·일본어·중국어와 여성·남성 목소리 중에서 골라 사용할 수 있습니다. 음성을 받기 전에 용량을 확인할 수 있고, 브라우저 저장과 삭제도 가능합니다.",
-      "<strong>모드변경</strong>으로 전환해도 마지막으로 확인한 상태는 유지됩니다. 어시스트의 화면 연결을 끝내려면 연결을 해제하거나 다른 모드로 전환하세요."],
+      "<strong>설정 → 모드 변경</strong>으로 전환해도 마지막으로 확인한 상태는 유지됩니다. 어시스트의 화면 연결을 끝내려면 연결을 해제하거나 다른 모드로 전환하세요."],
     ["위치와 스테이지 이동", "#position-button",
       `현재 <strong>칸 번호</strong>를 누르면 위치를 입력할 수 있습니다. 수동 모드 단축키는 <kbd>${keys[0]}</kbd>입니다.`,
       `수동 모드에서는 <strong>캐릭터를 끌어</strong> 위치를 바꿀 수 있습니다. <strong>스테이지 화살표</strong>${alternate ? "" : "·방향키 ←/→"}는 수동·자동 모드에서 위치를 바꿉니다.`],
@@ -128,7 +129,7 @@ export function showHelp() {
   function render() {
     const { title, paragraphs, detail } = steps[index];
     bubble.querySelector("h3").textContent = title;
-    bubble.querySelector(".help-copy").innerHTML = paragraphs.map((line) => `<p>${line}</p>`).join("");
+    bubble.querySelector(".help-copy").innerHTML = paragraphs.map((line) => `<p>${translateMarkup(line)}</p>`).join("");
     bubble.querySelector(".help-progress").textContent = `${index + 1} / ${steps.length}`;
     extra.innerHTML = detail?.html ?? "";
     extra.hidden = true;
@@ -200,9 +201,13 @@ export function showHelp() {
   };
   heading.onpointerup = heading.onpointercancel = () => (drag = null);
   window.addEventListener("resize", place);
+  window.addEventListener("adventurelanguagechange", render);
+  // Translated copy may wrap to more lines after it is inserted.
+  const layoutObserver = typeof ResizeObserver === "function" ? new ResizeObserver(place) : null;
+  layoutObserver?.observe(bubble);
   node.addEventListener(
     "close",
-    () => window.removeEventListener("resize", place),
+    () => { window.removeEventListener("resize", place); window.removeEventListener("adventurelanguagechange", render); layoutObserver?.disconnect(); },
     { once: true },
   );
   render();

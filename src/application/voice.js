@@ -21,7 +21,12 @@ function settings(value) {
 export class AssistVoice extends EventTarget {
   constructor(session, coordinator, assist, { load = loadVoicePack, audio = new VoiceAudio() } = {}) {
     super(); Object.assign(this, { session, coordinator, assist, load, audio });
-    this.settings = settings(readPreferences());
+    const saved = readPreferences();
+    this.settings = settings(saved);
+    // Preserve legacy saved languages; new volume/cue-only preferences do not
+    // count as completing the initial voice-language setup.
+    this.languageConfigured = saved.languageConfigured === true ||
+      saved.languageConfigured !== false && LANGUAGES.some(lang => lang.id === saved.language);
     this.status = "off"; this.enabled = false; this.holds = 0; this.epoch = 0; this.inspectEpoch = 0;
     this.cache = { available: !!globalThis.caches, bytes: 0, files: {}, freeBytes: null };
     this.lastAvailable = this.available;
@@ -41,7 +46,7 @@ export class AssistVoice extends EventTarget {
     desired: this.desired?.clip || null, delivered: this.delivered || null, audio: this.audio?.snapshot || null }; }
   publish() { this.dispatchEvent(new Event("change")); }
   notice(message) { this.dispatchEvent(new CustomEvent("notice", { detail: message })); }
-  save() { try { localStorage.setItem(PREFERENCES, JSON.stringify(this.settings)); } catch {} }
+  save() { try { localStorage.setItem(PREFERENCES, JSON.stringify({ ...this.settings, languageConfigured: this.languageConfigured })); } catch {} }
   async inspect() {
     const epoch = ++this.inspectEpoch, cache = await inspectVoiceCache();
     if (epoch === this.inspectEpoch && !this.disposed) { this.cache = cache; this.publish(); }
@@ -59,7 +64,8 @@ export class AssistVoice extends EventTarget {
       const result = await this.load(pack, { persist, download, signal: controller.signal, progress: value => { if (epoch === this.epoch) { this.progress = value; this.publish(); } } });
       candidate = result.library; current();
       this.pack?.dispose(); this.pack = candidate; candidate = null;
-      this.settings = settings({ ...this.settings, language: pack.language, voice: pack.voice, persist }); this.save();
+      this.settings = settings({ ...this.settings, language: pack.language, voice: pack.voice, persist });
+      this.languageConfigured = true; this.save();
       this.enabled = true; this.status = "ready"; this.preparation = null; this.delivered = null; this.unblock(); this.publish();
       if (result.cacheFailed) this.notice("음성은 사용할 수 있지만, 브라우저에 저장하지 못했습니다.");
       this.inspect(); this.sync(); return true;

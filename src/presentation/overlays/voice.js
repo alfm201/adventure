@@ -3,6 +3,7 @@ import { showModelSelection } from "./models.js";
 import { LANGUAGES, loadVoiceCatalog } from "../../speech/manifest.js";
 import { isPackCached } from "../../speech/storage.js";
 import { bindVolumeSlider } from "../input/volume.js";
+import { pageLanguage } from "../../localization/index.js";
 
 import { CUE_OPTIONS } from "../../speech/cues.js";
 
@@ -14,8 +15,8 @@ function showVoiceInfo() {
   dialog("음성 정보", body, { className: "voice-license-dialog" });
 }
 
-export function showVoiceSettings(voice) {
-  if (document.querySelector("dialog")) return;
+export function showVoiceSettings(voice, { parent = null } = {}) {
+  if ([...document.querySelectorAll('dialog[open]')].some(node => node !== parent)) return;
   const release = voice.hold(), body = document.createElement("div"); body.className = "voice-settings";
   body.innerHTML = `<div class="voice-intro"><p>화면 확인 요청과 추천 행동을 음성으로 안내합니다.</p><span class="voice-state"></span></div>
     <div class="voice-model-needed" hidden><span>행동을 추천할 모델을 먼저 선택해 주세요.</span><button type="button" data-model>모델 선택</button></div>
@@ -41,7 +42,8 @@ export function showVoiceSettings(voice) {
   const CUE_KEYS = CUE_OPTIONS.map(([key]) => key);
   for (const lang of LANGUAGES) input("language").add(new Option(lang.name, lang.id));
   for (const [id, name] of [["F", "여성"], ["M", "남성"]]) input("voice").add(new Option(name, id));
-  input("language").value = voice.settings.language; input("voice").value = voice.settings.voice;
+  input("language").value = !voice.enabled && !voice.languageConfigured ? pageLanguage() : voice.settings.language;
+  input("voice").value = voice.settings.voice;
   input("volume").value = Math.round(voice.settings.volume * 100); input("persist").checked = voice.settings.persist;
   for (const key of CUE_KEYS) input("cue_" + key).checked = voice.settings.cues?.[key] !== false;
   let catalog = [], catalogError = null, reading = true, deleting = false, closed = false;

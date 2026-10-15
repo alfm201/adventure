@@ -22,8 +22,8 @@ const issues = {
   preview: "미리보기를 재생하지 못했습니다. 화면을 다시 연결해 주세요.",
 };
 
-export function showModes(session, assist, { screen = false, voice = null } = {}) {
-  if (document.querySelector("dialog")) return;
+export function showModes(session, assist, { screen = false, voice = null, parent = null } = {}) {
+  if ([...document.querySelectorAll('dialog[open]')].some(node => node !== parent)) return;
   const body = document.createElement("div");
   const node = dialog("모드 선택", body, { className: "mode-dialog" });
   let pane, video, previewIssue = false;
@@ -102,7 +102,7 @@ export function showModes(session, assist, { screen = false, voice = null } = {}
     body.querySelector(".mode-back").onclick = showChoices;
     body.querySelector("[data-connect]").onclick = async () => {
       if (await assist.connect()) {
-        if (voice && !voice.enabled) node.addEventListener("close", () => showVoiceSettings(voice), { once: true });
+        if (voice && !voice.enabled) node.addEventListener("close", () => showVoiceSettings(voice, {parent}), { once: true });
         node.close();
       }
     };

@@ -1,7 +1,7 @@
 import { askValue, confirmAction, toast, dialog } from "../overlays/dialogs.js";
 import { showModelSelection } from "../overlays/models.js";
 import { showHelp } from "../overlays/help.js";
-import { showModes } from "../overlays/modes.js";
+import { showAppSettings } from "../overlays/app-settings.js";
 import { showNotice } from "../overlays/notice.js";
 import { askMultiplierRoll } from "../overlays/multiplier.js";
 import { bindOverview } from "../overlays/overview.js";
@@ -10,6 +10,10 @@ import { tiles, cards } from "../../rules/index.js";
 import { cardLabels } from "../../content/cards.js";
 
 export function bindInputs(session, coordinator, renderer, prediction, assist, voice) {
+  document.addEventListener('adventureopensettings', event => {
+    prediction.hide();
+    showAppSettings(session, assist, voice, {parent:event.detail.parent});
+  });
   const recalculate = () =>
     session.canRecommend && (coordinator.enabled ? coordinator.recalculate() : showModelSelection(coordinator));
   const $ = (s) => document.querySelector(s),
@@ -82,7 +86,7 @@ export function bindInputs(session, coordinator, renderer, prediction, assist, v
   };
   $("#mode-button").onclick = () => {
     prediction.hide();
-    showModes(session, assist, { voice });
+    showAppSettings(session, assist, voice);
   };
   $("#notice-button") && ($("#notice-button").onclick = () => {
     prediction.hide();

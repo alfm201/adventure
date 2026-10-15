@@ -16,6 +16,7 @@ import {
   popcount,
 } from "../environment/tables.js";
 import { cardLabels } from "../content/cards.js";
+import { translate, pageLanguage } from "../localization/index.js";
 import { diagnostics } from "../platform/report.js";
 export class Session extends EventTarget {
   constructor(random = Math.random) {
@@ -179,7 +180,7 @@ export class Session extends EventTarget {
         .replace("*", "주사위 ")
         .replace(/^>.*/, "다음 스테이지");
       const index = cardLabels.findIndex(
-        (name, i) => name.includes(query) && b.deckMask & (1 << i),
+          (name, i) => (name.includes(query) || translate(name, pageLanguage()).toLocaleLowerCase().includes(value.trim().toLocaleLowerCase())) && b.deckMask & (1 << i),
       );
       if (index < 0) throw Error("획득 가능한 일치 카드가 없습니다.");
       add(index + 1);

@@ -1,7 +1,7 @@
 import { CharacterProbe } from "./character.js";
+import { DeckNumbers } from "./deck-numbers.js";
 
 const WIDTH = 1234;
-const CLASSES = [1, 2, 3, 4, 4, 6, 6, 8, 8, 10, 10, 12, 12, 14, 14, 16, 16, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 29];
 const white = (r, g, b) => Math.min(r, g, b) > 205 && Math.max(r, g, b) - Math.min(r, g, b) < 48;
 const WHITE_POINTS = [[70, 7], [130, 7], [8, 50], [200, 100], [80, 278], [130, 278]];
 const CORE_REGIONS = [[74, 55, 51, 21], [420, 638, 220, 42], [16, 540, 176, 70], [128, 659, 35, 27]];
@@ -60,14 +60,9 @@ function normalized(mask, width, top, bottom, left, right) {
 export class GameRecognizer {
   constructor(templates) {
     this.templates = templates;
-    this.rows = templates.rows.map(row => ({ ...row, mask: this.inkMask(row) }));
-    this.anchor = { ...templates.anchor, mask: this.inkMask(templates.anchor) };
+    this.anchor = templates.anchor;
+    this.deckNumbers = new DeckNumbers(templates.deckDigits);
     this.character = new CharacterProbe(templates.characters);
-  }
-  inkMask(template) {
-    const mask = new Uint8Array(template.width * template.height);
-    for (const p of template.ink) mask[p] = 1;
-    return mask;
   }
   pixel(x, y) { const i = (Math.round(y) * WIDTH + Math.round(x)) * 4; return this.data.subarray(i, i + 3); }
   whiteAt(x, y) { return white(...this.pixel(x, y)); }
@@ -77,21 +72,26 @@ export class GameRecognizer {
       mask[yy * width + xx] = +predicate(...this.pixel(x + xx, y + yy));
     return mask;
   }
-  inkSimilarity(mask, reference) {
-    let total = 0, both = 0;
-    for (let i = 0; i < mask.length; i++) { total += mask[i] + reference[i]; both += mask[i] & reference[i]; }
-    return total ? both * 2 / total : 0;
-  }
   anchorScore(image) {
-    const mask = new Uint8Array(image.width * image.height);
-    for (let i = 0; i < mask.length; i++) mask[i] = +(Math.min(image.data[i * 4], image.data[i * 4 + 1], image.data[i * 4 + 2]) > 170);
-    return this.inkSimilarity(mask, this.anchor.mask);
+    return this.structureScore((x, y) => image.data.subarray((y * image.width + x) * 4, (y * image.width + x) * 4 + 3));
+  }
+  structureScore(pixel) {
+    // All groups are text-free frame/divider/icon patches. Each must agree;
+    // a large matching blank panel cannot compensate for an unrelated icon.
+    return Math.min(...this.anchor.groups.map(group => {
+      let error = 0;
+      for (const [x, y, r, g, b] of group) {
+        const rgb = pixel(x, y);
+        error += Math.abs(rgb[0] - r) + Math.abs(rgb[1] - g) + Math.abs(rgb[2] - b);
+      }
+      return 1 - error / (group.length * 3 * 255);
+    }));
   }
   visible() {
     if (WHITE_POINTS.filter(([x, y]) => this.whiteAt(x, y)).length < 3) return false;
     const a = this.anchor;
-    const mask = this.textMask(a.x, a.y, a.width, a.height, (r, g, b) => Math.min(r, g, b) > 170);
-    this.lastAnchorScore = this.inkSimilarity(mask, a.mask); return this.lastAnchorScore > .62;
+    this.lastAnchorScore = this.structureScore((x, y) => this.pixel(a.x + x, a.y + y));
+    return this.lastAnchorScore > .88;
   }
   dimmingGain() {
     const samples = WHITE_POINTS.map(([x, y]) => Array.from(this.pixel(x, y)))
@@ -184,59 +184,29 @@ export class GameRecognizer {
     const blank = [[465, 105], [465, 250], [465, 490]].filter(([x, y]) => this.whiteAt(x, y)).length;
     const [r, g, b] = this.pixel(465, 30);
     if (blank < 3 || r < g * 1.25 || r < b * 1.1) { this.deckCache = null; return { open: false, rows: [] }; }
-    const mask = this.textMask(256, 67, 221, 544, (r, g, b) => Math.max(r, g, b) < 115);
-    // Only reuse row identities when every label pixel is unchanged. Checkbox
-    // pixels are outside this mask and are always sampled from the new frame.
+    // Scan this fixed ROI directly. Avoid allocating an RGB subarray for
+    // each of its 120,224 pixels on every deck frame.
+    const mask = new Uint8Array(221 * 544), data = this.data;
+    for (let y = 0, p = 0; y < 544; y++) {
+      let at = ((y + 67) * WIDTH + 256) * 4;
+      for (let x = 0; x < 221; x++, p++, at += 4)
+        mask[p] = +(data[at] < 170 && data[at + 1] < 170 && data[at + 2] < 170);
+    }
     if (this.deckCache && mask.every((value, i) => value === this.deckCache.mask[i])) {
       return { open: true, range: this.deckCache.range,
         rows: this.deckCache.rows.map(row => ({ index: row.index, identified: true, obtained: this.deckFlag(row.y) }))
           .filter(row => row.obtained !== null) };
     }
     this.deckCache = null;
-    const lines = Array.from({ length: 544 }, (_, y) => { let n = 0; for (let x = 0; x < 221; x++) n += mask[y * 221 + x]; return n > 4; });
-    const bands = runs(lines).filter(([a, b]) => b - a >= 8 && b - a <= 14);
-    const observed = [];
-    for (const [start, end] of bands) {
-      const y = start + 67;
-      const costs = [];
-      const parts = [-1, 0, 1].map(dy => this.textMask(256, y + dy, 221, 11, (r, g, b) => Math.max(r, g, b) < 115));
-      for (const template of this.rows) {
-        let best = 0;
-        for (const part of parts) best = Math.max(best, this.inkSimilarity(part, template.mask));
-        costs.push([template.id, best]);
-      }
-      costs.sort((a, b) => b[1] - a[1]);
-      const id = costs[0][1] > .80 && costs[0][1] - costs[1][1] > .003 ? costs[0][0] : null;
-      const obtained = this.deckFlag(y);
-      observed.push({ y, id, obtained });
-    }
-    if (observed.length < 3) return { open: true, rows: [] };
-    const candidates = [];
-    for (let start = 0; start < 30; start++) {
-      let matches = 0, mismatches = 0;
-      for (const row of observed) {
-        const index = start + Math.round((row.y - observed[0].y) / 30);
-        if (index >= 30) { mismatches += 2; continue; }
-        if (row.id !== null) { if (CLASSES[index] === row.id) matches++; else mismatches++; }
-      }
-      candidates.push({ start, matches, mismatches, score: matches - 3 * mismatches });
-    }
-    candidates.sort((a, b) => b.score - a.score);
-    const best = candidates[0];
-    if (best.matches < 3 || best.mismatches || best.score - candidates[1].score < 2) return { open: true, rows: [] };
-    // Hover/highlight colors can hide one row's black label. Its physical
-    // ordinal is still known when six or more labels establish a unique grid.
-    const trustedGrid = best.matches >= 6 && best.score - candidates[1].score >= 3;
-    const identified = row => row.id !== null || trustedGrid
-      && Math.abs((row.y - observed[0].y) / 30 - Math.round((row.y - observed[0].y) / 30)) <= 1 / 30;
-    this.deckCache = { mask,
-      range: { start: best.start, end: best.start + Math.round((observed.at(-1).y - observed[0].y) / 30) },
-      rows: observed.filter(identified).map(row => ({ y: row.y,
-        index: best.start + Math.round((row.y - observed[0].y) / 30) })).filter(row => row.index < 30) };
-    return { open: true,
-      range: { start: best.start, end: best.start + Math.round((observed.at(-1).y - observed[0].y) / 30) },
-      rows: observed.map(row => ({ index: best.start + Math.round((row.y - observed[0].y) / 30), obtained: row.obtained, identified: identified(row) })).filter(row => row.index < 30 && row.identified && row.obtained !== null) };
+    const identified = this.deckNumbers.locate(mask, 221, 544);
+    if (!identified) return { open: true, rows: [] };
+    const rows = identified.rows.map(row => ({ ...row, y: row.y + 67 }));
+    this.deckCache = { mask, range: identified.range, rows };
+    return { open: true, range: identified.range,
+      rows: rows.map(row => ({ index: row.index, identified: true, obtained: this.deckFlag(row.y) }))
+        .filter(row => row.obtained !== null) };
   }
+
   deckFlag(y) {
     let orange = 0, dark = 0;
     for (let yy = y - 3; yy < y + 12; yy++) for (let xx = 232; xx < 252; xx++) {
@@ -260,21 +230,21 @@ export class GameRecognizer {
       const gain = this.dimmingGain(), score = this.lastAnchorScore;
       if (gain) {
         this.brightenCore(image, gain, false);
-        if (this.visible() && this.lastAnchorScore > .80) { illumination = gain; dimmed = true; }
+        if (this.visible() && this.lastAnchorScore > .90) { illumination = gain; dimmed = true; }
         else { this.data = image.data; this.lastAnchorScore = score; }
       }
     }
     if (!retained && !visible) {
       const a = this.anchor;
       if (allowOverlay) {
-        this.lastAnchorScore = this.inkSimilarity(this.textMask(a.x, a.y, a.width, a.height, (r,g,b) => Math.min(r,g,b)>170), a.mask);
-        overlay = this.lastAnchorScore > .80;
+        this.lastAnchorScore = this.structureScore((x, y) => this.pixel(a.x + x, a.y + y));
+        overlay = this.lastAnchorScore > .90;
       }
       if (!overlay) {
         const gain = this.dimmingGain();
         if (gain) {
           this.brightenCore(image, gain, false);
-          if (this.visible() && this.lastAnchorScore > .80) { illumination = gain; dimmed = true; }
+          if (this.visible() && this.lastAnchorScore > .90) { illumination = gain; dimmed = true; }
         }
         if (!dimmed) {
           this.data = image.data;

@@ -24,6 +24,12 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
   const node = dialog("모델 선택", body, { className: "model-dialog" });
   let controller, epoch = 0, handedOff = false, deletingCache = false, selected = selectedModel ?? (coordinator.enabled ? coordinator.settings.model : "vela");
   const heading = node.querySelector("h2");
+  const settingsEntry = document.createElement('button');
+  settingsEntry.type = 'button'; settingsEntry.className = 'model-settings-entry';
+  settingsEntry.setAttribute('aria-label', '설정'); settingsEntry.title = '설정';
+  settingsEntry.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/></svg><span>설정</span>';
+  settingsEntry.onclick = () => document.dispatchEvent(new CustomEvent('adventureopensettings', {detail:{parent:node}}));
+  node.querySelector('.dialog-header').insertBefore(settingsEntry, node.querySelector('.dialog-close'));
   const focusPrimary = () => body.querySelector(".primary:not(:disabled)")?.focus({ preventScroll: true });
   const leave = next => { handedOff = true; node.addEventListener("close", next, { once: true }); node.close(); };
   node.addEventListener("close", () => {
@@ -66,6 +72,7 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
     else showModelSelection(coordinator, { initial, selectedModel: selected, onFinish });
   }
   function select() {
+    settingsEntry.hidden = false;
     epoch++; controller?.abort(); controller = null; coordinator.cancelModelPreparation();
     heading.textContent = "모델 선택";
     body.innerHTML = `<p class="model-intro">게임의 다음 선택을 도와줄 모델을 고르세요.</p>
@@ -160,6 +167,9 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
     paintChoices(body); focusPrimary();
   }
   function progressScreen(title, manifest) {
+    // Preparation can hand off to another dialog asynchronously. Settings are
+    // entered from model selection, where that parent stays stable.
+    settingsEntry.hidden = true;
     heading.textContent = title;
     body.innerHTML = `<div class="model-loading" aria-live="polite"><p class="model-loading-title">준비하고 있습니다.</p><p class="model-loading-detail">잠시만 기다려 주세요.</p>
       <div class="model-meter"><span>${transferLabel}</span><strong class="model-transfer">준비 중</strong></div><progress class="model-download" max="1" value="0" aria-label="모델 ${transferLabel}"></progress>

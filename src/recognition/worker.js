@@ -8,22 +8,32 @@ const status = new RecognitionStatus();
 const source = new OffscreenCanvas(1, 1), screen = new OffscreenCanvas(1234, 694);
 const input = source.getContext("2d", { willReadFrequently: true });
 const output = screen.getContext("2d", { willReadFrequently: true });
-const anchorCanvas = new OffscreenCanvas(103, 14), anchorOutput = anchorCanvas.getContext("2d", { willReadFrequently: true });
 
 function crop(rect) {
   output.drawImage(source, rect.x, rect.y, rect.width, rect.height, 0, 0, 1234, 694);
   return screen.getContext("2d").getImageData(0, 0, 1234, 694);
 }
-function align(rect) {
-  const a = recognizer.anchor;
+function align(rect, image) {
+  const a = recognizer.anchor, pixels = image.data, width = image.width;
   let best = null, score = 0;
   for (const dy of [0, -.5, .5, -1, 1]) for (const dx of [0, -.5, .5, -1, 1]) {
     const x = rect.x + dx * rect.scale, y = rect.y + dy * rect.scale;
-    anchorOutput.drawImage(source, x + a.x * rect.scale, y + a.y * rect.scale, a.width * rect.scale, a.height * rect.scale, 0, 0, a.width, a.height);
-    const match = recognizer.anchorScore(anchorOutput.getImageData(0, 0, a.width, a.height));
-    if (match > score) { score = match; best = { ...rect, x, y }; }
+    // Sample only the structural points from the already captured search
+    // image. Avoid 25 canvas crops/readbacks for every candidate window.
+    const match = recognizer.structureScore((px, py) => {
+      const sx = x + (a.x + px + .5) * rect.scale - .5;
+      const sy = y + (a.y + py + .5) * rect.scale - .5;
+      const ix = Math.floor(sx), iy = Math.floor(sy), fx = sx - ix, fy = sy - iy;
+      const at = (iy * width + ix) * 4, rgb = [];
+      for (let c = 0; c < 3; c++) rgb.push(
+        (pixels[at+c]*(1-fx)+pixels[at+4+c]*fx)*(1-fy) +
+        (pixels[at+width*4+c]*(1-fx)+pixels[at+width*4+4+c]*fx)*fy);
+      return rgb;
+    });
+    // Prefer the geometric origin over a tiny resampling-score fluctuation.
+    if (match > score + .012) { score = match; best = { ...rect, x, y }; }
   }
-  return score > .62 ? best : null;
+  return score > .88 ? best : null;
 }
 
 self.onmessage = async ({ data }) => {
@@ -58,8 +68,9 @@ self.onmessage = async ({ data }) => {
     if (!observation?.visible && started - lastSearch > 1200) {
       lastSearch = started;
       searchIssue = region ? "covered" : "window";
-      for (const candidate of findGameRegion(input.getImageData(0, 0, source.width, source.height))) {
-        const adjusted = align(candidate);
+      const searchImage = input.getImageData(0, 0, source.width, source.height);
+      for (const candidate of findGameRegion(searchImage)) {
+        const adjusted = align(candidate, searchImage);
         if (!adjusted) continue;
         if (candidate.scale < .9) { searchIssue = "small"; continue; }
         const result = recognizer.read(crop(adjusted), context);
