@@ -219,13 +219,13 @@ export class AssistVoice extends EventTarget {
       }
     }
     const cue = this.cue();
-    // A queued/buffering acknowledgement can be replaced by a recommendation.
-    // Once audible, finish the whole acknowledgement; recompute the latest
+    // Queued/buffering notices can be replaced by a recommendation.
+    // Once audible, finish acknowledgement and calculation notices; recompute the latest
     // cue on completion instead of retaining a potentially obsolete action.
-    if (this.playback && this.cueStarted && this.desired?.clip === "deck-ready" &&
+    if (this.playback && this.cueStarted && ["deck-ready", "calculating"].includes(this.desired?.clip) &&
         this.session.mode === "assist" && this.assist.stream &&
-        this.desired.key.startsWith("deck-ready:" + this.assist.epoch + ":") &&
-        this.isCueEnabled("deck-ready") && cue?.clip !== "disconnected") {
+        this.desired.key.startsWith(this.desired.clip + ":" + this.assist.epoch + ":") &&
+        this.isCueEnabled(this.desired.clip) && cue?.clip !== "disconnected") {
       if (cue?.key.startsWith("action:") && !this.freshAction(cue)) this.requestActionFrame(cue);
       return;
     }
