@@ -17,7 +17,7 @@ function guidance(assist, duration) {
   if (r.issue === "covered") return ["게임 화면을 확인하고 있습니다", duration > 6000 ? "팝업이 열려 있다면 닫은 뒤 계속해 주세요." : "동작이 끝나면 자동으로 이어집니다."];
   if (r.issue === "deck-open" || r.issue === "deck-reopen") return [r.issue === "deck-reopen" ? "카드 획득 이력을 다시 열어주세요" : "카드 획득 이력을 열어주세요",
     r.verification === "gap" ? "놓친 변화가 있어 남은 카드를 다시 확인하겠습니다." : "실제 게임의 ? 버튼을 누른 뒤 목록을 천천히 스크롤해 주세요."];
-  if (r.issue === "deck-up" || r.issue === "deck-down") return [`카드 이력을 ${r.issue === "deck-up" ? "위" : "아래"}로 스크롤해 주세요`, "일부 카드가 아직 보이지 않습니다. 스크롤 후 잠시 멈춰 주세요."];
+  if (r.issue === "deck-up" || r.issue === "deck-down") return [`카드 이력을 ${r.issue === "deck-up" ? "위" : "아래"}로 스크롤해 주세요`, r.deckRecognition ? "목록의 위치를 확인하고 있습니다. 조금 움직인 뒤 잠시 멈춰 주세요." : "일부 카드가 아직 보이지 않습니다. 스크롤 후 잠시 멈춰 주세요."];
   if (r.issue === "deck-scan") return ["카드 이력을 천천히 스크롤해 주세요", "목록의 위치를 확인하고 있습니다. 조금 움직인 뒤 잠시 멈춰 주세요."];
   if (r.issue === "deck-adjust" || r.issue === "deck-hold" && duration > 1800) return ["카드 이력을 조금 위아래로 움직여 주세요", "아직 읽지 못한 항목이 있습니다. 체크 표시가 보이면 잠시 멈춰 주세요."];
   if (r.issue === "deck-hold") return ["스크롤을 잠시 멈춰 주세요", "현재 보이는 카드 이력을 확인하고 있습니다."];

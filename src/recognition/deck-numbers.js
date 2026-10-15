@@ -36,7 +36,7 @@ export class DeckNumbers {
       return false;
     });
     const parts = runs(columns), digits = [];
-    const classify = (left,right) => {
+    const classify = (left,right, weak=false) => {
       let t = bottom, b = top;
       for (let y = top; y < bottom; y++) for (let x = left; x < right; x++) if (mask[y*width+x]) { t=Math.min(t,y);b=Math.max(b,y+1); }
       if (b-t < 7 || b-t > 14 || right-left > 8) return null;
@@ -49,37 +49,48 @@ export class DeckNumbers {
         scores.set(g.value,Math.min(scores.get(g.value) ?? Infinity,error));
       }
       const ranked = [...scores].sort((a,b) => a[1]-b[1]);
-      return ranked[0]?.[1] <= .16 && ranked[1][1]-ranked[0][1] >= .025
-        ? { value: ranked[0][0], error: ranked[0][1], left, right } : null;
+      if (ranked[0]?.[1] <= .16 && ranked[1][1]-ranked[0][1] >= .025)
+        return { value: ranked[0][0], error: ranked[0][1], left, right, top:t, bottom:b };
+      // Weak shape evidence can veto a truncated number, never supply its value.
+      // Accepted digits still require the original .16/.025 confidence gates.
+      return weak && ranked[0]?.[1]<=.23 ? { value:null, numeric:true, left, right, top:t, bottom:b } : null;
     };
     for (let i=0; i<parts.length; i++) {
       const [left,right]=parts[i], next=parts[i+1];
-      const single=classify(left,right);
+      const single=classify(left,right,true);
       // Downsampling can erase a thin digit's connecting pixels. Join only
       // a one-column interior gap when the complete glyph itself validates.
       const joined=next && next[0]-right<=1 ? classify(left,next[1]) : null;
-      if (joined && (!single || joined.error<single.error)) {digits.push(joined);i++;}
-      else digits.push(single);
+      if (joined && (!single || single.value===null || joined.error<single.error)) {digits.push(joined);i++;}
+      // Retain rejected component bounds: a failed second digit must not turn
+      // 12 into 1, or a failed first digit turn it into 2.
+      else digits.push(single || { value:null, left, right });
     }
     const values = new Set();
     for (let i = 0; i < digits.length; i++) {
-      const d = digits[i]; if (!d) continue;
+      const d = digits[i]; if (d.value===null) continue;
       const next = digits[i+1], previous = digits[i-1];
-      if (previous && d.left-previous.right <= 4) continue;
-      if (next && next.left-d.right <= 4) {
+      if (previous && previous.value!==null && d.left-previous.right <= 4) continue;
+      // Only narrow neighbours can be an unread numeral; full-width language
+      // glyphs beside a number are not part of that number.
+      const suspect = part => part?.numeric && Math.abs(part.top-d.top)<=1 && part.bottom===d.bottom;
+      if (previous?.value===null && suspect(previous) && d.left-previous.right<=4) continue;
+      if (next && next.left-d.right <= 4 && (next.value!==null || suspect(next))) {
         const number = d.value*10+next.value;
-        if (d.value===1 && number<=12 && !(digits[i+2] && digits[i+2].left-next.right<=4)) values.add(number);
+        const third=digits[i+2];
+        if (next.value!==null && d.value===1 && number<=12 && !(third && third.left-next.right<=4 && (third.value!==null || suspect(third)))) values.add(number);
       } else if (d.value>=1 && d.value<=9) values.add(d.value);
     }
     return [...values];
   }
-  locate(mask, width, height) {
+  locate(mask, width, height) { return this.analyze(mask,width,height).identified || null; }
+  analyze(mask, width, height) {
     const lines = Array.from({ length: height }, (_, y) => {
       let count = 0; for (let x = 0; x < width; x++) count += mask[y*width+x];
       return count > 4;
     });
     const bands = runs(lines).filter(([a,b]) => b-a>=7 && b-a<=16 && b<height && (a>0 || b-a>=10));
-    if (bands.length<4) return null;
+    if (bands.length<4) return { reason:'row-grid', seek:'adjust', bands:bands.length };
     // Rows remain physical slots even when their numerals cannot be read.
     // No alignment or scroll offset from the previous frame is reused.
     const phaseCounts = Array.from({length:30},(_,phase) => bands.filter(([y]) => {
@@ -87,9 +98,9 @@ export class DeckNumbers {
     }).length);
     const phase = phaseCounts.indexOf(Math.max(...phaseCounts));
     const grid = bands.filter(([y]) => {const d=Math.abs(y%30-phase);return Math.min(d,30-d)<=1;});
-    if (grid.length<4 || grid.length<bands.length*.8) return null;
+    if (grid.length<4 || grid.length<bands.length*.8) return { reason:'row-grid', seek:'adjust', bands:bands.length, aligned:grid.length };
     const origin = grid[0][0], last = Math.round((grid.at(-1)[0]-origin)/30);
-    if (last>=30) return null;
+    if (last>=30) return { reason:'row-grid', seek:'adjust' };
     const observed = grid.map(([top,bottom]) => ({
       slot:Math.round((top-origin)/30), y:top, values:this.numbers(mask,width,top,bottom),
     }));
@@ -105,8 +116,35 @@ export class DeckNumbers {
     }
     ranked.sort((a,b)=>a.conflicts-b.conflicts || b.matches-a.matches);
     const best=ranked[0];
-    if (!best || best.conflicts || best.matches<4 || ranked[1] && ranked[1].conflicts<2) return null;
-    return { range:{start:best.start,end:best.start+last},
-      rows:observed.map(row=>({index:best.start+row.slot,y:row.y})) };
+    const candidates=ranked.filter(candidate=>candidate.conflicts===0);
+    if (!best || best.conflicts || best.matches<4 || ranked[1] && ranked[1].conflicts<2) {
+      // Seek fresh evidence outside this viewport. Candidate starts are only
+      // guidance: no flags or row IDs are committed until the normal strict
+      // full-window test succeeds on a new frame.
+      const possible=ranked.filter(candidate=>candidate.conflicts<=1);
+      return { reason:candidates.length?'ambiguous-numbers':'number-conflict',
+        matches:best?.matches || 0, conflicts:best?.conflicts || 0,
+        candidateStarts:possible.map(candidate=>candidate.start),
+        seek:candidates.length?extensionDirection(possible,last):'adjust' };
+    }
+    return { reason:'identified', matches:best.matches, conflicts:0,
+      identified:{ range:{start:best.start,end:best.start+last},
+        rows:observed.map(row=>({index:best.start+row.slot,y:row.y})) } };
   }
+}
+
+function extensionDirection(candidates,last) {
+  if (!candidates.length) return 'adjust';
+  const choices=[];
+  for (const direction of ['down','up']) {
+    const room=candidates.map(({start})=>direction==='up'?start:29-start-last);
+    const steps=Math.min(4,...room);
+    if (steps<1) continue;
+    const traces=candidates.map(({start})=>Array.from({length:steps},(_,i)=>
+      DECK_NUMBERS[direction==='up'?start-i-1:start+last+i+1]));
+    choices.push({ direction, diversity:new Set(traces.map(trace=>JSON.stringify(trace))).size,
+      evidence:Math.min(...traces.map(trace=>trace.filter(value=>value!==null).length)) });
+  }
+  choices.sort((a,b)=>b.diversity-a.diversity || b.evidence-a.evidence);
+  return choices[0]?.direction || 'adjust';
 }

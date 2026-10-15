@@ -198,8 +198,8 @@ export class GameRecognizer {
           .filter(row => row.obtained !== null) };
     }
     this.deckCache = null;
-    const identified = this.deckNumbers.locate(mask, 221, 544);
-    if (!identified) return { open: true, rows: [] };
+    const analysis = this.deckNumbers.analyze(mask, 221, 544), identified = analysis.identified;
+    if (!identified) return { open: true, rows: [], recognition:analysis };
     const rows = identified.rows.map(row => ({ ...row, y: row.y + 67 }));
     this.deckCache = { mask, range: identified.range, rows };
     return { open: true, range: identified.range,

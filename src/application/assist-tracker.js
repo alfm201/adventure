@@ -447,6 +447,7 @@ export class AssistTracker {
   }
   result(issue, extra = {}) {
     return { ready: !issue, issue, seen: this.seen, verification: this.deckReason,
+      ...(issue?.startsWith('deck-') && this.lastObservation?.deck?.recognition ? { deckRecognition:this.lastObservation.deck.recognition } : {}),
       canCorrect: !!this.lastObservation?.visible, ...extra };
   }
   collectDeck(observed, key, at, sourceFrame) {
@@ -469,7 +470,10 @@ export class AssistTracker {
     const range = deck.range || (rows.length ? {
       start: Math.min(...rows.map(row => row.index)), end: Math.max(...rows.map(row => row.index)),
     } : null);
-    if (!range) return "deck-scan";
+    if (!range) {
+      const seek=deck.recognition?.seek;
+      return seek==='up'?'deck-up':seek==='down'?'deck-down':seek==='adjust'?'deck-adjust':'deck-scan';
+    }
 
     const missingBelow = this.votes.some((vote, i) => i > range.end && vote.count < 2);
     const missingAbove = this.votes.some((vote, i) => i < range.start && vote.count < 2);
