@@ -6,7 +6,7 @@ export const memoryText = manifest => manifest.recommendedMemoryBytes
   : '메모리 사용량은 기기와 게임 상태에 따라 달라집니다.';
 const preparationNavigation = () => '<footer><button type="button" class="model-back">이전</button><span></span><button type="button" class="primary">다음</button></footer>';
 
-export function preparationConsent({ bytes, intro, memory = '', local = false, resident = false, supported = true, allowed = false, storage = true, deleteStorage = false, saveHint = '' }) {
+export function preparationConsent({ bytes, intro, memory = '', local = false, resident = false, supported = true, allowed = false, storage = true, storageHint = false, saveHint = '' }) {
   return `<p class="model-intro">${intro}</p>
     <div class="model-size"><strong>${megabytes(bytes)} <span>${resident || local ? '모델 파일' : '다운로드'}</span></strong>${saveHint ? `<span>${saveHint}</span>` : ''}</div>
     ${memory ? `<p class="model-memory">${memory}</p>` : ''}
@@ -15,7 +15,7 @@ export function preparationConsent({ bytes, intro, memory = '', local = false, r
       <label><input type="radio" name="cache" value="yes" ${supported ? '' : 'disabled'} ${supported && allowed ? 'checked' : ''}><span><strong>이 브라우저에 저장</strong><small>저장 공간과 사용 가능 여부를 확인합니다.</small></span></label>
       <label><input type="radio" name="cache" value="no" ${supported && allowed ? '' : 'checked'}><span><strong>이번에만 사용</strong><small>${local ? '다음 접속 때 이 PC의 파일을 다시 읽습니다.' : '다음 접속 때 다시 다운로드합니다.'}</small></span></label>
     </div><div class="model-support cache-support"></div>
-    ${deleteStorage ? '<div class="model-cache-tools"><button type="button" class="model-forget">저장 해제·삭제</button></div>' : ''}
+    ${storageHint ? '<p class="model-note">저장된 모델은 설정의 저장 공간에서 삭제할 수 있습니다.</p>' : ''}
     <p class="model-note">${local ? '브라우저 저장 공간을 별도로 사용합니다.' : '브라우저 데이터 정리나 저장 공간 부족 시 다시 다운로드할 수 있습니다.'}</p>` : ''}
     ${preparationNavigation()}`;
 }

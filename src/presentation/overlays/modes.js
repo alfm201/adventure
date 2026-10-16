@@ -1,4 +1,4 @@
-import { dialog, toast } from "./dialogs.js";
+import { dialog, toast, canOpenDialog } from "./dialogs.js";
 import { showVoiceSettings } from "./voice.js";
 
 const icons = {
@@ -23,9 +23,9 @@ const issues = {
 };
 
 export function showModes(session, assist, { screen = false, voice = null, parent = null } = {}) {
-  if ([...document.querySelectorAll('dialog[open]')].some(node => node !== parent)) return;
+  if (!canOpenDialog(parent)) return;
   const body = document.createElement("div");
-  const node = dialog("모드 선택", body, { className: "mode-dialog" });
+  const node = dialog("모드 선택", body, { className: "mode-dialog", parent });
   let pane, video, previewIssue = false;
   const heading = node.querySelector("h2");
   const close = node.close.bind(node);

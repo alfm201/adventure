@@ -1,7 +1,47 @@
-.app-settings-dialog { width: min(440px, calc(100vw - 24px)); padding: 22px; }
+.app-settings-dialog { width: min(520px, calc(100vw - 24px)); padding: 22px; }
 .app-settings-dialog > .dialog-header { margin-bottom: 22px; }
 .app-settings-dialog .dialog-header h2 { font-size: 20px; }
 .app-settings { --settings-surface: #f0f7f3; --settings-outline: #d5e5dc; }
+.settings-tabs { display: flex; gap: 4px; padding: 0; margin: -4px 0 24px; border-bottom: 1px solid var(--settings-outline); overflow-x: auto; scrollbar-width: thin; }
+.settings-tabs [role=tab] { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-width: 0; min-height: 42px; padding: 10px 9px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; font-size: 12px; font-weight: 400; color: var(--dialog-muted); line-height: 1.4; white-space: nowrap; }
+.settings-tabs [role=tab] svg { flex: 0 0 16px; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.settings-tabs [aria-selected=true] { color: var(--dialog-accent); border-bottom-color: var(--dialog-accent); font-weight: 600; }
+.settings-tabs [role=tab]:focus-visible, .settings-storage-item button:focus-visible { outline: 2px solid var(--dialog-focus); outline-offset: 2px; }
+.settings-panel { min-height: 260px; }
+.settings-panel[hidden] { display: none; }
+.settings-panel[data-settings-panel=storage] { max-height: min(62vh,540px); overflow-y: auto; overscroll-behavior: contain; padding-right: 4px; }
+.settings-storage-header { display: flex; justify-content: flex-end; margin-bottom: 12px; }
+.settings-storage-header h3 { margin: 0; font-size: 14px; color: var(--dialog-heading); }
+.settings-storage-header p { margin: 6px 0 0; font-size: 12px; line-height: 1.6; }
+.settings-storage-header button { flex-shrink: 0; padding: 6px 9px; font-size: 11px; border: 1px solid var(--settings-outline); border-radius: 7px; background: transparent; color: var(--dialog-accent); }
+.settings-storage-summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 15px; border-radius: 9px; background: var(--settings-surface); color: var(--dialog-accent); }
+.settings-storage-summary span { font-size: 12px; }
+.settings-storage-summary strong { font-size: 23px; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.settings-storage-status { font-size: 12px; line-height: 1.65; }
+.settings-storage-status:empty { display: none; }
+.settings-storage-group { margin-top: 22px; }
+.settings-storage-group h4 { margin: 0 0 6px; font-size: 11px; color: var(--dialog-muted); font-weight: 600; }
+.settings-storage-item { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px 0; border-bottom: 1px solid var(--settings-outline); }
+.settings-storage-item > div { min-width: 0; }
+.settings-storage-item strong { display: block; font-size: 13px; font-weight: 600; color: var(--dialog-text); overflow-wrap: anywhere; }
+.settings-storage-item small { display: block; margin-top: 4px; font-size: 11px; line-height: 1.5; color: var(--dialog-muted); }
+.settings-storage-item button { flex-shrink: 0; border: 1px solid #e6ccc7; border-radius: 7px; background: transparent; color: #963e32; padding: 7px 11px; font-size: 11px; }
+.settings-storage-item button:disabled { opacity: .5; }
+.app-settings .settings-storage-empty { margin: 0; padding: 12px 0; font-size: 12px; color: var(--dialog-muted); border-bottom: 1px solid var(--settings-outline); }
+.settings-about { padding: 18px 0; text-align: center; }
+.settings-about-mark { display: grid; place-items: center; width: 48px; height: 48px; margin: 0 auto 14px; border: 1px solid var(--settings-outline); border-radius: 14px; color: var(--dialog-accent); background: var(--settings-surface); font: 600 26px Georgia,serif; }
+.settings-about h3 { margin: 0 0 20px; color: var(--dialog-heading); font-size: 18px; }
+.settings-about p { margin: 0 0 6px; font-size: 12px; }
+.settings-about > strong { font-size: 14px; color: var(--dialog-accent); font-variant-numeric: tabular-nums; }
+@media (min-width:600px) {
+  .app-settings-dialog { width: min(660px,calc(100vw - 48px)); padding: 26px; }
+  .app-settings { display: grid; grid-template-columns: 126px minmax(0,1fr); gap: 26px; align-items: stretch; }
+  .settings-tabs { display: flex; flex-direction: column; grid-column: 1; grid-row: 1; gap: 5px; padding: 0 14px 0 0; margin: 0; border-bottom: 0; border-right: 1px solid var(--settings-outline); overflow: visible; }
+  .settings-tabs [role=tab] { justify-content: flex-start; gap: 9px; min-height: 42px; padding: 10px 9px; text-align: left; font-size: 12px; border-bottom: 0; border-left: 2px solid transparent; border-radius: 0 6px 6px 0; }
+  .settings-tabs [aria-selected=true] { background: var(--settings-surface); border-left-color: var(--dialog-accent); }
+  .settings-panel { grid-column: 2; grid-row: 1; min-height: 290px; }
+  .settings-panel[data-settings-panel=storage] { max-height: min(65vh,540px); }
+}
 .settings-section-heading { display: flex; align-items: center; gap: 12px; }
 .settings-symbol { flex: 0 0 34px; display: grid; place-items: center; color: var(--dialog-accent); }
 .settings-symbol svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
@@ -18,7 +58,7 @@
 .settings-language-option:has(input:checked) .settings-check { opacity: 1; }
 .settings-language-option:has(input:focus-visible), .settings-destination:focus-visible, .model-settings-entry:focus-visible { outline: 2px solid var(--dialog-focus); outline-offset: 3px; }
 .app-settings .settings-persistence { margin: 0; padding-left: 2px; font-size: 11px; line-height: 1.6; color: var(--dialog-muted); }
-.settings-destinations { border-block: 1px solid var(--settings-outline); margin-top: 21px; padding-block: 5px; }
+.settings-destinations { border-block: 1px solid var(--settings-outline); margin-top: 0; padding-block: 5px; }
 .settings-destination { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 73px; padding: 12px 4px; border: 0; border-radius: 8px; background: transparent; color: var(--dialog-text); text-align: left; }
 .settings-destination + .settings-destination { border-top: 1px solid #e3ece6; border-radius: 0 0 8px 8px; }
 .settings-destination-copy { flex: 1; min-width: 0; }
@@ -32,7 +72,7 @@
 .model-dialog > .dialog-header { gap: 10px; }
 .model-dialog > .dialog-header h2 { min-width: 0; }
 @media (hover:hover) { .settings-language-option:hover, .settings-destination:hover, .model-settings-entry:hover { background: #edf5ef; } }
-@media (max-width:380px) { .app-settings-dialog { padding: 18px; } .settings-language-option { padding-left: 10px; } .settings-destination { gap: 8px; } }
+@media (max-width:380px) { .app-settings-dialog { padding: 18px; } .settings-tabs [role=tab] { font-size: 11px; } .settings-language-option { padding-left: 10px; } .settings-destination { gap: 8px; } }
 /* Translations wrap within existing controls instead of hiding the last words. */
 html[lang="en"] .position-button { display: flex; flex-direction: row-reverse; align-items: center; justify-content: flex-start; gap: 4px; }
 html:not([lang="ko"]) .stage-name { height: 30px; width: 100%; padding: 0 5px; flex-shrink: 0; line-height: 14px; white-space: normal; overflow-wrap: anywhere; display: flex; justify-content: center; align-items: center; text-align: center; }

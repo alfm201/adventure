@@ -1,11 +1,23 @@
 import { ASSET_URL, PACKAGE_URL, PACKAGE_SHA256, MANIFEST, LOCAL_MODEL, LOCAL_PACKAGE_URL } from './model.js';
 const consentKey='adventure-lyra-cache-consent-v2';
-const cacheName=`adventure-lyra-package-v1:${new URL('../',ASSET_URL).pathname}`;
+export const PACKAGE_CACHE_NAME=`adventure-lyra-package-v1:${new URL('../',ASSET_URL).pathname}`;
+const cacheName=PACKAGE_CACHE_NAME;
 const cacheKey=new URL(`__cache__/${PACKAGE_SHA256}`,ASSET_URL).href;
 let resident;
 export const hashBytes=async bytes=>[...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map(n=>n.toString(16).padStart(2,'0')).join('');
-export function cacheAllowed(){try{return localStorage.getItem(consentKey)==='yes';}catch{return false;}}
-export function rememberCacheChoice(allowed){try{if(allowed)localStorage.setItem(consentKey,'yes');else localStorage.removeItem(consentKey);}catch{}}
+export function cacheAllowed(){if(LOCAL_MODEL)return false;try{return localStorage.getItem(consentKey)==='yes';}catch{return false;}}
+export function rememberCacheChoice(allowed){if(LOCAL_MODEL&&allowed)return;try{if(allowed)localStorage.setItem(consentKey,'yes');else localStorage.removeItem(consentKey);}catch{}}
+// Presence only decides whether to skip the consent screen. loadPackage still
+// checks the complete package hash before any saved bytes can be used.
+export async function hasSavedPackage(){
+  try{
+    if(!globalThis.caches||!await caches.has(cacheName))return false;
+    const saved=await (await caches.open(cacheName)).match(cacheKey);
+    if(!saved)return false;
+    await saved.body?.cancel();
+    return true;
+  }catch{return false;}
+}
 // Deleting disk storage does not interrupt the model already in use this visit.
 export async function clearPackageCache(){rememberCacheChoice(false);if(globalThis.caches)await caches.delete(cacheName);}
 async function checked(bytes,manifest){return bytes.byteLength===manifest.bytes && await hashBytes(bytes)===manifest.sha256;}
@@ -48,7 +60,7 @@ export async function loadPackage({persist=cacheAllowed(),signal,onProgress=()=>
     }finally{clearTimeout(timer);signal?.removeEventListener('abort',cancel);}
   }else onProgress({phase:fromCache?'cache':'memory',fraction:1});
   signal?.throwIfAborted();resident=bytes;
-  if(cache&&!cacheSaved){try{await cache.put(cacheKey,new Response(bytes,{headers:{'Content-Type':'application/gzip'}}));cacheSaved=true;}catch{cacheFailed=true;}}
+  if(cache&&!cacheSaved){try{await cache.put(cacheKey,new Response(bytes,{headers:{'Content-Type':'application/gzip','Content-Length':String(bytes.byteLength)}}));cacheSaved=true;}catch{cacheFailed=true;}}
   signal?.throwIfAborted();
   if(cacheSaved){try{for(const request of await cache.keys())if(request.url!==cacheKey)await cache.delete(request);}catch{}}
   return {bytes,manifest,info:{fromCache,cacheSaved,cacheFailed,packageSha256:PACKAGE_SHA256,packageBytes:manifest.bytes}};

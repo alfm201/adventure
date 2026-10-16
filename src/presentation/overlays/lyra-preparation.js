@@ -1,17 +1,18 @@
-import { dialog, paintChoices, toast } from './dialogs.js';
+import { dialog, paintChoices, toast, canOpenDialog } from './dialogs.js';
 import { preparationConsent, preparationProgress, preparationReady, preparationStage, megabytes, memorySize } from './model-preparation.js';
 import { downloadProgress } from './download-progress.js';
 import { showSupport } from '../components/support.js';
 import { showDiagnostics } from './diagnostics.js';
-import { cacheAllowed, rememberCacheChoice, clearPackageCache } from '../../compute/lyra/package.js';
+import { cacheAllowed, rememberCacheChoice, hasSavedPackage } from '../../compute/lyra/package.js';
 import { diagnostics } from '../../platform/report.js';
 import { LOCAL_MODEL } from '../../compute/lyra/model.js';
 import { lyraMemory } from '../../content/models.js';
 
-export function showLyraPreparation(coordinator, { device, usage, initial, persist = cacheAllowed(), onBack, onCancel, onFinish }) {
-  if (document.querySelector('dialog')) return;
+export function showLyraPreparation(coordinator, { device, usage, initial, persist = cacheAllowed(), onBack, onCancel, onFinish, parent = null }) {
+  if (!canOpenDialog(parent)) return;
+  persist = !LOCAL_MODEL && persist;
   const resume = coordinator.suspend(), body = document.createElement('div');
-  const node = dialog('LYRA 준비', body, { className: 'model-dialog lyra-preparation-dialog' });
+  const node = dialog('LYRA 준비', body, { className: 'model-dialog lyra-preparation-dialog', parent });
   const heading = node.querySelector('h2'), bytes = 31029778;
   const memory = () => {
     const gpu = device === 'gpu' || device === 'auto' && coordinator.lyraGpuSupport.available;
@@ -33,31 +34,17 @@ export function showLyraPreparation(coordinator, { device, usage, initial, persi
     stop(); coordinator.cancelModelPreparation();
     heading.textContent = 'LYRA 준비';
     const resident = coordinator.lyra?.ready;
-    body.innerHTML = preparationConsent({ bytes, resident, local: LOCAL_MODEL, supported: !!globalThis.caches, allowed: persist, deleteStorage: true,
+    body.innerHTML = preparationConsent({ bytes, resident, local: LOCAL_MODEL, storage: !LOCAL_MODEL, supported: !!globalThis.caches, allowed: persist, storageHint: !LOCAL_MODEL,
       intro: resident ? '모델은 준비되어 있습니다. 다음 접속을 위한 저장 여부를 선택하세요.' : LOCAL_MODEL ? '이 PC의 모델 파일을 불러와 준비합니다.' : '전체 모델을 한 번 내려받아 준비합니다.',
       memory: memory() });
     const packageNote = document.createElement('p'); packageNote.className = 'model-note';
     packageNote.textContent = LOCAL_MODEL ? '모델과 CPU/GPU 엔진을 한 번에 불러옵니다.' : '모델과 CPU/GPU 엔진을 한 번에 내려받습니다.';
     body.querySelector('.model-size').after(packageNote);
     if (!globalThis.caches) showSupport(body.querySelector('.cache-support'), 'storage-unsupported', { target: '모델 저장' });
-    persist = body.querySelector('[name=cache]:checked').value === 'yes';
+    persist = !LOCAL_MODEL && body.querySelector('[name=cache]:checked')?.value === 'yes';
     body.onchange = change;
     body.querySelector('.model-back').onclick = back;
     const primary = body.querySelector('.primary'); primary.textContent = '모델 불러오기'; primary.onclick = load;
-    body.querySelector('.model-forget').onclick = async event => {
-      const button = event.currentTarget, current = epoch;
-      button.disabled = primary.disabled = true;
-      try {
-        await clearPackageCache();
-        for (const backend of [coordinator.lyra, coordinator.preparedLyra])
-          if (backend?.info) Object.assign(backend.info, { cacheSaved: false, cacheFailed: false, fromCache: false });
-        diagnostics.record('model.cache.clear', { model: 'lyra-v1' });
-        if (!node.open || current !== epoch) return;
-        persist = false; body.querySelector('[name=cache][value=no]').checked = true;
-        paintChoices(body); toast('저장된 모델을 삭제했습니다.');
-      } catch { if (node.open && current === epoch) toast('모델 파일을 삭제하지 못했습니다. 다른 Adventure 탭을 닫고 다시 시도해 주세요.'); }
-      finally { if (node.open && current === epoch) button.disabled = primary.disabled = false; }
-    };
     paintChoices(body); focusPrimary();
   }
   function change() { const selected = body.querySelector('[name=cache]:checked'); if (selected) persist = selected.value === 'yes'; }
@@ -113,5 +100,17 @@ export function showLyraPreparation(coordinator, { device, usage, initial, persi
       focusPrimary();
     }
   }
-  consent(); return node;
+  async function enter() {
+    if (!persist) { consent(); return; }
+    const current = epoch;
+    body.innerHTML = preparationProgress({ transferLabel: '파일 읽기', memory: memory() });
+    preparationStage(body, '모델 파일 확인 중', 1, 3);
+    body.querySelector('.model-back').onclick = consent;
+    body.querySelector('.model-cancel').onclick = () => node.close();
+    const saved = await hasSavedPackage();
+    if (!node.open || current !== epoch) return;
+    if (saved) load();
+    else consent();
+  }
+  enter(); return node;
 }

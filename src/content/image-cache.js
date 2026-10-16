@@ -2,11 +2,18 @@ import { IMAGE_MANIFEST } from './image-manifest.js';
 
 const base = new URL('../../public/assets/', import.meta.url);
 // Scoped to this application path; the version describes storage format, not page releases.
-const cacheName = `adventure-images-v1:${base.pathname}`;
+export const IMAGE_CACHE_NAME = `adventure-images-v1:${base.pathname}`;
+const cacheName = IMAGE_CACHE_NAME;
 const retentionMs = 7 * 24 * 60 * 60 * 1000;
 const keyFor = (name, entry) => new URL(`__cache__/${name}/${entry.sha256}`, base).href;
 const digest = async bytes => [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map(n => n.toString(16).padStart(2, '0')).join('');
 let opened;
+export async function clearImageCache() {
+  const pending = opened;
+  const task = (async () => { await pending?.catch(() => {}); if (globalThis.caches) await caches.delete(cacheName); return null; })();
+  opened = task;
+  try { await task; } finally { if (opened === task) opened = null; }
+}
 
 async function openCache() {
   if (!globalThis.caches || !globalThis.crypto?.subtle) return null;

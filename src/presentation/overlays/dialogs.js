@@ -1,5 +1,10 @@
 import { syncNotifications } from "./notifications.js";
 export { toast } from "./notifications.js";
+// A child can only be opened by the current top dialog. Ancestors stay open.
+export function canOpenDialog(parent = null) {
+  const open = [...document.querySelectorAll('dialog[open]')];
+  return parent ? parent.open && open.at(-1) === parent : open.length === 0;
+}
 
 const fallbackDialogs = [];
 let frameState;
@@ -37,7 +42,7 @@ export function paintChoices(root) {
     label.classList.toggle("is-unavailable", !!input?.disabled);
   });
 }
-export function dialog(title, body, { className = "" } = {}) {
+export function dialog(title, body, { className = "", parent = null } = {}) {
   const previous = document.activeElement,
     node = document.createElement("dialog");
   node.className = className;
@@ -108,6 +113,11 @@ export function dialog(title, body, { className = "" } = {}) {
     { once: true },
   );
   node.showModal();
+  if (parent) {
+    const closeChild = () => { if (node.open) node.close(); };
+    parent.addEventListener('close', closeChild, { once: true });
+    node.addEventListener('close', () => parent.removeEventListener('close', closeChild), { once: true });
+  }
   syncNotifications();
   if (className !== "help-tour")
     (body.querySelector("button.primary:not(:disabled)") ?? body.querySelector("button:not(:disabled)") ?? node.querySelector(".dialog-close"))?.focus({ preventScroll: true });

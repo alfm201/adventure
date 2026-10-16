@@ -12,7 +12,7 @@ import { cardLabels } from "../../content/cards.js";
 export function bindInputs(session, coordinator, renderer, prediction, assist, voice) {
   document.addEventListener('adventureopensettings', event => {
     prediction.hide();
-    showAppSettings(session, assist, voice, {parent:event.detail.parent});
+    showAppSettings(session, assist, voice, {parent:event.detail.parent,coordinator});
   });
   const recalculate = () =>
     session.canRecommend && (coordinator.enabled ? coordinator.recalculate() : showModelSelection(coordinator));
@@ -86,7 +86,7 @@ export function bindInputs(session, coordinator, renderer, prediction, assist, v
   };
   $("#mode-button").onclick = () => {
     prediction.hide();
-    showAppSettings(session, assist, voice);
+    showAppSettings(session, assist, voice, {coordinator});
   };
   $("#notice-button") && ($("#notice-button").onclick = () => {
     prediction.hide();

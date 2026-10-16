@@ -1,4 +1,4 @@
-import { dialog, confirmAction } from "./dialogs.js";
+import { dialog, confirmAction, canOpenDialog } from "./dialogs.js";
 import { showModelSelection } from "./models.js";
 import { LANGUAGES, loadVoiceCatalog } from "../../speech/manifest.js";
 import { isPackCached } from "../../speech/storage.js";
@@ -16,7 +16,7 @@ function showVoiceInfo() {
 }
 
 export function showVoiceSettings(voice, { parent = null } = {}) {
-  if ([...document.querySelectorAll('dialog[open]')].some(node => node !== parent)) return;
+  if (!canOpenDialog(parent)) return;
   const release = voice.hold(), body = document.createElement("div"); body.className = "voice-settings";
   body.innerHTML = `<div class="voice-intro"><p>화면 확인 요청과 추천 행동을 음성으로 안내합니다.</p><span class="voice-state"></span></div>
     <div class="voice-model-needed" hidden><span>행동을 추천할 모델을 먼저 선택해 주세요.</span><button type="button" data-model>모델 선택</button></div>
@@ -113,10 +113,13 @@ export function showVoiceSettings(voice, { parent = null } = {}) {
     deleting = true; update(); await voice.clearCache(); deleting = false; input("persist").checked = false; if (!closed) update();
   };
   update();
-  const node = dialog("음성 안내", body, { className: "voice-dialog" });
+  const node = dialog("음성 안내", body, { className: "voice-dialog", parent });
   el("[data-model]").onclick = () => {
-    node.addEventListener("close", () => showModelSelection(voice.coordinator), { once: true });
-    node.close();
+    showModelSelection(voice.coordinator, {parent:node, onFinish: () => {
+      if (!node.open) return;
+      update();
+      (voice.available ? input('language') : el('[data-model]')).focus({preventScroll:true});
+    }});
   };
   voice.addEventListener("change", update);
   node.addEventListener("close", () => {

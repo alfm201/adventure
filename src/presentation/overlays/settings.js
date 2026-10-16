@@ -1,4 +1,4 @@
-import { dialog, paintChoices } from "./dialogs.js";
+import { dialog, paintChoices, canOpenDialog } from "./dialogs.js";
 import { showLyraPreparation } from "./lyra-preparation.js";
 import { compatibilityMessage } from "../../content/compatibility.js";
 import { showSupport } from "../components/support.js";
@@ -7,8 +7,8 @@ const usageOptions = [
   ["medium", "보통", "균형"],
   ["high", "높음", "빠른 계산 우선"],
 ];
-export function showSettings(coordinator, { model = "x36", initial = false, selection, onBack, onCancel, onFinish } = {}) {
-  if (document.querySelector("dialog")) return;
+export function showSettings(coordinator, { model = "x36", initial = false, selection, onBack, onCancel, onFinish, parent = null } = {}) {
+  if (!canOpenDialog(parent)) return;
   const resume = coordinator.suspend();
   const lyra = model === "lyra";
   const settings = coordinator.settings,
@@ -89,7 +89,7 @@ export function showSettings(coordinator, { model = "x36", initial = false, sele
     body.querySelector("footer").prepend(back);
     back.onclick = () => { returning = true; node.addEventListener("close", onBack, { once: true }); node.close(); };
   }
-  const node = dialog(lyra ? "LYRA 실행 장치 선택" : "X36 엔진 선택", body, { className: "model-dialog compute-dialog" });
+  const node = dialog(lyra ? "LYRA 실행 장치 선택" : "X36 엔진 선택", body, { className: "model-dialog compute-dialog", parent });
   let applied = false, returning = false;
   body.querySelector(".compute-cancel").onclick = () => node.close();
   node.addEventListener("close", () => {
@@ -109,8 +109,8 @@ export function showSettings(coordinator, { model = "x36", initial = false, sele
       const device = body.elements.engine.value, usage = body.elements.usage.value;
       if (device === 'gpu' && !coordinator.lyraGpuSupport.available) { refreshSupport(); return; }
       returning = true;
-      node.addEventListener("close", () => showLyraPreparation(coordinator, { device, usage, initial, persist: selection?.persist,
-        onBack: persist => showSettings(coordinator, { model, initial, selection: { engine: device, usage, persist }, onBack, onCancel, onFinish }),
+      node.addEventListener("close", () => showLyraPreparation(coordinator, { device, usage, initial, parent, persist: selection?.persist,
+        onBack: persist => showSettings(coordinator, { model, initial, parent, selection: { engine: device, usage, persist }, onBack, onCancel, onFinish }),
         onCancel, onFinish }), { once: true });
       node.close();
       return;
