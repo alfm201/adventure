@@ -1,0 +1,59 @@
+# La Tale Adventures Helper | AI Dice & Card Strategy Recommendations
+
+[한국어](../../README.md) · **English** · [日本語](README.ja.md) · [简体中文](README.zh-CN.md) · [繁體中文](README.zh-TW.md)
+
+A web app that helps you choose your next dice or card action in La Tale Adventures. **Assist** reads the game screen you share, **Manual** lets you enter the game state yourself, and **Automatic** simulates the dice rolls and card actions you choose. You still control the actual game yourself.
+
+Assist mode offers **voice guidance** in Korean, English, Japanese and Chinese, with female and male voices. You can check a voice pack's size before downloading it, then choose whether to keep it in browser storage. Saved packs can be deleted at any time. The prerecorded AI voices were generated with Gemini 3.8 Flash TTS.
+
+## Choose a model
+
+| Model | How it evaluates actions | Average score |
+| --- | --- | ---: |
+| **LYRA · v1 (research)** | Neural network with 1-step search on CPU or GPU | About 1,879 in research testing |
+| **VELA · v4.2** | Evaluates future states on CPU | About 1,877 |
+| **X36 · G3** | Compares actions through repeated simulations on CPU or GPU | About 1,860 |
+
+These scores are reference figures from different evaluations. Computation time depends on your device and the game state.
+
+VELA is selected by default. LYRA is a research model that can run on CPU or GPU. With device selection set to Automatic, it uses an available GPU first and falls back to CPU if initialization or inference fails.
+
+VELA loads a model package of about **68 MB** on first use; LYRA loads about **31 MB**. On the hosted site, you can allow the app to save the model in your browser for future visits. Once the app checks the latest model information, it removes any incompatible older model data from browser storage. When running locally, it reads the project's model files without saving an extra browser copy. LYRA uses the same package for both CPU and GPU.
+
+Action values help you compare the available choices. The expected final score estimates your result if you keep following the selected model's recommendations. VELA v4.2 and LYRA v1 each use a score predictor trained for their own policy. Once the game ends, the actual score is displayed. You can also cancel model selection and use the app without recommendations.
+
+## Run on your PC
+
+With **Node.js 22 or later**, no package installation or build is required.
+
+1. Download and extract the project.
+2. Download your chosen model from **GitHub Releases** and place it at the following path **without extracting it**. Skip this step if you only use X36 · G3.
+   - **[VELA v4.2](https://github.com/alfm201/adventure/releases/tag/vela-v4.2):** `model.bin.gz` → `public/models/vela-v4.2/model.bin.gz`
+   - **[LYRA v1 · research pre-release](https://github.com/alfm201/adventure/releases/tag/lyra-v1):** `lyra-v1.bin.gz` → `public/models/lyra-v1/lyra-v1.bin.gz`
+3. Open a terminal in the project folder and run:
+
+   ```sh
+   node scripts/serve.mjs
+   ```
+
+4. Open **[http://127.0.0.1:4173/](http://127.0.0.1:4173/)** in your browser. You can set a different port with the `PORT` environment variable.
+
+You can also use `npm start`. Keep the terminal open while using the app; press `Ctrl+C` to stop it. Opening `index.html` directly with `file://` is not supported.
+
+## Help
+
+Your browser automatically caches the images. Updates to the page code reuse cached images; if an image changes, only that file is downloaded again. Clearing site data also clears the cached images. If you edit the images, see the [image cache guide](../../src/content/IMAGE_CACHE.md) (Korean) for instructions on generating and checking the hash list.
+
+Open **Help** in the app for controls and keyboard shortcuts. If something goes wrong, choose **Save diagnostics → Save file** at the bottom of Help, then share the file along with a description of the problem. Diagnostic files are not sent automatically.
+
+## Model research and builds
+
+The [LYRA reproduction guide](../../research/lyra-v1/README.md) includes the code and instructions for V₂₀ training and conversion to the browser's FP32 model format. The app uses the π₂₀ 1-step policy.
+
+For VELA v4.2 FULL100 generation, Hinge training and a summary of the results, see the [research guide](../../research/vela-v4.2/README.md). WASM build instructions are in the [build guide](../../src/policies/vela/native/README.md). The original FULL100 table is not required to run the app. These guides are in Korean.
+
+## License
+
+Code and documentation in this repository are licensed under [0BSD](../../LICENSE), except for identified third-party components and portions carrying separate license or copyright notices, which retain their applicable terms. The author's AI models and original images `81.png` and `82.png` may also be used, modified and redistributed commercially without attribution or additional permission. Gemini-generated voice recordings have a separate permission grant limited to rights held by the author.
+
+Other game images and recognition templates extracted from game screens are excluded from these grants. Third-party libraries retain their respective licenses and notices. See [Licensing and permissions](../../LICENSING.md) for the scope and the conditions for voices and bundled model packages.
