@@ -93,7 +93,7 @@ export class ScreenReader {
       const bitmap = await this.bitmap();
       if (!bitmap) { this.busy = false; this.schedule(20); return; }
       if (this.stopped) { bitmap.close(); return; }
-      try { this.worker.postMessage({ type: "frame", id: ++this.id, bitmap, context: this.context() }, [bitmap]); }
+      try { this.worker.postMessage({ type: "frame", id: ++this.id, sourceFrame, bitmap, context: this.context() }, [bitmap]); }
       catch (error) { bitmap.close(); throw error; }
     } catch { this.failed(); }
   }

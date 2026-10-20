@@ -1,8 +1,10 @@
 import { GameRecognizer, findGameRegion } from "./vision.js";
 import { RecognitionStatus } from "./status.js";
 import { CharacterProbe } from "./character.js";
+import { NumberRecovery } from "./number-recovery.js";
 
 let recognizer, region, sourceSize, lastSearch = -Infinity;
+let numberRecovery;
 let searchIssue = "window";
 const status = new RecognitionStatus();
 const source = new OffscreenCanvas(1, 1), screen = new OffscreenCanvas(1234, 694);
@@ -51,18 +53,19 @@ self.onmessage = async ({ data }) => {
       if (!response.ok) throw Error("Recognition templates unavailable");
       const templates = await response.json();
       recognizer = new GameRecognizer(templates);
+      numberRecovery = new NumberRecovery(recognizer);
       self.postMessage({ type: "ready" });
       characters.then(value => { if (Array.isArray(value)) recognizer.character = new CharacterProbe(value); });
     } catch (error) { self.postMessage({ type: "error", issue: "reader", error: { message: String(error?.message || error), stack: String(error?.stack || "") } }); }
     return;
   }
-  const { bitmap, id, context } = data;
+  const { bitmap, id, sourceFrame, context } = data;
   if (!bitmap) return;
   const started = performance.now();
   try {
     if (!recognizer) throw Error("Reader unavailable");
     const size = bitmap.width + "x" + bitmap.height;
-    if (size !== sourceSize) { region = null; lastSearch = -Infinity; searchIssue = "window"; status.reset(); sourceSize = size; source.width = bitmap.width; source.height = bitmap.height; }
+    if (size !== sourceSize) { region = null; lastSearch = -Infinity; searchIssue = "window"; status.reset(); numberRecovery.reset(); sourceSize = size; source.width = bitmap.width; source.height = bitmap.height; }
     input.drawImage(bitmap, 0, 0);
     let observation = region ? recognizer.read(crop(region), context) : null;
     if (!observation?.visible && started - lastSearch > 1200) {
@@ -77,6 +80,8 @@ self.onmessage = async ({ data }) => {
         if (result.visible) { region = adjusted; observation = result; break; }
       }
     }
+    try { observation = numberRecovery.update(source, region, observation, sourceFrame); }
+    catch { numberRecovery.reset(); } // Supplemental sampling cannot invalidate the original read.
     if (observation?.visible) status.reset();
     else observation = { visible: false, issue: status.update(searchIssue, started) };
     self.postMessage({ type: "frame", id, observation,
