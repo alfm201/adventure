@@ -2,9 +2,10 @@ import { GameRecognizer, findGameRegion } from "./vision.js";
 import { RecognitionStatus } from "./status.js";
 import { CharacterProbe } from "./character.js";
 import { NumberRecovery } from "./number-recovery.js";
+import { refineRegion, compatibleRefinement, advancingFrame } from "./region-alignment.js";
 
-let recognizer, region, sourceSize, lastSearch = -Infinity;
-let numberRecovery;
+let recognizer, region, regionCandidate, sourceSize, lastSearch = -Infinity;
+let numberRecovery, refinementReader, lastRefinement = -Infinity, lastSourceFrame = null;
 let searchIssue = "window";
 const status = new RecognitionStatus();
 const source = new OffscreenCanvas(1, 1), screen = new OffscreenCanvas(1234, 694);
@@ -54,6 +55,7 @@ self.onmessage = async ({ data }) => {
       const templates = await response.json();
       recognizer = new GameRecognizer(templates);
       numberRecovery = new NumberRecovery(recognizer);
+      refinementReader = null; lastRefinement = -Infinity; lastSourceFrame = null;
       self.postMessage({ type: "ready" });
       characters.then(value => { if (Array.isArray(value)) recognizer.character = new CharacterProbe(value); });
     } catch (error) { self.postMessage({ type: "error", issue: "reader", error: { message: String(error?.message || error), stack: String(error?.stack || "") } }); }
@@ -65,19 +67,53 @@ self.onmessage = async ({ data }) => {
   try {
     if (!recognizer) throw Error("Reader unavailable");
     const size = bitmap.width + "x" + bitmap.height;
-    if (size !== sourceSize) { region = null; lastSearch = -Infinity; searchIssue = "window"; status.reset(); numberRecovery.reset(); sourceSize = size; source.width = bitmap.width; source.height = bitmap.height; }
+    if (size !== sourceSize) { region = regionCandidate = null; lastSearch = -Infinity; searchIssue = "window"; status.reset(); numberRecovery.reset(); lastRefinement = -Infinity; lastSourceFrame = null; sourceSize = size; source.width = bitmap.width; source.height = bitmap.height; }
+    const previousFrame = lastSourceFrame; lastSourceFrame = sourceFrame;
     input.drawImage(bitmap, 0, 0);
+    let searchImage, candidates;
     let observation = region ? recognizer.read(crop(region), context) : null;
     if (!observation?.visible && started - lastSearch > 1200) {
       lastSearch = started;
       searchIssue = region ? "covered" : "window";
-      const searchImage = input.getImageData(0, 0, source.width, source.height);
-      for (const candidate of findGameRegion(searchImage)) {
+      searchImage = input.getImageData(0, 0, source.width, source.height);
+      candidates = findGameRegion(searchImage);
+      for (const candidate of candidates) {
         const adjusted = align(candidate, searchImage);
         if (!adjusted) continue;
         if (candidate.scale < .9) { searchIssue = "small"; continue; }
         const result = recognizer.read(crop(adjusted), context);
-        if (result.visible) { region = adjusted; observation = result; break; }
+        if (result.visible) { region = adjusted; regionCandidate = candidate; observation = result; break; }
+      }
+    }
+    const incomplete = !observation?.visible || observation.issue || observation.deck?.open && !observation.deck.rows.length;
+    if (incomplete && advancingFrame(previousFrame, sourceFrame) && !observation?.overlay &&
+        (!observation?.dimmed || observation.illumination >= 1.06 && observation.illumination <= 1.2) &&
+        started-lastRefinement >= 1200) {
+      lastRefinement = started;
+      const saved = { data: recognizer.data, deckCache: recognizer.deckCache, deckFailure: recognizer.deckFailure };
+      try {
+        searchImage ||= input.getImageData(0, 0, source.width, source.height);
+        candidates = candidates?.length ? candidates : regionCandidate ? [regionCandidate] : region ? [region] : findGameRegion(searchImage);
+        for (const candidate of candidates.slice(0, 3)) {
+          const adjusted = refineRegion(searchImage, candidate, recognizer);
+          if (!adjusted) continue;
+          refinementReader ||= new GameRecognizer(recognizer.templates);
+          if (refinementReader.character.templates !== recognizer.character.templates)
+            refinementReader.character = new CharacterProbe(recognizer.character.templates);
+          const image = crop(adjusted), result = refinementReader.read(image, context);
+          if (!compatibleRefinement(observation, result) || result.dimmed && !refinementReader.visible()) continue;
+          const { score, profileScore, structureScore, ...geometry } = adjusted;
+          const committed = recognizer.read(image, context);
+          if (!compatibleRefinement(observation, committed) || committed.dimmed && !recognizer.visible()) { Object.assign(recognizer, saved); continue; }
+          region = geometry; regionCandidate = candidate;
+          observation = committed;
+          observation.regionRecovery = { profileScore, structureScore };
+          numberRecovery.reset();
+          break;
+        }
+      } catch {
+        Object.assign(recognizer, saved); // Optional refinement cannot replace the original observation with a reader error.
+        refinementReader = null;
       }
     }
     try { observation = numberRecovery.update(source, region, observation, sourceFrame); }

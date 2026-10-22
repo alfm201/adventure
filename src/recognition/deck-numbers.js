@@ -84,6 +84,32 @@ export class DeckNumbers {
     return [...values];
   }
   locate(mask, width, height) { return this.analyze(mask,width,height).identified || null; }
+  analyzeContrast(levels, width, height) {
+    // Resampling changes antialiasing, not the physical list order. Reuse the
+    // same glyph confidence and full-list rejection rules at darker cutoffs.
+    // Never vote individual digits into a list or reuse an old scroll offset.
+    const mask = new Uint8Array(levels.length), accepted = [];
+    for (const threshold of [140, 145, 150, 155, 160]) {
+      for (let i = 0; i < mask.length; i++) mask[i] = +(levels[i] < threshold);
+      const analysis = this.analyze(mask, width, height);
+      if (analysis.identified) accepted.push({ ...analysis, threshold });
+    }
+    const strong = accepted.filter(a => a.matches >= 6).sort((a,b) => b.matches-a.matches);
+    if (!strong.length) return null;
+    const best = strong[0];
+    for (const other of accepted) {
+      let overlap = 0;
+      for (const row of other.identified.rows) {
+        const near = best.identified.rows.find(r => Math.abs(r.y-row.y) <= 2);
+        if (!near) continue;
+        if (near.index !== row.index) return null;
+        overlap++;
+      }
+      if (overlap < 4) return null;
+    }
+    return { ...best, samples: accepted.map(a => a.identified.rows),
+      contrast: { thresholds: accepted.map(a => a.threshold), matches: best.matches } };
+  }
   analyze(mask, width, height) {
     const lines = Array.from({ length: height }, (_, y) => {
       let count = 0; for (let x = 0; x < width; x++) count += mask[y*width+x];

@@ -24,8 +24,12 @@ export class Assist extends EventTarget {
 
   get support() { return screenCaptureSupport(); }
   get snapshot() {
+    const settings = this.stream?.getVideoTracks?.()[0]?.getSettings?.();
     return { status: this.status, issue: this.issue, connected: !!this.stream, supported: this.support.available,
       reading: this.reading, observation: this.tracker.lastObservation, region: this.region,
+      sourceSize: this.sourceSize,
+      ...(settings ? { capture: { width: settings.width, height: settings.height, frameRate: settings.frameRate,
+        displaySurface: settings.displaySurface, resizeMode: settings.resizeMode } } : {}),
       processingMs: this.processingMs, frame: this.frame, history: this.history, captureFrames: !!this.reader?.frames?.active,
       verifications: this.tracker.verifications, mismatch: this.tracker.lastMismatch };
   }
@@ -46,6 +50,7 @@ export class Assist extends EventTarget {
     this.reader?.stop(); this.reader = null;
     this.tracker.reset();
     this.region = null;
+    this.sourceSize = null;
     this.frame = null;
     this.history = null;
     this.historyReplayKey = null;

@@ -183,7 +183,7 @@ export class GameRecognizer {
   deck() {
     const blank = [[465, 105], [465, 250], [465, 490]].filter(([x, y]) => this.whiteAt(x, y)).length;
     const [r, g, b] = this.pixel(465, 30);
-    if (blank < 3 || r < g * 1.25 || r < b * 1.1) { this.deckCache = null; return { open: false, rows: [] }; }
+    if (blank < 3 || r < g * 1.25 || r < b * 1.1) { this.deckCache = this.deckFailure = null; return { open: false, rows: [] }; }
     // Scan this fixed ROI directly. Avoid allocating an RGB subarray for
     // each of its 120,224 pixels on every deck frame.
     const mask = new Uint8Array(221 * 544), data = this.data;
@@ -192,21 +192,55 @@ export class GameRecognizer {
       for (let x = 0; x < 221; x++, p++, at += 4)
         mask[p] = +(data[at] < 170 && data[at + 1] < 170 && data[at + 2] < 170);
     }
-    if (this.deckCache && mask.every((value, i) => value === this.deckCache.mask[i])) {
+    let levels;
+    const readLevels = () => {
+      levels = new Uint8Array(221 * 544);
+      for (let y = 0, p = 0; y < 544; y++) {
+        let at = ((y + 67) * WIDTH + 256) * 4;
+        for (let x = 0; x < 221; x++, p++, at += 4)
+          levels[p] = Math.max(data[at], data[at + 1], data[at + 2]);
+      }
+      return levels;
+    };
+    if (this.deckCache && mask.every((value, i) => value === this.deckCache.mask[i]) &&
+        (!this.deckCache.levels || readLevels().every((value, i) => value === this.deckCache.levels[i]))) {
       return { open: true, range: this.deckCache.range,
-        rows: this.deckCache.rows.map(row => ({ index: row.index, identified: true, obtained: this.deckFlag(row.y) }))
+        ...(this.deckCache.contrast ? { recognition: this.deckCache.contrast } : {}),
+        rows: this.deckCache.rows.map(row => ({ index: row.index, identified: true, obtained: this.deckRowFlag(row) }))
           .filter(row => row.obtained !== null) };
     }
     this.deckCache = null;
-    const analysis = this.deckNumbers.analyze(mask, 221, 544), identified = analysis.identified;
-    if (!identified) return { open: true, rows: [], recognition:analysis };
-    const rows = identified.rows.map(row => ({ ...row, y: row.y + 67 }));
-    this.deckCache = { mask, range: identified.range, rows };
+    if (this.deckFailure && (levels || readLevels()).every((value, i) => value === this.deckFailure.levels[i]))
+      return { open: true, rows: [], recognition: this.deckFailure.analysis };
+    let analysis = this.deckNumbers.analyze(mask, 221, 544), identified = analysis.identified;
+    if (!identified) {
+      const alternate = this.deckNumbers.analyzeContrast(levels || readLevels(), 221, 544);
+      if (alternate) { analysis = alternate; identified = alternate.identified; }
+    }
+    if (!identified) {
+      this.deckFailure = { levels, analysis };
+      return { open: true, rows: [], recognition:analysis };
+    }
+    this.deckFailure = null;
+    const rows = identified.rows.map(row => ({ ...row, y: row.y + 67,
+      ...(analysis.samples ? { ys: analysis.samples.flatMap(sample => {
+        const found = sample.find(r => r.index === row.index);
+        return found ? [found.y + 67] : [];
+      }) } : {}) }));
+    const contrast = analysis.contrast ? { reason: 'identified', method: 'contrast', ...analysis.contrast } : null;
+    this.deckCache = { mask, range: identified.range, rows, levels: contrast ? levels : null, contrast };
     return { open: true, range: identified.range,
-      rows: rows.map(row => ({ index: row.index, identified: true, obtained: this.deckFlag(row.y) }))
+      ...(contrast ? { recognition: contrast } : {}),
+      rows: rows.map(row => ({ index: row.index, identified: true, obtained: this.deckRowFlag(row) }))
         .filter(row => row.obtained !== null) };
   }
 
+  deckRowFlag(row) {
+    const value = this.deckFlag(row.y);
+    // Contrast may move a text band's top by one pixel. A flag must agree
+    // at every independently accepted band position, including cache hits.
+    return row.ys?.some(y => this.deckFlag(y) !== value) ? null : value;
+  }
   deckFlag(y) {
     let orange = 0, dark = 0;
     for (let yy = y - 3; yy < y + 12; yy++) for (let xx = 232; xx < 252; xx++) {
