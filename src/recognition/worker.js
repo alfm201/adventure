@@ -1,11 +1,12 @@
 import { GameRecognizer, findGameRegion } from "./vision.js";
 import { RecognitionStatus } from "./status.js";
 import { CharacterProbe } from "./character.js";
-import { NumberRecovery } from "./number-recovery.js";
-import { refineRegion, compatibleRefinement, advancingFrame } from "./region-alignment.js";
+import { NumberRecovery, readableDeck } from "./number-recovery.js";
+import { refineRegion, refineDeckRegion, compatibleRefinement, advancingFrame } from "./region-alignment.js";
 
 let recognizer, region, regionCandidate, sourceSize, lastSearch = -Infinity;
 let numberRecovery, refinementReader, lastRefinement = -Infinity, lastSourceFrame = null;
+let panelCandidate = null, panelNumberRecovery, panelGeometry = null;
 let searchIssue = "window";
 const status = new RecognitionStatus();
 const source = new OffscreenCanvas(1, 1), screen = new OffscreenCanvas(1234, 694);
@@ -17,6 +18,7 @@ function crop(rect) {
   return screen.getContext("2d").getImageData(0, 0, 1234, 694);
 }
 function align(rect, image) {
+  const {measurement, ...geometry} = rect;
   const a = recognizer.anchor, pixels = image.data, width = image.width;
   let best = null, score = 0;
   for (const dy of [0, -.5, .5, -1, 1]) for (const dx of [0, -.5, .5, -1, 1]) {
@@ -34,9 +36,47 @@ function align(rect, image) {
       return rgb;
     });
     // Prefer the geometric origin over a tiny resampling-score fluctuation.
-    if (match > score + .012) { score = match; best = { ...rect, x, y }; }
+    if (match > score + .012) { score = match; best = { ...geometry, x, y }; }
   }
   return score > .88 ? best : null;
+}
+
+function recoverPanel(adjusted, observation, context, sourceFrame) {
+  const original = { data: recognizer.data, deckCache: recognizer.deckCache, deckFailure: recognizer.deckFailure };
+  try {
+    const {structureScore,panel,...geometry}=adjusted;
+    refinementReader ||= new GameRecognizer(recognizer.templates);
+    if (panelNumberRecovery?.recognizer !== refinementReader) panelNumberRecovery=new NumberRecovery(refinementReader);
+    const image=crop(geometry), trial=refinementReader.read(image,context);
+    if (trial.deck?.rows?.length<12 || !trial.deck?.open || !refinementReader.visible()) {panelNumberRecovery.reset();return observation;}
+    const result=panelNumberRecovery.update(source,geometry,trial,sourceFrame,{allowDeck:true,allowRaw:true});
+    if (!compatibleRefinement(observation,result)) return observation;
+    const committed=recognizer.read(image,context);
+    if (committed.deck?.rows?.length<12 || !recognizer.visible()) {Object.assign(recognizer,original);return observation;}
+    // Only previously unknown numeric fields may use the multi-sample,
+    // two-source-frame result; a confident committed conflict still vetoes it.
+    for (const field of result.numberRecovery?.fields || []) {
+      if (committed[field]!=null && committed[field]!==result[field]) {Object.assign(recognizer,original);return observation;}
+      committed[field]=result[field];
+    }
+    if (result.numberRecovery) {
+      committed.numberRecovery=result.numberRecovery;
+      if (committed.position!=null && committed.diceUsed!=null && ['score','dice'].includes(committed.issue)) committed.issue=null;
+    }
+    if (!compatibleRefinement(observation,committed)) {Object.assign(recognizer,original);return observation;}
+    region=geometry;regionCandidate=geometry;panelGeometry=JSON.stringify(geometry);
+    if (committed.issue === null && readableDeck(committed.deck)) {
+      panelCandidate=null;
+      if (result.numberRecovery) {
+        // Carry the confirmed evidence into the ordinary reader. Do not crop
+        // and decode the full history panel again on every stable frame.
+        numberRecovery=panelNumberRecovery;numberRecovery.recognizer=recognizer;
+        panelNumberRecovery=null;
+      } else numberRecovery.reset();
+    } else {panelCandidate={adjusted,base:panelGeometry};numberRecovery.reset();}
+    committed.regionRecovery={method:"deck-panel",structureScore,panel};
+    return committed;
+  } catch {Object.assign(recognizer,original);panelNumberRecovery?.reset();return observation;}
 }
 
 self.onmessage = async ({ data }) => {
@@ -56,6 +96,7 @@ self.onmessage = async ({ data }) => {
       recognizer = new GameRecognizer(templates);
       numberRecovery = new NumberRecovery(recognizer);
       refinementReader = null; lastRefinement = -Infinity; lastSourceFrame = null;
+      panelCandidate = null; panelNumberRecovery = null; panelGeometry = null;
       self.postMessage({ type: "ready" });
       characters.then(value => { if (Array.isArray(value)) recognizer.character = new CharacterProbe(value); });
     } catch (error) { self.postMessage({ type: "error", issue: "reader", error: { message: String(error?.message || error), stack: String(error?.stack || "") } }); }
@@ -67,7 +108,7 @@ self.onmessage = async ({ data }) => {
   try {
     if (!recognizer) throw Error("Reader unavailable");
     const size = bitmap.width + "x" + bitmap.height;
-    if (size !== sourceSize) { region = regionCandidate = null; lastSearch = -Infinity; searchIssue = "window"; status.reset(); numberRecovery.reset(); lastRefinement = -Infinity; lastSourceFrame = null; sourceSize = size; source.width = bitmap.width; source.height = bitmap.height; }
+    if (size !== sourceSize) { region = regionCandidate = null; panelCandidate=null;panelGeometry=null;panelNumberRecovery?.reset();lastSearch = -Infinity; searchIssue = "window"; status.reset(); numberRecovery.reset(); lastRefinement = -Infinity; lastSourceFrame = null; sourceSize = size; source.width = bitmap.width; source.height = bitmap.height; }
     const previousFrame = lastSourceFrame; lastSourceFrame = sourceFrame;
     input.drawImage(bitmap, 0, 0);
     let searchImage, candidates;
@@ -76,14 +117,24 @@ self.onmessage = async ({ data }) => {
       lastSearch = started;
       searchIssue = region ? "covered" : "window";
       searchImage = input.getImageData(0, 0, source.width, source.height);
-      candidates = findGameRegion(searchImage);
-      for (const candidate of candidates) {
-        const adjusted = align(candidate, searchImage);
+      candidates = findGameRegion(searchImage, {precise:true});
+      searchLoop: for (const candidate of candidates) for (const variant of [candidate, candidate.measurement]) {
+        if (!variant) continue;
+        const adjusted = align(variant, searchImage);
         if (!adjusted) continue;
         if (candidate.scale < .9) { searchIssue = "small"; continue; }
         const result = recognizer.read(crop(adjusted), context);
-        if (result.visible) { region = adjusted; regionCandidate = candidate; observation = result; break; }
+        if (result.visible) { region = adjusted; regionCandidate = candidate; observation = result; break searchLoop; }
       }
+    }
+    if (panelGeometry && (!observation?.visible || observation.overlay || JSON.stringify(region)!==panelGeometry ||
+        observation.dimmed && !(observation.illumination>=1.06 && observation.illumination<=1.2))) panelGeometry=null;
+    if (panelCandidate) {
+      if (JSON.stringify(region)!==panelCandidate.base || !observation?.visible || !observation.deck?.open || observation.overlay) {
+        panelCandidate=null;panelNumberRecovery?.reset();
+      } else if (advancingFrame(previousFrame,sourceFrame) && ['score','dice'].includes(observation.issue) &&
+          (!observation.dimmed || observation.illumination>=1.06 && observation.illumination<=1.2))
+        observation=recoverPanel(panelCandidate.adjusted,observation,context,sourceFrame);
     }
     const incomplete = !observation?.visible || observation.issue || observation.deck?.open && !observation.deck.rows.length;
     if (incomplete && advancingFrame(previousFrame, sourceFrame) && !observation?.overlay &&
@@ -93,10 +144,10 @@ self.onmessage = async ({ data }) => {
       const saved = { data: recognizer.data, deckCache: recognizer.deckCache, deckFailure: recognizer.deckFailure };
       try {
         searchImage ||= input.getImageData(0, 0, source.width, source.height);
-        candidates = candidates?.length ? candidates : regionCandidate ? [regionCandidate] : region ? [region] : findGameRegion(searchImage);
-        for (const candidate of candidates.slice(0, 3)) {
-          const adjusted = refineRegion(searchImage, candidate, recognizer);
-          if (!adjusted) continue;
+        candidates = candidates?.length ? candidates : regionCandidate ? [regionCandidate] : region ? [region] : findGameRegion(searchImage, {precise:true});
+        candidateLoop: for (const candidate of candidates.slice(0, 3)) for (let pass=0; pass<2; pass++) {
+          const adjusted = pass===0 ? candidate.measurement : refineRegion(searchImage, candidate, recognizer);
+          if (!adjusted || adjusted.scale < .9) continue;
           refinementReader ||= new GameRecognizer(recognizer.templates);
           if (refinementReader.character.templates !== recognizer.character.templates)
             refinementReader.character = new CharacterProbe(recognizer.character.templates);
@@ -107,16 +158,31 @@ self.onmessage = async ({ data }) => {
           if (!compatibleRefinement(observation, committed) || committed.dimmed && !recognizer.visible()) { Object.assign(recognizer, saved); continue; }
           region = geometry; regionCandidate = candidate;
           observation = committed;
-          observation.regionRecovery = { profileScore, structureScore };
+          observation.regionRecovery = pass===0 ? { method:"profile-measurement" } : { profileScore, structureScore };
           numberRecovery.reset();
-          break;
+          break candidateLoop;
         }
       } catch {
         Object.assign(recognizer, saved); // Optional refinement cannot replace the original observation with a reader error.
         refinementReader = null;
       }
+      // The panel can also supply geometry for missing core numbers even when
+      // its rows are readable. Pending numeric evidence uses fresh frames.
+      if (observation?.visible && observation.deck?.open &&
+          (!observation.deck.rows.length || ['score','dice'].includes(observation.issue))) {
+        try {
+          searchImage ||= input.getImageData(0, 0, source.width, source.height);
+          const adjusted = refineDeckRegion(searchImage, region, recognizer);
+          if (adjusted) {
+            panelCandidate={adjusted,base:JSON.stringify(region)};
+            observation=recoverPanel(adjusted,observation,context,sourceFrame);
+          }
+        } catch {panelCandidate=null;panelNumberRecovery?.reset();}
+      }
     }
-    try { observation = numberRecovery.update(source, region, observation, sourceFrame); }
+    try { if (!observation?.numberRecovery) observation = numberRecovery.update(source, region, observation, sourceFrame,
+      {allowDeck:readableDeck(observation?.deck),
+       allowRaw:panelGeometry!==null && panelGeometry===JSON.stringify(region)}); }
     catch { numberRecovery.reset(); } // Supplemental sampling cannot invalidate the original read.
     if (observation?.visible) status.reset();
     else observation = { visible: false, issue: status.update(searchIssue, started) };

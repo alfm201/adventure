@@ -44,7 +44,7 @@ export class FrameRecorder {
       const bitmap = await this.capture();
       if (!bitmap) { clearTimeout(this.watchdog); this.busy = false; this.schedule(100); return; }
       if (this.stopped) { bitmap.close(); return; }
-      try { this.worker.postMessage({ type: "frame", bitmap, region, at, id }, [bitmap]); }
+      try { this.worker.postMessage({ type: "frame", bitmap, region, at, id, sourceFrame }, [bitmap]); }
       catch (error) { bitmap.close(); throw error; }
     } catch { this.stop(); }
   }

@@ -95,6 +95,7 @@ export class AssistVoice extends EventTarget {
     this.sync();
   }
   stop() {
+    this.requestChange = null;
     clearTimeout(this.timer); this.timer = null;
     this.playback?.abort(); this.playback = null;
     if (this.speaking) diagnostics.record("voice.stop");
@@ -218,8 +219,24 @@ export class AssistVoice extends EventTarget {
         return;
       }
     }
-    const cue = this.cue();
+    let cue = this.cue();
     // Queued/buffering notices can be replaced by a recommendation.
+    const deckPrompt = this.playback && this.cueStarted && this.desired?.clip === "deck-open" &&
+      this.session.mode === "assist" && this.assist.stream && this.isCueEnabled("deck-open") &&
+      this.desired.key.startsWith("request:" + this.assist.epoch + ":" + JSON.stringify(this.session.state) + ":") &&
+      !this.assist.reading.ready && !this.assist.tracker?.lastObservation?.deck?.open;
+    if (deckPrompt && (!cue || ["score", "dice", "hand", "bonus", "covered", "window", "small", "stale"].includes(cue.clip))) {
+      if (!cue) { this.requestChange = null; return; }
+      if (this.requestChange?.key !== cue.key) this.requestChange = { key:cue.key, at:performance.now() };
+      // A replacement request has its own persistence delay. Do not silence
+      // an audible prompt before that delay has actually elapsed.
+      if (performance.now() - this.requestChange.at < cue.delay) return;
+    }
+    if (this.requestChange) {
+      if (cue?.key === this.requestChange.key)
+        cue = { ...cue, delay:Math.max(0, cue.delay - (performance.now() - this.requestChange.at)) };
+      else this.requestChange = null;
+    }
     // Once audible, finish acknowledgement and calculation notices; recompute the latest
     // cue on completion instead of retaining a potentially obsolete action.
     if (this.playback && this.cueStarted && ["deck-ready", "calculating"].includes(this.desired?.clip) &&

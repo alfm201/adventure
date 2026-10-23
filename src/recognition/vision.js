@@ -6,7 +6,7 @@ const white = (r, g, b) => Math.min(r, g, b) > 205 && Math.max(r, g, b) - Math.m
 const WHITE_POINTS = [[70, 7], [130, 7], [8, 50], [200, 100], [80, 278], [130, 278]];
 const CORE_REGIONS = [[74, 55, 51, 21], [420, 638, 220, 42], [16, 540, 176, 70], [128, 659, 35, 27]];
 
-export function findGameRegion({ data, width, height }) {
+export function findGameRegion({ data, width, height }, { precise = false } = {}) {
   const mask = new Uint8Array(width * height), queue = new Int32Array(width * height);
   for (let i = 0; i < mask.length; i++) mask[i] = +white(data[i * 4], data[i * 4 + 1], data[i * 4 + 2]);
   const choices = [];
@@ -27,7 +27,14 @@ export function findGameRegion({ data, width, height }) {
     const scale = Math.abs(rounded - measured) < .012 ? rounded : measured;
     const x = Math.round(left + (w - 193 * scale) / 2 - 8 * scale), y = Math.round(top + (h - 272 * scale) / 2 - 7 * scale);
     if (x < -2 || y < -2 || x + WIDTH * scale > width + 2 || y + 694 * scale > height + 2) continue;
-    choices.push({ x, y, width: WIDTH * scale, height: 694 * scale, scale });
+    const choice = { x, y, width: WIDTH * scale, height: 694 * scale, scale };
+    if (precise && measured >= 1.005 && measured < 1.06) {
+      const mx = left - 8 * measured, my = top + (h - 272 * measured) / 2 - 7 * measured;
+      if (Math.abs(mx-x) + Math.abs(my-y) + Math.abs(measured-scale) > 1e-6 &&
+          mx >= 0 && my >= 0 && mx + WIDTH*measured <= width && my + 694*measured <= height)
+        choice.measurement = { x:mx, y:my, width:WIDTH*measured, height:694*measured, scale:measured };
+    }
+    choices.push(choice);
   }
   return choices.sort((a, b) => b.scale - a.scale);
 }

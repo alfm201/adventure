@@ -77,3 +77,59 @@ export function advancingFrame(previous, current) {
   const a = identity(previous), b = identity(current);
   return !!(a && b && a.capture === b.capture && b.sequence > a.sequence);
 }
+
+// The fixed card-history panel has a 260 x 600 white connected outline at
+// (229,14) in the 1234 x 694 game UI. Its long vertical baseline resolves
+// subpixel scale errors that the smaller profile frame cannot distinguish.
+// Geometry only: no card names, digit values or previously seen scroll offset.
+export function refineDeckRegion(image, rect, recognizer) {
+  if (!rect || !Number.isFinite(rect.scale) || rect.scale < .9) return null;
+  const { data, width, height } = image, scale = rect.scale;
+  const left = Math.max(0, Math.floor(rect.x + 217 * scale));
+  const top = Math.max(0, Math.floor(rect.y + 2 * scale));
+  const right = Math.min(width, Math.ceil(rect.x + 501 * scale));
+  const bottom = Math.min(height, Math.ceil(rect.y + 626 * scale));
+  const w = right-left, h = bottom-top;
+  if (w <= 0 || h <= 0 || w*h > 1600000) return null;
+  const mask = new Uint8Array(w*h), queue = new Int32Array(w*h);
+  for (let y=0; y<h; y++) for (let x=0; x<w; x++) {
+    const at = ((top+y)*width+left+x)*4;
+    const low = Math.min(data[at],data[at+1],data[at+2]);
+    const high = Math.max(data[at],data[at+1],data[at+2]);
+    mask[y*w+x] = +(low>205 && high-low<48);
+  }
+  const choices = [];
+  for (let i=0; i<mask.length; i++) {
+    if (!mask[i]) continue;
+    let head=0, tail=1, l=w, r=0, t=h, b=0;
+    queue[0]=i; mask[i]=0;
+    while (head<tail) {
+      const p=queue[head++], x=p%w, y=(p/w)|0;
+      l=Math.min(l,x); r=Math.max(r,x); t=Math.min(t,y); b=Math.max(b,y);
+      for (const next of [x?p-1:-1,x<w-1?p+1:-1,p-w,p+w]) {
+        if (next>=0 && next<mask.length && mask[next]) {mask[next]=0;queue[tail++]=next;}
+      }
+    }
+    if (l===0 || r===w-1 || t===0 || b===h-1) continue; // Cropped/connected outside panel.
+    const pw=r-l+1, ph=b-t+1, fitted=ph/600, fill=tail/(pw*ph);
+    if (Math.abs(ph-600*scale)>3 || Math.abs(pw-260*fitted)>1.5 || fill<.80 || fill>.96) continue;
+    const x=left+l+(pw-260*fitted)/2-229*fitted, y=top+t-14*fitted;
+    if (Math.abs(x-rect.x)>3*scale || Math.abs(y-rect.y)>3*scale ||
+        x<0 || y<0 || x+1234*fitted>width || y+694*fitted>height) continue;
+    const a=recognizer.anchor;
+    const structureScore=recognizer.structureScore((px,py)=>{
+      const sx=x+(a.x+px+.5)*fitted-.5, sy=y+(a.y+py+.5)*fitted-.5;
+      const ix=Math.floor(sx), iy=Math.floor(sy), fx=sx-ix, fy=sy-iy;
+      if (ix<0 || iy<0 || ix+1>=width || iy+1>=height) return [0,0,0];
+      const at=(iy*width+ix)*4, rgb=[];
+      for(let c=0;c<3;c++)rgb.push((data[at+c]*(1-fx)+data[at+4+c]*fx)*(1-fy)+
+        (data[at+width*4+c]*(1-fx)+data[at+width*4+4+c]*fx)*fy);
+      return rgb;
+    });
+    if (structureScore<=.90) continue;
+    choices.push({x,y,width:1234*fitted,height:694*fitted,scale:fitted,
+      structureScore,panel:{x:left+l,y:top+t,width:pw,height:ph}});
+  }
+  // Do not rank ambiguous panels by which one happens to yield readable digits.
+  return choices.length===1 ? choices[0] : null;
+}
