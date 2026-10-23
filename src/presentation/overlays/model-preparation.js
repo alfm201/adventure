@@ -33,7 +33,15 @@ export function preparationProgress({ transferLabel = '다운로드', memory = '
 export function preparationStage(body, stage, step, total) {
   const working = body.querySelector('.model-working');
   working.hidden = !stage;
-  working.querySelector('.model-working-stage').textContent = stage ? `${stage}${step && total ? ` (${step}/${total})` : ''}` : '';
+  const label = working.querySelector('.model-working-stage');
+  label.replaceChildren();
+  if (stage) {
+    // Translate the full message independently of the numbered step suffix.
+    const message = document.createElement('span');
+    message.textContent = stage;
+    label.append(message);
+    if (step && total) label.append(` (${step}/${total})`);
+  }
   body.querySelector('.model-prepare').hidden = true;
   body.querySelector('.model-prepared').closest('.model-meter').hidden = true;
   body.querySelector('.model-download').hidden = !!stage;
