@@ -8,7 +8,11 @@ export function canOpenDialog(parent = null) {
 
 const fallbackDialogs = [];
 const managedDialogs = [];
-const outsideProtected = new WeakSet();
+const outsideRules = new WeakMap();
+const canCloseOutside = node => {
+  const rule = outsideRules.get(node);
+  return typeof rule === 'function' ? rule() : rule !== false;
+};
 let outsidePress;
 const topDialog = () => managedDialogs.filter(node => node.open).at(-1);
 function outside(node, event) {
@@ -20,13 +24,13 @@ function outside(node, event) {
 }
 function outsideDown(event) {
   const node = topDialog();
-  outsidePress = event.button === 0 && node && outside(node, event) ? { node, x: event.clientX, y: event.clientY } : null;
+  outsidePress = event.button === 0 && node && outside(node, event) ? { node, allowed: canCloseOutside(node), x: event.clientX, y: event.clientY } : null;
 }
 function outsideClick(event) {
   const press = outsidePress; outsidePress = null;
   if (!press || press.node !== topDialog() || !outside(press.node, event) || Math.hypot(event.clientX - press.x, event.clientY - press.y) > 10) return;
   event.preventDefault(); event.stopImmediatePropagation();
-  if (!outsideProtected.has(press.node)) press.node.close();
+  if (press.allowed && canCloseOutside(press.node)) press.node.close();
 }
 function cancelOutsidePress() { outsidePress = null; }
 let frameState;
@@ -68,7 +72,7 @@ export function dialog(title, body, { className = "", parent = null, closeOnOuts
   const previous = document.activeElement,
     node = document.createElement("dialog");
   node.className = className;
-  if (!closeOnOutside) outsideProtected.add(node);
+  outsideRules.set(node, closeOnOutside);
   const heading = document.createElement("h2");
   heading.textContent = title;
   heading.id = "dialog-title-" + Math.random().toString(36).slice(2);

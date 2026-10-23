@@ -113,7 +113,7 @@ export function showVoiceSettings(voice, { parent = null } = {}) {
     deleting = true; update(); await voice.clearCache(); deleting = false; input("persist").checked = false; if (!closed) update();
   };
   update();
-  const node = dialog("음성 안내", body, { className: "voice-dialog", parent });
+  const node = dialog("음성 안내", body, { className: "voice-dialog", parent, closeOnOutside: () => !voice.preparing && !reading && !deleting });
   el("[data-model]").onclick = () => {
     showModelSelection(voice.coordinator, {parent:node, onFinish: () => {
       if (!node.open) return;

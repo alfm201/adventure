@@ -18,7 +18,8 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
   if (!canOpenDialog(parent)) return;
   const resume = coordinator.suspend();
   const body = document.createElement("div");
-  const node = dialog("모델 선택", body, { className: "model-dialog", parent });
+  let busy = false;
+  const node = dialog("모델 선택", body, { className: "model-dialog", parent, closeOnOutside: () => !busy });
   let controller, epoch = 0, handedOff = false, selected = selectedModel ?? (coordinator.enabled ? coordinator.settings.model : "vela");
   let ready = false;
   node.addEventListener('closing', () => { epoch++; controller?.abort(); });
@@ -71,6 +72,7 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
     else showModelSelection(coordinator, { initial, selectedModel: selected, onFinish, parent });
   }
   function select() {
+    busy = false;
     ready = false;
     settingsEntry.hidden = false;
     epoch++; controller?.abort(); controller = null; coordinator.cancelModelPreparation();
@@ -115,6 +117,7 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
     }
   }
   function localPreparation(manifest) {
+    busy = false;
     heading.textContent = "VELA 준비";
     body.innerHTML = preparationConsent({ bytes: manifest.bytes, intro: "이 PC의 모델 파일을 불러옵니다.", memory: memoryText(manifest), local: true, storage: false });
     body.querySelector(".model-back").onclick = select;
@@ -123,6 +126,7 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
     focusPrimary();
   }
   function consent(manifest, issue) {
+    busy = false;
     heading.textContent = "VELA 준비";
     const resident = coordinator.vela?.ready && sameModel(coordinator.vela.info.manifest, manifest);
     const supported = coordinator.velaSupport.storage !== false && !!navigator.storage?.getDirectory && !issue;
@@ -135,6 +139,7 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
     primary.onclick = async () => {
       const persist = body.querySelector("[name=cache]:checked").value === "yes";
       if (persist) {
+        busy = true;
         controller?.abort(); controller = new AbortController();
         const current = ++epoch, signal = controller.signal;
         primary.disabled = true; primary.textContent = "저장 확인 중";
@@ -151,6 +156,7 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
     paintChoices(body); focusPrimary();
   }
   function progressScreen(title, manifest) {
+    busy = true;
     ready = false;
     // Preparation can hand off to another dialog asynchronously. Settings are
     // entered from model selection, where that parent stays stable.
@@ -189,6 +195,7 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
       if (signal.aborted || current !== epoch || !node.open) return;
       heading.textContent = `${info.manifest.name} 준비 완료`;
       ready = true;
+      busy = false;
       body.innerHTML = preparationReady({ ...info, local: localModel, initial });
       if (info.cacheFailed) { showSupport(body.querySelector(".cache-support"), info.cacheIssue || "storage-failed", { target: "모델 저장" }); toast("모델을 저장하지 못했습니다. 이번에는 사용할 수 있습니다."); }
       body.querySelector(".model-back").onclick = select;
@@ -211,6 +218,7 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
     } catch (error) { if (!signal.aborted && current === epoch && node.open) failure(error, loadX36); }
   }
   function failure(error, retry) {
+    busy = false;
     diagnostics.capture(error, "model.prepare");
     console.error("Model preparation failed", error);
     heading.textContent = "모델을 준비하지 못했습니다";

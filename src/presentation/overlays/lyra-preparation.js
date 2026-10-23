@@ -12,7 +12,8 @@ export function showLyraPreparation(coordinator, { device, usage, initial, persi
   if (!canOpenDialog(parent)) return;
   persist = !LOCAL_MODEL && persist;
   const resume = coordinator.suspend(), body = document.createElement('div');
-  const node = dialog('LYRA 준비', body, { className: 'model-dialog lyra-preparation-dialog', parent });
+  let busy = false;
+  const node = dialog('LYRA 준비', body, { className: 'model-dialog lyra-preparation-dialog', parent, closeOnOutside: () => !busy });
   const heading = node.querySelector('h2'), bytes = 31029778;
   const memory = () => {
     const gpu = device === 'gpu' || device === 'auto' && coordinator.lyraGpuSupport.available;
@@ -33,6 +34,7 @@ export function showLyraPreparation(coordinator, { device, usage, initial, persi
     else { if (coordinator.enabled) coordinator.recalculate(); onFinish?.(); }
   }, { once: true });
   function consent() {
+    busy = false;
     ready = false;
     stop(); coordinator.cancelModelPreparation();
     heading.textContent = 'LYRA 준비';
@@ -52,6 +54,7 @@ export function showLyraPreparation(coordinator, { device, usage, initial, persi
   }
   function change() { const selected = body.querySelector('[name=cache]:checked'); if (selected) persist = selected.value === 'yes'; }
   async function load() {
+    busy = true;
     ready = false;
     change(); stop(); controller = new AbortController();
     const current = epoch, signal = controller.signal;
@@ -80,6 +83,7 @@ export function showLyraPreparation(coordinator, { device, usage, initial, persi
       if (signal.aborted || !node.open || current !== epoch) return;
       transfer.dispose(); heading.textContent = 'LYRA 준비 완료';
       ready = true;
+      busy = false;
       body.innerHTML = preparationReady({ ...info, local: LOCAL_MODEL, initial });
       if (info.cacheFailed) {
         showSupport(body.querySelector('.cache-support'), 'storage-failed', { target: '모델 저장' });
@@ -91,6 +95,7 @@ export function showLyraPreparation(coordinator, { device, usage, initial, persi
     } catch (error) {
       if (signal.aborted || !node.open || current !== epoch) return;
       transfer.dispose(); diagnostics.capture(error, 'lyra.prepare');
+      busy = false;
       heading.textContent = '모델을 준비하지 못했습니다';
       body.innerHTML = `<p class="model-intro">${device === 'gpu' && error.code === 'lyra-runtime' ? 'GPU를 준비하지 못했습니다. 자동 또는 CPU를 선택해 주세요.' : '모델을 준비하지 못했습니다. 다시 시도해 주세요.'}</p><footer><button type="button" class="model-back">이전</button><button type="button" class="diagnostics-button">진단 정보</button><span></span><button type="button" class="primary">다시 시도</button></footer>`;
       body.querySelector('.model-back').onclick = back;
@@ -101,6 +106,7 @@ export function showLyraPreparation(coordinator, { device, usage, initial, persi
   }
   async function enter() {
     if (!persist) { consent(); return; }
+    busy = true;
     const current = epoch;
     body.innerHTML = preparationProgress({ transferLabel: '파일 읽기', memory: memory() });
     preparationStage(body, '모델 파일 확인 중', 1, 3);
