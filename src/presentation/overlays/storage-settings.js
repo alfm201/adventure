@@ -2,6 +2,7 @@ import { inspectBrowserStorage, deleteStoredItem } from '../../platform/storage.
 import { confirmAction, toast } from './dialogs.js';
 import { diagnostics } from '../../platform/report.js';
 import { modelKey } from '../../compute/vela/model.js';
+import { setLocalizedText } from '../../localization/index.js';
 
 const size = bytes => bytes < 1000 ? `${bytes} B` : bytes < 1e6 ? `${(bytes / 1000).toFixed(1)} KB` : `${(bytes / 1e6).toFixed(1)} MB`;
 const names = { ko: '한국어', en: '영어', ja: '일본어', zh: '중국어' };
@@ -30,7 +31,7 @@ export function bindStorageSettings(body, node, { coordinator, voice }) {
           const row = document.createElement('div'); row.className = 'settings-storage-item';
           const copy = document.createElement('div'), name = document.createElement('strong'), detail = document.createElement('small');
           name.textContent = item.kind === 'voice' && item.language ? `${names[item.language]} · ${item.voice === 'F' ? '여성' : '남성'}` : item.name;
-          detail.textContent = `${size(item.bytes)} · ${item.files} 파일`;
+          setLocalizedText(detail, '{0} · {1} 파일', size(item.bytes), item.files);
           // Names are DOM text; cached metadata and URLs are never trusted HTML.
           if (item.kind === 'voice') name.dataset.voicePack = `${item.language}-${item.voice}`;
           copy.append(name, detail);

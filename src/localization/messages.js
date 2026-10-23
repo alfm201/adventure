@@ -1,6 +1,11 @@
 // Korean source messages map to English, Japanese and Simplified Chinese.
 // Stage names use descriptive translations/transliterations, not verified regional game names.
 globalThis.adventureMessages = {
+  "{0} · 약 {1} 남음": ["{0} · about {1} left", "{0}・残り約{1}", "{0} · 剩余约{1}"],
+  "{0}: {1}": ["{0}: {1}", "{0}：{1}", "{0}：{1}"],
+  "{0} · {1} 파일": ["{0} · {1} files", "{0} · {1} ファイル", "{0} · {1} 个文件"],
+  "모델 파일 읽기": ["Read model files", "モデルファイルの読み込み", "读取模型文件"],
+  "모델 다운로드": ["Model download", "モデルのダウンロード", "模型下载"],
   "카드 획득": ["Cards drawn", "カード獲得", "获得卡牌"],
   "획득 불가": ["Missed draws", "獲得できず", "未能获得"],
   "실제로 손패에 들어온 카드": ["Cards actually added to your hand", "実際に手札に加わったカード", "实际加入手牌的卡牌"],

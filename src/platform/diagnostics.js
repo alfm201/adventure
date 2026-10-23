@@ -1,7 +1,7 @@
 (function (scope) {
   "use strict";
   if (scope.adventureDiagnostics) return;
-  var build = "2026.10.23.8";
+  var build = "2026.10.23.9";
   var events = [], errors = [], providers = {}, listeners = [], startedAt = new Date().toISOString();
   var eventLimit = 160, errorLimit = 24, dropped = 0, sequence = 0;
   function cleanText(value) {

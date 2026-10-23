@@ -44,6 +44,20 @@
     if (cache.size >= 2048) cache.clear();
     cache.set(key, result); return result;
   }
+  // Explicit messages use an exact catalog key. Parameters are opaque data;
+  // only nested {key, values} messages are translated, never guessed fragments.
+  function format(key, values = [], locale = language, depth = 0) {
+    const original = String(key), index = codes.indexOf(locale) - 1;
+    const translations = catalog[original] ?? (korean.test(original) ? catalog[normalize(original)] : null);
+    const template = index >= 0 ? translations?.[index] ?? original : original;
+    if (!values.length) return template;
+    return template.replace(/\{(\d+)\}/g, (slot, i) => {
+      if (!(i in values)) return slot;
+      const value = values[i];
+      return value && typeof value.key === 'string' && Array.isArray(value.values) && depth < 8
+        ? format(value.key, value.values, locale, depth + 1) : String(value ?? '');
+    });
+  }
   function markup(value) {
     // Only application-authored rich text is accepted here. Translate complete
     // rich messages when present, otherwise each text segment, never tag syntax.
@@ -53,9 +67,32 @@
   const textSources = new WeakMap(), attributeSources = new WeakMap();
   const attributes = ['aria-label', 'aria-description', 'title', 'placeholder', 'alt', 'data-label'];
   const excluded = 'script,style,textarea,[contenteditable],[translate="no"]';
+  function setText(node, key, values = []) {
+    let child = node.firstChild;
+    if (!child || child.nodeType !== 3 || child.nextSibling) {
+      child = document.createTextNode(''); node.replaceChildren(child);
+    }
+    const rendered = format(key, values);
+    textSources.set(child, { message: { key, values }, rendered, locale: language });
+    if (child.data !== rendered) child.data = rendered;
+  }
+  function setAttribute(node, name, key, values = []) {
+    let records = attributeSources.get(node);
+    if (!records) { records = {}; attributeSources.set(node, records); }
+    const rendered = format(key, values);
+    records[name] = { message: { key, values }, rendered, locale: language };
+    if (node.getAttribute(name) !== rendered) node.setAttribute(name, rendered);
+  }
   function text(node) {
     if (!node.parentElement || node.parentElement.closest(excluded)) return;
     const old = textSources.get(node), current = node.data;
+    if (old?.message && current === old.rendered) {
+      if (old.locale !== language) {
+        old.rendered = format(old.message.key, old.message.values); old.locale = language;
+        if (current !== old.rendered) node.data = old.rendered;
+      }
+      return;
+    }
     const source = old && current === old.rendered ? old.source : current;
     if (!korean.test(source) && !old) return;
     const rendered = t(source);
@@ -70,6 +107,13 @@
       const current = node.getAttribute(name);
       if (current === null) { delete records[name]; continue; }
       const old = records[name], source = old && current === old.rendered ? old.source : current;
+      if (old?.message && current === old.rendered) {
+        if (old.locale !== language) {
+          old.rendered = format(old.message.key, old.message.values); old.locale = language;
+          if (current !== old.rendered) node.setAttribute(name, old.rendered);
+        }
+        continue;
+      }
       const rendered = t(source); records[name] = {source, rendered};
       if (current !== rendered) node.setAttribute(name, rendered);
     }
@@ -106,7 +150,7 @@
     scope.dispatchEvent(new CustomEvent('adventurelanguagechange', { detail: {language} }));
     return true;
   }
-  scope.adventureI18n = {t, markup, setLanguage, localize, refresh, get language() { return language; },
+  scope.adventureI18n = {t, format, setText, setAttribute, markup, setLanguage, localize, refresh, get language() { return language; },
     get persistent() { return persistent; },
     locales: Object.freeze(codes.slice()), numberLocale: () => ({ko:'ko-KR', en:'en-US', ja:'ja-JP', zh:'zh-CN'})[language]};
   refresh();

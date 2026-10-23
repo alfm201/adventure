@@ -1,3 +1,4 @@
+import { setLocalizedText } from '../../localization/index.js';
 // Shared presentation for model preparation; storage and engines stay model-specific.
 export const megabytes = bytes => `${Math.round(bytes / 1e6).toLocaleString()} MB`;
 export const memorySize = bytes => bytes >= 1e9 ? `${(bytes / 1e9).toLocaleString()} GB` : megabytes(bytes);
@@ -22,7 +23,7 @@ export function preparationConsent({ bytes, intro, memory = '', local = false, r
 
 export function preparationProgress({ transferLabel = '다운로드', memory = '' } = {}) {
   return `<div class="model-loading" aria-live="polite"><p class="model-loading-title">준비하고 있습니다.</p><p class="model-loading-detail">잠시만 기다려 주세요.</p>
-    <div class="model-meter"><span>${transferLabel}</span><strong class="model-transfer">준비 중</strong></div><progress class="model-download" max="1" value="0" aria-label="모델 ${transferLabel}"></progress>
+    <div class="model-meter"><span>${transferLabel}</span><strong class="model-transfer">준비 중</strong></div><progress class="model-download" max="1" value="0" aria-label="${transferLabel === '파일 읽기' ? '모델 파일 읽기' : '모델 다운로드'}"></progress>
     <p class="model-transfer-detail" aria-live="off" hidden></p>
     <div class="model-meter"><span>모델 준비</span><strong class="model-prepared">대기 중</strong></div><progress class="model-prepare" max="1" value="0" aria-label="모델 준비"></progress>
     <div class="model-working" role="status" hidden><span class="model-working-icon" aria-hidden="true"></span><span class="model-working-stage"></span></div>
@@ -38,7 +39,7 @@ export function preparationStage(body, stage, step, total) {
   if (stage) {
     // Translate the full message independently of the numbered step suffix.
     const message = document.createElement('span');
-    message.textContent = stage;
+    setLocalizedText(message, stage);
     label.append(message);
     if (step && total) label.append(` (${step}/${total})`);
   }

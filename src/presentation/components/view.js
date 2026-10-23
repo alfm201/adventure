@@ -1,7 +1,7 @@
 import { tiles } from "../../rules/index.js";
 import { stageNames } from "../../content/board-layout.js";
 import { cardLabels, cardIcons } from "../../content/cards.js";
-import { numberLocale, pageLanguage, translate } from "../../localization/index.js";
+import { numberLocale, pageLanguage, translate, message, setLocalizedText } from "../../localization/index.js";
 export const number = (n, digits = 1) =>
   Number.isFinite(n)
     ? n.toLocaleString(numberLocale(), { maximumFractionDigits: digits })
@@ -217,9 +217,13 @@ export class GameView {
     text("center-label", vela ? "평가값" : result.profile?.engine === "cpu" ? "중앙값" : "평균");
     clearTimeout(this.detailTimer);
     if (lyra && result.status === "running" && Number.isFinite(result.startedAt)) {
+      const model = result.modelName ?? 'LYRA v1', engine = (result.profile?.engine ?? 'cpu').toUpperCase();
+      const description = result.profile?.device === 'auto'
+        ? message('{0} · {1} · {2}', model, message('자동'), engine) : `${model} · ${engine}`;
+      const detail = document.getElementById('evaluation-detail');
       const updateDetail = () => {
         const elapsed = Math.max(0, performance.now() - result.startedAt);
-        text("evaluation-detail", translate(`${result.modelName ?? 'LYRA v1'} · ${result.profile?.device === 'auto' ? '자동 · ' : ''}${(result.profile?.engine ?? 'cpu').toUpperCase()} · ${number(elapsed / 1000, 1)}초 · 계산중`));
+        setLocalizedText(detail, '{0} · {1}초 · 계산중', description, number(elapsed / 1000, 1));
         // Refresh only this line; do not redraw the board or restart inference.
         this.detailTimer = setTimeout(updateDetail, 100);
       };

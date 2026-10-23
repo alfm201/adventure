@@ -9,6 +9,7 @@ import { showDiagnostics } from "./diagnostics.js";
 import { downloadProgress } from "./download-progress.js";
 
 import { megabytes, memoryText, preparationConsent, preparationProgress, preparationReady, preparationStage } from "./model-preparation.js";
+import { setLocalizedAttribute } from '../../localization/index.js';
 const transferLabel = localModel ? "파일 읽기" : "다운로드";
 const comparison = model => {
   const { meanScore, relativeTime } = modelComparison[model];
@@ -180,7 +181,7 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
         body.querySelector(".model-loading-detail").textContent = data.phase === "retry" ? localModel ? "브라우저 저장본 대신 이 PC의 모델 파일을 읽습니다." : "저장된 파일을 확인하지 못해 새로 받습니다." : "준비가 끝나면 바로 사용할 수 있습니다.";
         if (data.phase === "download" || (!downloaded && cached)) {
           body.querySelector(".model-meter span").textContent = cached ? "저장된 파일" : transferLabel;
-          body.querySelector(".model-download").setAttribute("aria-label", cached ? "저장된 모델 읽기" : `모델 ${transferLabel}`);
+          setLocalizedAttribute(body.querySelector(".model-download"), "aria-label", cached ? "저장된 모델 읽기" : localModel ? "모델 파일 읽기" : "모델 다운로드");
           body.querySelector(".model-transfer").textContent = data.total ? `${megabytes(data.received)} / ${megabytes(data.total)}` : "준비 중";
           body.querySelector(".model-download").value = data.fraction || 0;
           if (data.phase === "download") downloaded = true;

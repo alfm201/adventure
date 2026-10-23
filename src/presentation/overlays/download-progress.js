@@ -1,9 +1,10 @@
+import { message, setLocalizedText } from '../../localization/index.js';
 const remainingTime = seconds => {
   const value = Math.max(1, Math.ceil(seconds));
-  if (value < 60) return `${value}초`;
-  if (value < 3600) return `${Math.floor(value / 60)}분 ${value % 60}초`;
+  if (value < 60) return message('{0}초', value);
+  if (value < 3600) return message('{0}분 {1}초', Math.floor(value / 60), value % 60);
   const minutes = Math.ceil(value / 60);
-  return `${Math.floor(minutes / 60)}시간 ${minutes % 60}분`;
+  return message('{0}시간 {1}분', Math.floor(minutes / 60), minutes % 60);
 };
 
 export function downloadProgress(element) {
@@ -27,7 +28,8 @@ export function downloadProgress(element) {
     else if (elapsed < 1000 || speed <= 0) element.textContent = "속도 확인 중";
     else {
       const rate = speed >= 1e6 ? `${(speed / 1e6).toFixed(1)} MB/s` : `${Math.max(1, Math.round(speed / 1000))} KB/s`;
-      element.textContent = rate + (total > received ? ` · 약 ${remainingTime((total - received) / speed)} 남음` : "");
+      if (total > received) setLocalizedText(element, '{0} · 약 {1} 남음', rate, remainingTime((total - received) / speed));
+      else element.textContent = rate;
     }
   };
   return {
