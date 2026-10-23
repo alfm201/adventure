@@ -7,6 +7,28 @@ export function canOpenDialog(parent = null) {
 }
 
 const fallbackDialogs = [];
+const managedDialogs = [];
+const outsideProtected = new WeakSet();
+let outsidePress;
+const topDialog = () => managedDialogs.filter(node => node.open).at(-1);
+function outside(node, event) {
+  const panel = node.querySelector('.help-bubble') || node;
+  if (panel !== node && !panel.contains(event.target)) return true;
+  if (panel !== node || event.target !== node && node.contains(event.target)) return false;
+  const r = panel.getBoundingClientRect();
+  return event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom;
+}
+function outsideDown(event) {
+  const node = topDialog();
+  outsidePress = event.button === 0 && node && outside(node, event) ? { node, x: event.clientX, y: event.clientY } : null;
+}
+function outsideClick(event) {
+  const press = outsidePress; outsidePress = null;
+  if (!press || press.node !== topDialog() || !outside(press.node, event) || Math.hypot(event.clientX - press.x, event.clientY - press.y) > 10) return;
+  event.preventDefault(); event.stopImmediatePropagation();
+  if (!outsideProtected.has(press.node)) press.node.close();
+}
+function cancelOutsidePress() { outsidePress = null; }
 let frameState;
 function syncFallbacks() {
   const frame = document.querySelector("#frame"), top = fallbackDialogs[fallbackDialogs.length - 1]?.node;
@@ -42,10 +64,11 @@ export function paintChoices(root) {
     label.classList.toggle("is-unavailable", !!input?.disabled);
   });
 }
-export function dialog(title, body, { className = "", parent = null } = {}) {
+export function dialog(title, body, { className = "", parent = null, closeOnOutside = true } = {}) {
   const previous = document.activeElement,
     node = document.createElement("dialog");
   node.className = className;
+  if (!closeOnOutside) outsideProtected.add(node);
   const heading = document.createElement("h2");
   heading.textContent = title;
   heading.id = "dialog-title-" + Math.random().toString(36).slice(2);
@@ -88,15 +111,43 @@ export function dialog(title, body, { className = "", parent = null } = {}) {
           document.removeEventListener(type, blockFallbackInput, true);
       node.dispatchEvent(new Event("close"));
     };
-    escape = event => {
-      if (event.key !== "Escape" || !node.hasAttribute("open")) return;
-      const open = document.querySelectorAll("dialog[open]");
-      if (open[open.length - 1] !== node) return;
-      event.preventDefault(); event.stopImmediatePropagation();
-      if (node.dispatchEvent(new Event("cancel", { cancelable: true }))) node.close();
-    };
-    document.addEventListener("keydown", escape, true);
   }
+  const closeNow = node.close.bind(node);
+  let closing = false, openingAnimation, closingAnimation, closeTimer, closeValue;
+  const finishClose = () => {
+    clearTimeout(closeTimer);
+    closeNow(closeValue);
+    closingAnimation?.cancel();
+  };
+  node.close = value => {
+    if (!node.open || closing) return;
+    closing = true; closeValue = value;
+    node.dispatchEvent(new Event('closing'));
+    const target = node.querySelector('.help-bubble') || node;
+    const currentStyle = getComputedStyle(target);
+    const from = { opacity: currentStyle.opacity, scale: currentStyle.scale === 'none' ? '1' : currentStyle.scale };
+    openingAnimation?.cancel();
+    if (document.hidden || matchMedia('(prefers-reduced-motion: reduce)').matches || !target.animate) { finishClose(); return; }
+    node.classList.add('dialog-closing');
+    closingAnimation = target.animate([from, { opacity: 0, scale: '.975' }],
+      { duration: 90, easing: 'ease-in', fill: 'forwards' });
+    closingAnimation.onfinish = finishClose;
+    closeTimer = setTimeout(finishClose, 130);
+  };
+  const blockClosingInput = event => { if (closing) { event.preventDefault(); event.stopImmediatePropagation(); } };
+  for (const type of ['click','submit','keydown']) node.addEventListener(type, blockClosingInput, true);
+  escape = event => {
+    if (event.key !== 'Escape' || topDialog() !== node) return;
+    event.preventDefault(); event.stopImmediatePropagation();
+    if (!closing && node.dispatchEvent(new Event('cancel', { cancelable: true }))) node.close();
+  };
+  document.addEventListener('keydown', escape, true);
+  if (!managedDialogs.length) {
+    document.addEventListener('pointerdown', outsideDown, true);
+    document.addEventListener('click', outsideClick, true);
+    document.addEventListener('pointercancel', cancelOutsidePress, true);
+  }
+  managedDialogs.push(node);
   const observer = new MutationObserver(() => paintChoices(node));
   observer.observe(body, { childList: true });
   node.addEventListener("change", () => paintChoices(node));
@@ -105,6 +156,15 @@ export function dialog(title, body, { className = "", parent = null } = {}) {
     "close",
     () => {
       observer.disconnect(); backdrop?.remove();
+      clearTimeout(closeTimer); openingAnimation?.cancel(); closingAnimation?.cancel();
+      const index = managedDialogs.indexOf(node);
+      if (index >= 0) managedDialogs.splice(index, 1);
+      if (!managedDialogs.length) {
+        document.removeEventListener('pointerdown', outsideDown, true);
+        document.removeEventListener('click', outsideClick, true);
+        document.removeEventListener('pointercancel', cancelOutsidePress, true);
+        outsidePress = null;
+      }
       if (escape) document.removeEventListener("keydown", escape, true);
       syncNotifications();
       node.remove();
@@ -113,6 +173,11 @@ export function dialog(title, body, { className = "", parent = null } = {}) {
     { once: true },
   );
   node.showModal();
+  const openingTarget = node.querySelector('.help-bubble') || node;
+  if (!node.classList.contains('run-statistics') && !document.hidden && !matchMedia('(prefers-reduced-motion: reduce)').matches && openingTarget.animate) {
+    openingAnimation = openingTarget.animate([{ opacity: 0, scale: '.975' }, { opacity: 1, scale: '1' }],
+      { duration: 120, easing: 'ease-out' });
+  }
   if (parent) {
     const closeChild = () => { if (node.open) node.close(); };
     parent.addEventListener('close', closeChild, { once: true });

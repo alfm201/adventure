@@ -8,11 +8,16 @@ export function syncNotifications() {
   if (stack.hidden) hide();
   else if (popover) { try { stack.showPopover(); } catch {} }
   if (!stack.hidden) {
-    stack.style.bottom = "";
+    stack.style.top = ""; stack.style.bottom = "";
+    const frame = document.querySelector("#frame")?.getBoundingClientRect();
     const controls = document.querySelector(".toolbar")?.getBoundingClientRect();
     const bounds = stack.getBoundingClientRect();
-    if (controls && bounds.left < controls.right && bounds.right > controls.left && bounds.top < controls.bottom && bounds.bottom > controls.top)
-      stack.style.bottom = Math.max(12, innerHeight - controls.top + 12) + "px";
+    if (frame) {
+      stack.style.right = Math.max(12, innerWidth - frame.right) + "px";
+      if (frame.bottom + 10 + bounds.height <= innerHeight - 12) {
+        stack.style.bottom = "auto"; stack.style.top = frame.bottom + 10 + "px";
+      } else stack.style.bottom = Math.max(12, Math.min(innerHeight - bounds.height - 12, innerHeight - (controls?.top ?? frame.bottom) + 10)) + "px";
+    }
   }
 }
 
@@ -26,7 +31,7 @@ const icons = {
   loading: '<path d="M20 12a8 8 0 1 1-8-8"/>',
 };
 
-function animate(element, frames, duration = 350, easing = "cubic-bezier(0.22, 1, 0.36, 1)", options = {}) {
+function animate(element, frames, duration = 220, easing = "cubic-bezier(0.22, 1, 0.36, 1)", options = {}) {
   if (motion() && typeof element.animate === "function")
     return element.animate(frames, { duration, easing, ...options });
 }
@@ -36,7 +41,7 @@ function layout(change) {
   change();
   for (const item of visible) if (positions.has(item) && !item.leaving && !item.dragging) {
     const offset = positions.get(item) - item.element.getBoundingClientRect().top;
-    if (Math.abs(offset) > 1) animate(item.element, [{ transform: `translateY(${offset}px)` }, { transform: "translateY(0)" }], 300, "cubic-bezier(0.22, 1, 0.36, 1)");
+    if (Math.abs(offset) > 1) animate(item.element, [{ transform: `translateY(${offset}px)` }, { transform: "translateY(0)" }], 220, "cubic-bezier(0.22, 1, 0.36, 1)");
   }
 }
 
@@ -55,10 +60,24 @@ function deadline(item) {
   return item.started + (waiting.length ? Math.max(3500, item.duration - waiting.length * 700) : item.duration);
 }
 
+function pause(item, reason, active) {
+  item.pauses ??= new Set();
+  if (active) {
+    if (!item.pauses.size) item.pausedAt = performance.now();
+    item.pauses.add(reason);
+  } else {
+    item.pauses.delete(reason);
+    if (!item.pauses.size && item.pausedAt !== undefined) {
+      item.started += performance.now() - item.pausedAt; item.pausedAt = undefined;
+    }
+  }
+  schedule();
+}
+
 function schedule() {
   clearTimeout(timer);
   if (document.hidden) return;
-  const timed = visible.filter(item => item.duration && !item.leaving && !item.dragging);
+  const timed = visible.filter(item => item.duration && !item.leaving && !item.pauses?.size);
   if (!timed.length) return;
   timer = setTimeout(() => {
     const now = performance.now();
@@ -80,9 +99,16 @@ function pump() {
     item.started = document.hidden ? hiddenAt ?? performance.now() : performance.now();
     paint(item);
     item.element.classList.add("notification-in");
+    item.element.addEventListener("animationend", event => {
+      if (event.target === item.element && event.animationName === "notification-in") item.element.classList.remove("notification-in");
+    });
+    item.element.addEventListener("pointerenter", event => { if (event.pointerType !== "touch") pause(item, "hover", true); });
+    item.element.addEventListener("pointerleave", () => pause(item, "hover", false));
+    item.element.addEventListener("focusin", () => pause(item, "focus", true));
+    item.element.addEventListener("focusout", event => { if (!item.element.contains(event.relatedTarget)) pause(item, "focus", false); });
     item.element.querySelector(".notification-close").onclick = () => dismiss(item);
     bindSwipe(item);
-    layout(() => { visible.push(item); stack.append(item.element); syncNotifications(); });
+    layout(() => { visible.push(item); stack.prepend(item.element); syncNotifications(); });
   }
   syncNotifications();
   schedule();
@@ -95,8 +121,10 @@ function bindSwipe(item) {
     if (drag || event.isPrimary === false || event.button !== 0 || event.target.closest("button") || item.leaving) return;
     drag = { id: event.pointerId, x: event.clientX, y: event.clientY, at: performance.now(), offset: 0 };
     item.dragging = true;
+    element.classList.remove("notification-in");
+    for (const animation of element.getAnimations()) animation.cancel();
     element.setPointerCapture(event.pointerId);
-    schedule();
+    pause(item, "drag", true);
   });
   element.addEventListener("pointermove", event => {
     if (!drag || event.pointerId !== drag.id) return;
@@ -109,7 +137,7 @@ function bindSwipe(item) {
   const end = event => {
     if (!drag || event.pointerId !== drag.id) return;
     const { offset, at } = drag, elapsed = performance.now() - at;
-    drag = null; item.dragging = false; item.started += elapsed;
+    drag = null; item.dragging = false; pause(item, "drag", false);
     const opacity = element.style.opacity || "1";
     if (event.type === "pointerup" && (Math.abs(offset) > Math.min(100, element.offsetWidth * .25) || Math.abs(offset) > 35 && Math.abs(offset) / Math.max(1, elapsed) > .5)) {
       dismiss(item, offset);
@@ -141,7 +169,8 @@ function remove(item, offset = 0) {
     return;
   }
   let done = false, fallback;
-  const finish = () => {
+  const finish = event => {
+    if (event && (event.target !== item.element || event.animationName !== "notification-out")) return;
     if (done) return;
     done = true;
     clearTimeout(fallback);
@@ -157,19 +186,19 @@ function remove(item, offset = 0) {
   if (offset) {
     const animation = animate(item.element, [
       { opacity: item.element.style.opacity || 1, transform: `translateX(${offset}px)` },
-      { opacity: 0, transform: `translateX(${Math.sign(offset) * (item.element.offsetWidth + 30)}px) scale(0.92)` }
-    ], 260, "cubic-bezier(0.2, 0.8, 0.2, 1)", { fill: "forwards" });
-    if (animation) animation.finished.then(finish, finish);
+      { opacity: 0, transform: `translateX(${Math.sign(offset) * (item.element.offsetWidth + 30)}px)` }
+    ], 160, "cubic-bezier(0.2, 0.8, 0.2, 1)", { fill: "forwards" });
+    if (animation) animation.finished.then(() => finish(), () => finish());
     else finish();
   } else {
     item.element.classList.remove("notification-in");
     item.element.classList.add("notification-out");
-    item.element.addEventListener("animationend", finish, { once: true });
-    fallback = setTimeout(finish, 380);
+    item.element.addEventListener("animationend", finish);
+    fallback = setTimeout(finish, motion() ? 210 : 110);
   }
 }
 
-export function notify(key, message, { tone = "info", duration = 5500, action, actionLabel } = {}) {
+export function notify(key, message, { tone = "info", action, actionLabel, duration = tone === "loading" ? 0 : action ? 8000 : tone === "warning" ? 6500 : tone === "success" ? 3500 : 4500 } = {}) {
   message = String(message || "").trim();
   if (!message) return;
   const previous = dismissed.get(key);
@@ -181,7 +210,11 @@ export function notify(key, message, { tone = "info", duration = 5500, action, a
     item.action = action;
     if (item.message === message && item.tone === tone && item.duration === duration && item.actionLabel === actionLabel && hadAction === !!action) return;
     Object.assign(item, { message, tone, duration, actionLabel, started: document.hidden ? hiddenAt ?? performance.now() : performance.now() });
-    if (item.element) layout(() => { paint(item); syncNotifications(); });
+    if (item.pauses?.size) item.pausedAt = item.started;
+    if (item.element) layout(() => {
+      paint(item); syncNotifications();
+      animate(item.element.querySelector('.notification-icon'), [{opacity:.3},{opacity:1}], 120);
+    });
   } else {
     item = { key, message, tone, duration, action, actionLabel };
     notices.set(key, item); waiting.push(item);
@@ -202,7 +235,7 @@ export function toast(message) {
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) { hiddenAt = performance.now(); clearTimeout(timer); }
   else {
-    if (hiddenAt !== undefined) for (const item of visible) item.started += performance.now() - hiddenAt;
+    if (hiddenAt !== undefined) for (const item of visible) if (!item.pauses?.size) item.started += performance.now() - hiddenAt;
     hiddenAt = undefined; schedule();
   }
 });

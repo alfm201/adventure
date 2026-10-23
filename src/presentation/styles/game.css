@@ -608,79 +608,29 @@ dialog.overview-dialog[open] { display: flex; flex-direction: column; }
 .loading-card progress::-webkit-progress-value { background: linear-gradient(90deg, #70b9a1, #529ca1); border-radius: 8px; }
 .loading-card progress::-moz-progress-bar { background: #5aa998; border-radius: 8px; }
 .loading-card button { margin-top: 12px; border: 1px solid #aac8be; border-radius: 7px; background: #edf5ed; color: #397778; padding: 7px 12px; }
-.notification-stack {
-  position: fixed;
-  inset: auto;
-  bottom: max(20px, env(safe-area-inset-bottom));
-  right: max(20px, env(safe-area-inset-right));
-  z-index: 11000;
-  display: grid;
-  justify-items: stretch;
-  gap: 10px;
-  width: min(390px, calc(100vw - 24px));
-  max-height: calc(100vh - 36px);
-  margin: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  overflow: visible;
-  pointer-events: none;
-}
-.notification-stack::backdrop { background: transparent; pointer-events: none; }
-.notification {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  max-width: 100%;
-  padding: 12px 12px 12px 14px;
-  border: 1px solid #a9cbb9;
-  border-radius: 12px;
-  background: #f7fcf7;
-  color: #244c3b;
-  box-shadow: 0 6px 24px #173f3629, 0 2px 5px #173f3614;
-  font: 600 15px/1.5 Arial, "Malgun Gothic", sans-serif;
-  text-align: left;
-  pointer-events: auto;
-  touch-action: pan-y;
-  will-change: transform, opacity;
-  transform-origin: bottom center;
-}
-.notification-icon { display: grid; place-items: center; flex: 0 0 28px; width: 28px; height: 28px; border-radius: 50%; background: #e0eee3; color: #3c7753; }
-.notification-icon svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.notification-message { flex: 1; min-width: 0; word-break: keep-all; overflow-wrap: anywhere; }
-.notification-warning { border-color: #d6be90; background: #fffaf0; color: #634c29; }
-.notification-warning .notification-icon { background: #f5e8cc; color: #8b6527; }
-.notification-loading .notification-icon svg { animation: notification-spin 1s linear infinite; }
-.notification-stack .notification button { flex-shrink: 0; cursor: pointer; pointer-events: auto; font: 600 12px/1.4 Arial, "Malgun Gothic", sans-serif; }
-.notification-action { min-height: 32px; padding: 5px 9px; border: 1px solid #c5d6c8; border-radius: 7px; background: #fff; color: #466d52; }
-.notification-close { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 7px; background: transparent; color: #6c8174; }
-.notification-close svg { display: block; width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-@media (hover: hover) { .notification-action:hover, .notification-close:hover { background: #e6eee4; color: #2b583c; } }
-@keyframes notification-spin { to { transform: rotate(360deg); } }
-@keyframes notification-in {
-  from { opacity: 0; transform: translateY(40px) scale(0.92); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
-}
-@keyframes notification-out {
-  from { opacity: 1; transform: translateY(0) scale(1); }
-  to { opacity: 0; transform: translateY(32px) scale(0.92); }
-}
-.notification-in { animation: notification-in 380ms cubic-bezier(0.22, 1, 0.36, 1) both; }
-.notification-out { animation: notification-out 320ms cubic-bezier(0.32, 0, 0.67, 0) forwards; pointer-events: none; }
-@media (max-width: 420px) {
-  .notification-stack { bottom: max(12px, env(safe-area-inset-bottom)); right: max(12px, env(safe-area-inset-right)); }
-  .notification { padding: 11px 8px 11px 12px; gap: 8px; font-size: 14px; }
-  .notification-close { width: 34px; height: 34px; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .notification-loading .notification-icon svg { animation: none; }
-  @keyframes notification-in { from { opacity: 0; } to { opacity: 1; } }
-  @keyframes notification-out { from { opacity: 1; } to { opacity: 0; } }
-  .notification-in { animation-duration: 250ms; }
-  .notification-out { animation-duration: 200ms; }
-}
+.notification-stack{position:fixed;inset:auto;bottom:max(12px,env(safe-area-inset-bottom));right:max(12px,env(safe-area-inset-right));z-index:11000;display:grid;justify-items:stretch;gap:10px;width:min(360px,calc(100vw - 24px));max-height:calc(100dvh - 24px);margin:0;padding:0;border:0;background:transparent;color:inherit;overflow:visible;pointer-events:none}
+.notification-stack::backdrop{background:transparent;pointer-events:none}
+.notification{position:relative;display:flex;align-items:center;gap:11px;width:100%;max-width:100%;box-sizing:border-box;min-height:52px;padding:10px 8px 10px 12px;border:1px solid #dce5e2;border-radius:12px;background:#fff;color:#1c2d32;box-shadow:0 10px 28px #0d22301f,0 2px 6px #0d223014;font:500 13.5px/1.5 Arial,"Malgun Gothic",sans-serif;text-align:left;pointer-events:auto;touch-action:pan-y;will-change:transform,opacity;overflow:hidden}
+.notification::before{content:"";position:absolute;inset:0 auto 0 0;width:3px;background:var(--notification-tone)}
+.notification{--notification-tone:#2f6fb3;--notification-soft:#e8f0fa}.notification-success{--notification-tone:#1d8a5a;--notification-soft:#e3f4ea}.notification-warning{--notification-tone:#c46a12;--notification-soft:#fdf0de}.notification-loading{--notification-tone:#276f70;--notification-soft:#e3f2ef}
+.notification-icon{display:grid;place-items:center;flex:0 0 28px;width:28px;height:28px;border-radius:50%;background:var(--notification-soft);color:var(--notification-tone)}
+.notification-icon svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+.notification-message{flex:1;min-width:0;word-break:keep-all;overflow-wrap:anywhere}
+.notification-loading .notification-icon svg{animation:notification-spin 1s linear infinite}
+.notification-stack .notification button{flex-shrink:0;cursor:pointer;pointer-events:auto;font:700 12.5px/1.4 Arial,"Malgun Gothic",sans-serif}
+.notification-action{min-height:32px;padding:6px 11px;border:0;border-radius:8px;background:var(--notification-tone);color:#fff;box-shadow:0 1px 2px #0d22301f}
+.notification-action:focus-visible,.notification-close:focus-visible{outline:2px solid var(--notification-tone);outline-offset:2px}
+.notification-close{display:flex;align-items:center;justify-content:center;width:30px;height:30px;padding:0;border:0;border-radius:8px;background:transparent;color:#7a898d}
+.notification-close svg{display:block;width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+@media(hover:hover){.notification-action:hover{filter:brightness(.92)}.notification-close:hover{background:#eef2f1;color:#22363b}}
+@keyframes notification-spin{to{transform:rotate(360deg)}}
+@keyframes notification-in{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes notification-out{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(4px)}}
+.notification-in{animation:notification-in 240ms cubic-bezier(.22,1,.36,1) backwards}
+.notification-out{animation:notification-out 160ms ease-in forwards;pointer-events:none}
+@media(max-width:420px){.notification{font-size:14px;padding:9px 7px 9px 11px;gap:9px}.notification-close{width:34px;height:34px}}
+@media(prefers-reduced-motion:reduce){.notification-loading .notification-icon svg{animation:none}@keyframes notification-in{from{opacity:0}to{opacity:1}}@keyframes notification-out{from{opacity:1}to{opacity:0}}.notification-in,.notification-out{animation-duration:80ms}}
+
 dialog {
   border: 1px solid var(--dialog-border);
   border-radius: 14px;
@@ -697,6 +647,10 @@ dialog {
 dialog::backdrop {
   background: #193c365c;
 }
+dialog.dialog-closing::backdrop{animation:dialog-backdrop-out 90ms ease-in forwards}
+dialog.dialog-closing{pointer-events:none}
+@keyframes dialog-backdrop-out{to{background:transparent}}
+@media(prefers-reduced-motion:reduce){dialog.dialog-closing::backdrop{animation:none}}
 dialog h2 {
   margin: 0 0 10px;
   font-size: 21px;

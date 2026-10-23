@@ -122,9 +122,8 @@ export function showSettings(coordinator, { model = "x36", initial = false, sele
       usage: body.elements.usage.value,
       workers: Number(body.elements.workers.value),
     };
-    resume(); node.close();
-    coordinator.configure(next);
-    onFinish?.();
+    node.addEventListener('close', () => { coordinator.configure(next); onFinish?.(); }, { once: true });
+    node.close();
   };
   return node;
 }

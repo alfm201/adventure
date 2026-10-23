@@ -2,6 +2,8 @@ import { Session } from "../application/session.js";
 import { Coordinator } from "../application/coordinator.js";
 import { Assist } from "../application/assist.js";
 import { AssistVoice } from "../application/voice.js";
+import { RunStatistics } from "../application/run-statistics.js";
+import { bindRunStatistics } from "../presentation/overlays/run-statistics.js";
 import { Assets } from "../content/assets.js";
 import { GameView } from "../presentation/components/view.js";
 import { BoardRenderer } from "../presentation/board/renderer.js";
@@ -31,6 +33,7 @@ document.addEventListener("keydown", event => {
 const session = new Session(),
   coordinator = new Coordinator(session),
   assist = new Assist(session),
+  statistics = new RunStatistics(session, coordinator, assist),
   voice = new AssistVoice(session, coordinator, assist),
   assets = new Assets(),
   view = new GameView(assets);
@@ -86,6 +89,7 @@ coordinator.addEventListener("change", () => {
 });
 bindInputs(session, coordinator, renderer, prediction, assist, voice);
 bindAssistBar(session, assist, prediction, voice);
+const disposeStatistics = bindRunStatistics(statistics);
 const resize = () => {
   const scale = Math.min(innerWidth / 1234, innerHeight / 694);
   document.querySelector("#frame").style.cssText =
@@ -96,6 +100,7 @@ const resize = () => {
 addEventListener("resize", resize);
 resize();
 addEventListener("pagehide", () => {
+  disposeStatistics(); statistics.dispose();
   voice.dispose();
   assist.dispose();
   renderer.dispose();

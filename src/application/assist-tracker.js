@@ -559,7 +559,7 @@ export class AssistTracker {
       this.accepted(at);
       this.characterAnchor = null;
       this.rememberCharacter(observed);
-      return this.result(null, { state: this.state, synchronized: true, deckOpen: !!observed.deck?.open });
+      return this.result(null, { state: this.state, synchronized: true, newGame: true, deckOpen: !!observed.deck?.open });
     }
     if (!this.verified) {
       if (this.seen < 30) {
@@ -592,9 +592,10 @@ export class AssistTracker {
     if (this.movingKey === key && observed.position === this.state.position && absent)
       return this.result("settling", { moving: true });
     if (unchanged) {
+      const continuityLost = this.lost;
       this.rememberCharacter(observed);
       this.accepted(at);
-      return this.result(null, { state: this.state, deckOpen: !!observed.deck?.open });
+      return this.result(null, { state: this.state, statistics: { complete: !continuityLost, steps: [] }, deckOpen: !!observed.deck?.open });
     }
     const evidence = this.intermediate(observed, at), intermediate = evidence.intermediate;
     this.actionHint ||= evidence.hint;
@@ -603,12 +604,14 @@ export class AssistTracker {
     if (this.reconciliation?.state !== this.state || this.reconciliation.key !== key || this.reconciliation.evidenceKey !== evidenceKey) {
       const candidates = reconcileState(this.state, observed);
       let anchor = this.state, reset = false;
+      const steps = [];
       // A later visible checkpoint does not erase uncertainty before it.
       // Across a real blind interval, keep every compatible prefix deck and
       // constrain the search by the ordered positive observations instead.
       const uncertainPrefix = this.lost || evidence.unconfirmed;
       for (const checkpoint of uncertainPrefix ? [] : evidence.checkpoints) {
         const step = reconcileState(anchor, checkpoint)[0];
+        steps.push({ state: step.state, action: step.action });
         anchor = step.state; reset ||= step.reset;
       }
       // Prefer a compatible single action in an ordinary continuous session,
@@ -622,12 +625,15 @@ export class AssistTracker {
       // draw combination before the constrained recovery has applied bounds.
       let resolved = uncertainPrefix && intermediate ? [] :
         resolveTransition(anchor, observed, { ...options, directOnly: true }), search = null;
+      const counted = directOnly && resolved.length === 1;
+      if (counted) steps.push({ state: resolved[0].state, action: resolved[0].action });
       if (resolved.length < 2 && (!directOnly || resolved.length === 0)) {
         search = createRecoverySearch(anchor, observed, options);
         resolved = search.advance().resolved;
       }
       for (const candidate of resolved) candidate.reset ||= reset;
-      this.reconciliation = { state: this.state, key, candidates, resolved, evidenceKey, search, reset };
+      this.reconciliation = { state: this.state, key, candidates, resolved, evidenceKey, search, reset,
+        statistics: { complete: counted, steps: counted ? steps : [] } };
     } else if (this.reconciliation.search) {
       const result = this.reconciliation.search.advance();
       this.reconciliation.resolved = result.resolved;
@@ -639,12 +645,13 @@ export class AssistTracker {
     if (resolved.length === 1) {
       this.lastMismatch = null;
       const { state, reset, action } = resolved[0];
+      const statistics = this.reconciliation.statistics;
       this.state = state;
       this.accepted(at);
       this.reconciliation = null;
       this.movingKey = null;
       this.rememberCharacter(observed);
-      return this.result(null, { state, action, deckReset: reset });
+      return this.result(null, { state, action, deckReset: reset, statistics });
     }
     const diceDelta = observed.diceUsed - this.state.diceUsed;
     this.lastMismatch = {

@@ -70,13 +70,6 @@ export function askMultiplierRoll(multiplier, anchor, signal) {
       node.style.top = Math.max(12, Math.min(innerHeight - h - 12, r.top >= h + 22 ? r.top - h - 10 : r.bottom + 10)) + "px";
     };
     const abort = () => { answer = null; node.close(); };
-    const outside = event => {
-      const r = node.getBoundingClientRect();
-      return event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom;
-    };
-    let pressedOutside = false;
-    node.addEventListener("pointerdown", event => { pressedOutside = outside(event); });
-    node.addEventListener("click", event => { if (pressedOutside && outside(event)) node.close(); });
     window.addEventListener("resize", place);
     signal?.addEventListener("abort", abort, { once: true });
     node.addEventListener("close", () => {

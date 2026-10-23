@@ -19,18 +19,21 @@ export function showLyraPreparation(coordinator, { device, usage, initial, persi
     const budget = lyraMemory[gpu ? 'gpu' : 'cpu'][usage];
     return `RAM 여유 약 ${memorySize(budget.ram)} 이상 권장 · 기기별 차이` + (gpu ? `<br>VRAM 여유 약 ${memorySize(budget.gpu)} 이상 권장 · 기기별 차이` : '');
   };
-  let controller, transfer, epoch = 0, handedOff = false, applied = false;
+  let controller, transfer, epoch = 0, handedOff = false, ready = false;
   const focusPrimary = () => body.querySelector('.primary:not(:disabled)')?.focus({ preventScroll: true });
   const stop = () => { epoch++; controller?.abort(); transfer?.dispose(); };
+  node.addEventListener('closing', stop);
   const back = () => { handedOff = true; node.addEventListener('close', () => onBack(persist), { once: true }); node.close(); };
   node.addEventListener('close', () => {
     stop(); resume();
-    if (!applied) coordinator.cancelModelPreparation();
-    if (handedOff || applied) return;
+    if (!ready) coordinator.cancelModelPreparation();
+    if (handedOff) return;
+    if (ready) { coordinator.configure({ model: 'lyra', lyraDevice: device, lyraUsage: usage }); onFinish?.(); return; }
     if (onCancel) onCancel();
     else { if (coordinator.enabled) coordinator.recalculate(); onFinish?.(); }
   }, { once: true });
   function consent() {
+    ready = false;
     stop(); coordinator.cancelModelPreparation();
     heading.textContent = 'LYRA 준비';
     const resident = coordinator.lyra?.ready;
@@ -49,6 +52,7 @@ export function showLyraPreparation(coordinator, { device, usage, initial, persi
   }
   function change() { const selected = body.querySelector('[name=cache]:checked'); if (selected) persist = selected.value === 'yes'; }
   async function load() {
+    ready = false;
     change(); stop(); controller = new AbortController();
     const current = epoch, signal = controller.signal;
     rememberCacheChoice(persist);
@@ -75,19 +79,14 @@ export function showLyraPreparation(coordinator, { device, usage, initial, persi
       }});
       if (signal.aborted || !node.open || current !== epoch) return;
       transfer.dispose(); heading.textContent = 'LYRA 준비 완료';
+      ready = true;
       body.innerHTML = preparationReady({ ...info, local: LOCAL_MODEL, initial });
       if (info.cacheFailed) {
         showSupport(body.querySelector('.cache-support'), 'storage-failed', { target: '모델 저장' });
         toast('모델을 저장하지 못했습니다. 이번에는 사용할 수 있습니다.');
       }
       body.querySelector('.model-back').onclick = consent;
-      body.querySelector('.primary').onclick = () => {
-        applied = true;
-        node.addEventListener('close', () => {
-          coordinator.configure({ model: 'lyra', lyraDevice: device, lyraUsage: usage }); onFinish?.();
-        }, { once: true });
-        node.close();
-      };
+      body.querySelector('.primary').onclick = () => node.close();
       focusPrimary();
     } catch (error) {
       if (signal.aborted || !node.open || current !== epoch) return;

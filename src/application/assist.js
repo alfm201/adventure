@@ -47,6 +47,7 @@ export class Assist extends EventTarget {
   }
 
   release() {
+    this.dispatchEvent(new Event("capture-end"));
     this.reader?.stop(); this.reader = null;
     this.tracker.reset();
     this.region = null;

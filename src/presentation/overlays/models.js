@@ -20,6 +20,8 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
   const body = document.createElement("div");
   const node = dialog("모델 선택", body, { className: "model-dialog", parent });
   let controller, epoch = 0, handedOff = false, selected = selectedModel ?? (coordinator.enabled ? coordinator.settings.model : "vela");
+  let ready = false;
+  node.addEventListener('closing', () => { epoch++; controller?.abort(); });
   const heading = node.querySelector("h2");
   const settingsEntry = document.createElement('button');
   settingsEntry.type = 'button'; settingsEntry.className = 'model-settings-entry';
@@ -33,6 +35,7 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
     resume();
     epoch++; controller?.abort(); coordinator.removeEventListener("capabilities", refreshSupport);
     if (handedOff) return;
+    if (ready) { coordinator.configure({ model: 'vela' }); onFinish?.(); return; }
     coordinator.cancelModelPreparation();
     if (initial && !coordinator.enabled) confirmSkip();
     else {
@@ -68,6 +71,7 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
     else showModelSelection(coordinator, { initial, selectedModel: selected, onFinish, parent });
   }
   function select() {
+    ready = false;
     settingsEntry.hidden = false;
     epoch++; controller?.abort(); controller = null; coordinator.cancelModelPreparation();
     heading.textContent = "모델 선택";
@@ -147,6 +151,7 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
     paintChoices(body); focusPrimary();
   }
   function progressScreen(title, manifest) {
+    ready = false;
     // Preparation can hand off to another dialog asynchronously. Settings are
     // entered from model selection, where that parent stays stable.
     settingsEntry.hidden = true;
@@ -183,13 +188,11 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
       }});
       if (signal.aborted || current !== epoch || !node.open) return;
       heading.textContent = `${info.manifest.name} 준비 완료`;
+      ready = true;
       body.innerHTML = preparationReady({ ...info, local: localModel, initial });
       if (info.cacheFailed) { showSupport(body.querySelector(".cache-support"), info.cacheIssue || "storage-failed", { target: "모델 저장" }); toast("모델을 저장하지 못했습니다. 이번에는 사용할 수 있습니다."); }
       body.querySelector(".model-back").onclick = select;
-      body.querySelector(".primary").onclick = () => leave(() => {
-        coordinator.configure({ model: "vela" });
-        onFinish?.();
-      });
+      body.querySelector(".primary").onclick = () => node.close();
       focusPrimary();
     } catch (error) { if (!signal.aborted && current === epoch && node.open) failure(error, inspectVela); }
     finally { transfer?.dispose(); }

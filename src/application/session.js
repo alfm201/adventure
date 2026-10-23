@@ -47,17 +47,19 @@ export class Session extends EventTarget {
       terminal: this.board.terminal,
     };
   }
-  observe(state, { ready = false, synchronized = false } = {}) {
+  observe(state, { ready = false, synchronized = false, statistics, newGame = false } = {}) {
     if (this.mode !== "assist") return false;
     const changed = ready && state && JSON.stringify(this.state) !== JSON.stringify(state);
     if (changed) restore(this.board, state);
-    if (!changed && this.assistReady === ready && !synchronized) return false;
+    if (!changed && this.assistReady === ready && !synchronized && statistics?.complete !== false) return false;
     this.assistReady = ready;
     this.edited = true;
     this.highScore = Math.max(this.highScore, this.board.score);
     this.revision++;
     diagnostics.record("assist.state", { ready, synchronized, state: this.state });
-    this.dispatchEvent(new CustomEvent("change", { detail: { type: synchronized ? "assist-sync" : "assist-state" } }));
+    this.dispatchEvent(new CustomEvent("change", { detail: {
+      type: synchronized ? "assist-sync" : "assist-state", ready, synchronized, statistics, newGame,
+    } }));
     return true;
   }
   execute(type, value, source = "pointer") {
@@ -65,7 +67,7 @@ export class Session extends EventTarget {
     const command = { type, value: typeof value === "number" || type === "mode" ? value :
       type === "card" && value ? { slot: value.slot, sum: value.sum } : undefined, source };
     try {
-      const changed = this.applyCommand(type, value, source);
+      const changed = this.applyCommand(type, value, source, before);
       diagnostics.record("game.command", { command, changed, before, after: this.view, random: draws });
       return changed;
     } catch (error) {
@@ -75,7 +77,7 @@ export class Session extends EventTarget {
       throw error;
     } finally { this.commandDraws = null; }
   }
-  applyCommand(type, value, source) {
+  applyCommand(type, value, source, before = this.view) {
     if (this.mode === "assist" && type !== "mode") return false;
     const b = this.board,
       automatic = this.mode === "automatic";
@@ -198,7 +200,7 @@ export class Session extends EventTarget {
     restore(b, snapshot(b));
     this.highScore = Math.max(this.highScore, b.score);
     this.revision++;
-    this.dispatchEvent(new CustomEvent("change", { detail: { type } }));
+    this.dispatchEvent(new CustomEvent("change", { detail: { type, value, before } }));
     return true;
   }
 }
