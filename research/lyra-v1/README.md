@@ -14,7 +14,7 @@ LYRA의 학습과 브라우저용 FP32 모델 변환 코드입니다. 기존 LYR
 | `training/src/` | Actor·ValueNet 정의, Actor·가치망 학습, self-play·backup 함수 |
 | `training/kernel/` | 실제 덱 전이와 Hinge 교사 레이블 생성용 C++·Python 코드 및 의존 헤더 |
 
-출처는 `claude/research/neural/deck_actor_20261011`의 `runs/v20_value/model.pt`, `data/board.npz`, `src/actor.py`입니다. 원본 체크포인트 SHA-256은 `b4edb84d4c64cd4b7d0d16bcc8db0eab6f521d5090b13426f797b50ac363d09a`입니다. 변환은 기존 LYRA FP32 방식(마지막 층의 global 토큰 계산)을 유지합니다.
+출처는 외부 보관 연구 `deck_actor_20261011`의 `runs/v20_value/model.pt`, `data/board.npz`, `src/actor.py`입니다. 원본 체크포인트 SHA-256은 `b4edb84d4c64cd4b7d0d16bcc8db0eab6f521d5090b13426f797b50ac363d09a`입니다. 변환은 기존 LYRA FP32 방식(마지막 층의 global 토큰 계산)을 유지합니다.
 
 ## 체크포인트 없이 학습
 
@@ -71,4 +71,4 @@ python research/lyra-v1/export.py --checkpoint research/lyra-v1/training/runs/v2
 
 기본 생성 위치는 `research/lyra-v1/output/`이며 `--out 경로`로 바꿀 수 있습니다. 생성 파일은 `lyra-v20-fp32.onnx`, `features.bin`, `assets.json`입니다. `assets.json`은 생성 정보이며 기존 벤치마크의 부가 기록은 포함하지 않습니다.
 
-고정 체크포인트의 변환 결과는 현재 브라우저용 모델과 ONNX·특징 데이터 SHA-256 및 배열 정의·게임 규칙이 일치하는 것을 확인했습니다. 학습 전체는 이번 패키징에서 실행하지 않았습니다. GPU·CUDA·PyTorch·부동소수점 연산 차이로 재학습 결과가 달라질 수 있으므로, 학습부터의 바이트 동일 재현이나 동일 점수를 보증하지 않습니다. 새 가중치 변환은 앱이나 배포 모델을 자동 교체하지 않습니다.
+고정 체크포인트의 변환 결과는 현재 브라우저용 모델과 ONNX·특징 데이터 SHA-256 및 배열 정의·게임 규칙이 일치하는 것을 확인했습니다. 포함된 학습 파이프라인의 전체 재학습 검증은 수행하지 않았습니다. GPU·CUDA·PyTorch·부동소수점 연산 차이로 재학습 결과가 달라질 수 있으므로, 학습부터의 바이트 동일 재현이나 동일 점수를 보증하지 않습니다. 새 가중치 변환은 앱이나 배포 모델을 자동 교체하지 않습니다.

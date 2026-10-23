@@ -48,9 +48,9 @@ VELA는 처음에 약 **68MB**, LYRA는 약 **31MB**의 모델 패키지를 불�
 
 ## 모델 연구·빌드
 
-LYRA v1의 V₂₀ 학습과 브라우저용 FP32 모델 변환 코드·설명은 [LYRA 재현 안내](research/lyra-v1/README.md)에 있습니다. 앱에서는 π₂₀ 1-step 정책을 사용합니다.
+X36 → VELA → LYRA의 계보와 주요 전환·평가 결과는 [연구 개요](research/README.ko.md)에 정리했습니다. 유한 자원 MDP의 수식 분석, 상태 공간과 탐색 분기, Oracle 실험은 [환경과 계산량](research/topics/environment.md)에서 설명합니다.
 
-VELA v4.2의 FULL100 생성·Hinge 학습 코드와 최종 결과 요약은 [연구 안내](research/vela-v4.2/README.md), WASM 빌드는 [빌드 안내](src/policies/vela/native/README.md)에 있습니다. FULL100 원본 테이블은 앱 실행에 필요하지 않습니다.
+모델 생성·학습·변환 절차는 [재현 가이드](research/reproduction/README.ko.md)에서 시작합니다. 버전별 상세 설명은 [LYRA v1 학습·변환](research/lyra-v1/README.md), [VELA v4.2 생성·평가](research/vela-v4.2/README.md)를 참고하세요. VELA의 WASM 빌드는 [빌드 안내](src/policies/vela/native/README.md)에 있습니다. FULL100 원본 테이블은 앱 실행에 필요하지 않습니다.
 
 ## 라이선스
 

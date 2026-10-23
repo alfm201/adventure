@@ -1,120 +1,105 @@
-# 모델 재현 가이드
+# Adventure 연구 계보
 
 [English](README.md) | 한국어
 
-## LYRA v1 — V₂₀ 신경망 가치 모델
+Adventure의 행동 추천은 X36의 후속 게임 시뮬레이션, VELA의 사전 계산 가치표, LYRA의 신경망 가치 추정으로 발전했습니다. 이 문서는 각 전환의 배경과 평가 성능, 남은 연구 과제를 정리합니다.
 
-[LYRA 학습·변환 자료](lyra-v1/README.md)에는 V₂₀ 학습 경로, 보드 데이터, 고정 체크포인트와 브라우저용 FP32 모델 변환 코드가 있습니다. 기존 LYRA 체크포인트 없이 학습할 수 있으며, 초기 교사인 VELA v4.2 가중치는 별도로 준비합니다. 앱에서는 π₂₀ 1-step 정책을 사용합니다.
-
-## VELA v4.2 — COMPACT100 Hinge
-
-현재 모델은 동결된 Hinge epoch 1, horizon 100, 2-step expectimax와 실제 잔여 덱 및 DeckPotential β=0.6을 사용합니다. FULL100 최소 생성기(C++ 1개·헤더 3개), 압축·학습 의존 소스, 실행 명령과 최종 결과 요약은 [v4.2 패키지](vela-v4.2/README.md)에 있습니다. FULL100 원본은 앱 실행에 필요하지 않습니다. 별도로 학습한 Hinge 최종 점수 예측기는 앱에 연결돼 있으며, 예측기 학습 자료는 이 가치 모델 연구 패키지에 포함하지 않습니다.
-
-## VELA v4.1 — COMPACT48
-
-| 폴더 | 역할 |
+| 보고 싶은 내용 | 안내 |
 |---|---|
-| `vela-v4.1/full48/` | 손패 최대 5장, horizon 48의 연속 DP 생성기 |
-| `vela-v4.1/include/` | 생성기에 필요한 의존 헤더 |
-| `vela-v4.1/compression/src/` | 시간·손패 공유 구조 학습 및 양자화 내보내기 |
+| 모델 생성·학습·변환 | [재현 가이드](reproduction/README.ko.md) |
+| 유한 자원 MDP, 상태 공간과 Oracle 실험 | [환경과 계산량](topics/environment.md) |
+| X36의 형성, 가치표와 탐색의 발전 | [가치 표현과 탐색](topics/value-and-planning.md) |
+| 과거 신경망 연구부터 LYRA의 학습 정체까지 | [학습과 정체](topics/learning-and-plateaus.md) |
+| 점수·정확성·용어의 해석 | [평가와 공통 기준](topics/evaluation.md) |
+| 보고서와 공통 연구 허브의 근거 | [출처와 확인 범위](topics/sources.md) |
 
-최종 파일은 `vela-v4.1/compression/models/quant_q6_k64_t12.bin`(37.68 MiB)입니다. FULL48 테이블은 생성 과정에만 필요하며 실행에는 필요하지 않습니다. WASM 빌드는 [native 안내](../src/policies/vela/native/README.md)를 참고하세요.
+## 한눈에 보는 흐름
 
-Windows에서 MSYS2 UCRT64 g++, Python, NumPy를 준비한 뒤 프로젝트 루트에서 실행합니다. 아래 명령은 전체 모델 생성 작업이며 이번 소스 정리 과정에서는 다시 실행하지 않았습니다. FULL48 테이블만 약 42.72 GiB이고, 최종 FP32 스냅샷과 압축 중간 결과에 추가 공간이 필요합니다.
+실선은 계열 내부의 연구 전개와 표기된 교사 관계를, 점선은 접근 전환과 관련 연구를 나타냅니다. 점수는 평가별 대표값을 반올림했습니다. 가중치 계승 여부와 통계적 개선은 각 보고서의 비교 조건을 확인해야 합니다.
 
-```powershell
-Push-Location research/vela-v4.1
-try {
-    New-Item -ItemType Directory -Force bin, compression/results | Out-Null
-    g++ -std=c++17 -O3 -march=native -fopenmp -I include full48/solve-hands-full48.cpp -o bin/solve-hands.exe
-    ./bin/solve-hands.exe 5 48 full48/model/full48 12
-    python compression/src/analyze_low.py
-    python compression/src/fit_shared.py 6
-    '[]' | Set-Content -Encoding ascii compression/results/models.json
-    python compression/src/export_quantized.py
-} finally {
-    Pop-Location
-}
+```mermaid
+flowchart TD
+    subgraph X["X36 계열 · 빠른 기반 정책과 시뮬레이션"]
+        X0["초기 휴리스틱(Fast) → X36 → G2 → G3<br/>직접 정책 약 1724 → 1776 → 1779 → 1792점"]
+        X1["G3 + 후보별 후속 플레이 시뮬레이션<br/>R100K 평가 약 1860점"]
+        X0 --> X1
+    end
+    subgraph V["VELA 계열 · 가치표와 기대값 탐색"]
+        V1["v1 → v2 · 손패 투영과 잔여 덱 보완<br/>약 1857 → 1864점"]
+        V2["v3 → v4 · 다섯 장 손패와 실행 구조<br/>약 1874 → 1875점"]
+        V3["v4.1 → v4.2 · 압축과 장기 지평<br/>약 1877 → 1878점 · 보고서 평가"]
+        V1 --> V2 --> V3
+    end
+    subgraph L["LYRA 계열 · 신경망 가치와 기대값 탐색"]
+        L0["Hinge 교사 → Actor → 초기 가치망 V₀"]
+        L1["가치 반복 → V₂₀ / π₂₀<br/>LYRA v1 · 보정 연구 평가 약 1879점"]
+        L2["후속 연구<br/>반복 자기 개선과 일반화"]
+        L0 --> L1 --> L2
+    end
+    X1 -. "평가 방식 전환" .-> V1
+    X0 -.-> N["이전 학습 정책 분기<br/>증류·행동 보정·직접 보상 학습"]
+    V3 -->|"VELA v4.2를 교사로 활용"| L0
+    V2 -.-> E["별도 분기 · 정확해와 행동 보증"]
+    V3 -.-> S["별도 분기 · 선택적 추가 탐색"]
+    L1 -.-> S
 ```
 
-원본 내보내기 스크립트는 비교용 T8 파일도 생성합니다. v4.1에 사용하는 파일은 T12입니다. 선형대수 환경에 따라 생성 바이트가 달라질 수 있으므로 재생성 후 가치·행동 일치와 정책 점수 검증이 필요합니다.
+### 1. X36 — 빠른 판단을 많은 후속 플레이로 보완
 
-[최종 연구 보고서](vela-v4.1/report-ko.md): 독립 90,000 paired 게임에서 후보 1876.5108점, FULL48 1878.0848점이며 원 연구의 비열등성 기준은 미충족입니다. 운영 H24+Four와 비교한 수치는 아닙니다.
+초기 휴리스틱은 JavaScript의 `chooseAction()`으로 구현됐으며, 이후 엔진 선택 기능을 넣으면서 `chooseActionFast()`로 분리·조정됐습니다. Fast는 이 구현을 가리키는 평가용 이름입니다.
 
-출처는 `adventure_vela/research/full_hand_dp/oneshot_full48_20260927/`(생성기), `adventure_vela/research/value_compression/full48_shared_structure_v1_20260927/`(압축·보고서), `adventure_vela/bak/legacy_20260926/S2_20260919_RDC/vendor/research/`(헤더)입니다. 소스 변경은 현재 폴더 구성에 맞춘 `common.py`의 입력 경로뿐입니다. 보고서의 외부 그림과 PC 전용 링크는 텍스트로 표시하며 원본 증거 자료는 원 연구 경로에 남아 있습니다.
+X36에서는 보드·카드·손패를 가중 평가하는 방식을 사용했고, G2의 종반 처리와 G3의 미래 카드 가치가 뒤따랐습니다. 서비스는 이 직접 정책을 시뮬레이션의 **후속 정책**으로 사용합니다. 첫 행동별로 끝까지 플레이한 결과를 비교하므로, 서비스의 추천 성능은 직접 정책 약 1792점과 구분해야 합니다.
 
-기준 모델의 압축 해제 후 SHA-256: `261ed5f731511119391278ae8800597ded67dbb882808e06ba2633ee58a292dc`.
+과거 신경망 연구에서도 직접 정책의 점수 개선은 확인됐습니다. 다만 이 개선이 시뮬레이션 기반 추천으로 이어지는지, 반복 호출 비용을 감당할 수 있는지는 따로 검증해야 했습니다.
 
----
+### 2. VELA v1–v3 — 더 충실한 가치 표현
 
-## VELA v1~v4 — 이전 버전 생성 과정
+VELA는 미리 계산한 상태 가치를 조회하고, 행동 결과의 확률에 따라 기대값을 계산합니다. v2에서는 잔여 덱의 장기 영향, v3에서는 다섯 장 손패의 상호작용을 더 충실하게 다뤘습니다. 각각의 대응 평가에서 개선이 확인됐습니다. v3의 온라인 탐색은 1-step으로 줄었습니다. 이 구간에서는 탐색 깊이보다 가치 표현의 변화가 두드러집니다.
 
-VELA-v4 모델을 처음부터 만들 때는 **V1, V3, V4**의 생성기 파일을 사용합니다. V2 생성기는 사용하지 않습니다.
+### 3. VELA v4–v4.2 — 큰 가치표를 실행 가능한 모델로
 
-## 필요한 폴더
+손패와 지평을 늘리면 가치표의 크기도 커집니다. v4는 보존된 H24 체크포인트와 시간 보정으로 실행 구조를 만들었고, v4.1은 FULL48을 공유 구조로 압축했습니다. v4.2는 horizon 100의 가치를 Hinge 학습으로 압축했습니다. 모델 크기와 판단 시간을 줄이면서 가치를 얼마나 보존하는지가 이 구간의 주요 과제였습니다. 원본 정책 대비 점수 개선과 서비스 사용 가능성은 각각 평가했습니다.
 
-| 폴더 | 역할 |
-|---|---|
-| `vela-v1/research/` | DP4 계산으로 `four-projected-24.bin` 생성 |
-| `vela-v3/research/` | DP5 계산 및 H24 체크포인트 export |
-| `vela-v4/research/` | H24 체크포인트를 `h24.raw`로 변환 |
+### 4. LYRA v1 — 가치표에서 학습 기반 가치로
 
-각 폴더의 헤더와 스크립트를 포함해 총 16개 파일을 함께 사용합니다.
+LYRA 연구는 모델이 플레이하며 모은 자료로 다음 모델을 학습하는 반복 자기 개선을 목표로 삼았습니다. 초기에는 VELA v4.2를 모방한 정책에 PPO를 적용했으나 원하는 개선을 얻지 못했습니다. 이후 신경망의 다음 상태 가치와 실제 덱 전이를 결합하는 가치 반복으로 전환했습니다. **LYRA v1은 V₂₀ 가치망과 π₂₀ 1-step 정책**입니다. 과거 QStar의 `v20`은 별도 연구 번호입니다.
 
-## 생성 순서
+### 5. 후속 연구 — 더 잘 맞추는 것과 더 잘 고르는 것의 차이
 
-1. **V1:** `four-project.cpp`를 빌드하고 지평 인자 `24`로 실행합니다. 출력은 `results/four-projected-24.bin`입니다.
-2. **V3:** `build-model.sh`로 DP5 테이블을 생성합니다. 스크립트의 H2 저장값 재시작 조건을 유지합니다.
-3. **V3:** `export-checkpoint.cpp`로 지평 `24`를 export합니다. 출력된 `*_part1.qdelta.gz`, `*_part2.qdelta.gz`를 순서대로 압축 해제·결합하여 `h24.qdelta`를 만듭니다.
-4. **V4:** `convert-checkpoint.cpp`로 만든 실행파일에 `h24.qdelta h24.raw`를 인자로 전달합니다.
+π₂₀ 이후에는 학습 손실이나 일부 가치 오차를 줄여도 게임 점수가 개선되지 않는 정체가 반복됐습니다. 초기에는 반복 갱신으로 얻는 개선분을 증류 과정의 근사 오차가 상쇄하는 것으로 보였습니다. 이후 행동 변화를 분해한 사후 진단에서는 잘못된 선택을 고치는 이득과 기존의 좋은 선택을 손상시키는 손실이 함께 생기는 양상이 관측됐습니다.
 
-최종적으로 필요한 가치테이블은 **`four-projected-24.bin`과 `h24.raw`**입니다. 두 파일을 기존 VELA-v4 런타임의 모델 경로에 배치합니다. 이 폴더에는 런타임 자체는 포함하지 않았습니다.
+추가 탐색은 개선을 만들지만, 그 이득을 저렴한 1-step 가치망으로 옮기는 일은 어렵습니다. 후속 연구에서는 표현·학습 분포·모델 규모가 반복 개선의 정체를 바꾸는지 비교합니다. [후속 연구 질문](topics/learning-and-plateaus.md#후속-연구-질문)에 설계와 확인 범위를 정리했습니다.
 
-## 실제 명령어 예시
+## 주요 지점의 연구 평가
 
-**Linux/WSL의 Bash**에서 저장소 루트(`research/`의 상위 디렉터리)를 기준으로 아래 명령을 실행합니다. 출력 디렉터리가 새 상태이고 아래 의존성이 설치되어 있다고 가정합니다. 전체 모델 계산을 수행하는 명령이며 짧은 동작 확인용이 아닙니다. `build-model.sh`에 전달하는 `4`는 스레드 수입니다.
+아래 수치는 고정된 정책을 평가한 기록입니다. 평가 시드 집합·표본 수·통계 보정 여부가 달라 서비스 선택창의 대표값(X36 약 1860, VELA 약 1877, LYRA 약 1879)과 차이가 있습니다. 개선량은 같은 조건에서 비교한 결과를 기준으로 읽어야 합니다.
 
-```bash
-(
-  set -euo pipefail
-  cd research
+| 지점 | 평균 점수 | 평가·해석 | 근거 |
+|---|---:|---|---|
+| 초기 X36 / G2 / G3 직접 정책 | 1776.42 / 1779.30 / 1791.76 | 각각 공통 조건 10M판. 서비스의 root 추천 점수와 다름 | [과거 평가](topics/value-and-planning.md#x36-계열의-두-층) |
+| G3 기반 R100K | 1860.11 | 보관 512판, 평균 CI [1842.29, 1877.94] | [과거 평가](topics/value-and-planning.md#x36-계열의-두-층) |
+| VELA v1 | 1857.11013 | 독립 100K판 | [보고서](vela-v1/report-ko.md) |
+| VELA v2 | 1863.96061 | 같은 평가 시드의 v1 대비 +6.20234, CI [4.85477, 7.54991] | [보고서](vela-v2/report-ko.md) |
+| VELA v3 | 1873.62695 | 같은 평가 시드의 v2 대비 +9.80262, CI [8.28441, 11.32083] | [보고서](vela-v3/report-ko.md) |
+| VELA v4 | 1874.83320 | 독립 50K판. v3보다 평균은 높지만 통계적 우위는 미확인 | [보고서](vela-v4/report-ko.md) |
+| VELA v4.1 / COMPACT48 | 1876.5108 | 독립 90K쌍. FULL48 대비 -1.5740, 원 연구 비열등성 기준 미충족 | [보고서](vela-v4.1/report-ko.md) |
+| VELA v4.2 / Hinge | 1878.13502 | 동결 100K판. FULL100 대비 +0.09784, CI [-1.04640, 1.24208]로 우위 미확인 | [생성·평가 요약](vela-v4.2/README.md#기존-평가-결과) |
+| LYRA v1 / π₂₀ | 약 1879 | 제어변량 보정 대표값. v4.2 대비 +1.30 / +1.49, 서로 다른 평가 시드 집합에서 각각 10K쌍 | [학습 흐름·평가](topics/learning-and-plateaus.md#lyra의-전환과-대표-성능) |
 
-  # V1: DP4, horizon 24
-  (
-    cd vela-v1
-    mkdir -p bin results
-    g++ -std=c++17 -O3 -ffp-contract=off -fopenmp \
-      research/four-project.cpp -o bin/four-project
-    ./bin/four-project 24
-  )
+CI는 추정 불확실성을 나타내는 신뢰구간입니다. [평가 기준](topics/evaluation.md)에서 원점수·보정 점수와 비교 방법을 설명합니다.
 
-  # V3: DP5 with the H2 restart, then export H24
-  (
-    cd vela-v3
-    bash research/build-model.sh 4
-    g++ -std=c++17 -O3 -ffp-contract=off \
-      research/export-checkpoint.cpp -o bin/export-checkpoint -lz
-    ./bin/export-checkpoint model/dp5 24 model/checkpoint
-    gzip -dc model/checkpoint_part1.qdelta.gz \
-      model/checkpoint_part2.qdelta.gz > model/h24.qdelta
-  )
+## 이름의 유래
 
-  # V4: convert H24 and collect both runtime tables
-  (
-    cd vela-v4
-    mkdir -p bin model
-    g++ -std=c++17 -O3 -ffp-contract=off \
-      research/convert-checkpoint.cpp -o bin/convert-checkpoint
-    ./bin/convert-checkpoint ../vela-v3/model/h24.qdelta model/h24.raw
-    cp ../vela-v1/results/four-projected-24.bin model/four-projected-24.bin
-  )
-)
-```
+VELA와 LYRA의 이름은 그리스 신화 속 이아손과 아르고 원정대의 황금양털 원정에서 영감을 받았습니다. 별자리 이름과 원정에 얽힌 상징을 통해 출항에서 여정, 성취로 이어지는 연구의 방향을 담았습니다.
 
-최종 두 파일은 `research/vela-v4/model/`에 모입니다. V3 중간 산출물은 `research/vela-v3/model/`에 남습니다. `build-model.sh`는 비어 있지 않은 `model/dp5/` 덮어쓰기를 거부하며, 임의의 중단 지점에서 복구하는 명령은 아닙니다.
+**VELA**는 옛 아르고호자리의 돛 부분을 이어받은 돛자리에서 따왔습니다. 미지의 세계를 향해 돛을 올리는 모습은 새로운 가능성을 탐색하고 해결책을 찾아가는 태도를 상징합니다. 이 명명 체계에서 VELA는 더 나은 판단 방법을 찾아 나서는 출항에 해당합니다.
 
-## 환경 및 확인 범위
+**LYRA**는 원정대원 오르페우스의 리라와 연결되는 거문고자리에서 따왔습니다. 음악으로 원정대의 항해를 도운 오르페우스에게서 여정과 조화의 의미를 가져왔으며, 경험을 통해 판단을 다듬는 지속적인 개선을 상징합니다. 실제 연구도 VELA를 교사로 삼아 학습을 시작한 뒤, 모델이 수집한 경험과 새로 계산한 학습 정답으로 다음 모델을 개선하는 반복 자기 개선을 목표로 삼았습니다.
 
-C++17, OpenMP, Python 3, Bash, gzip이 필요합니다. V3 export는 POSIX mmap과 zlib를 사용하므로 Linux/WSL 환경을 기준으로 합니다.
+후속 이름 후보인 **ARIES**는 황금양털을 지닌 숫양과 연결되는 양자리에서 따왔습니다. 원정대가 찾아 나선 황금양털에서 성취의 의미를 가져왔습니다. 이 이름은 전역 최적성이 수학적으로 증명되었거나, 전역 최적해와의 오차가 매우 작음을 입증한 모델 또는 정책을 위해 남겨 둔 후보입니다.
 
-이번 정리에서는 빌드·재계산·실행을 하지 않았습니다. 기존 모델과 재생성 결과의 해시 일치는 별도 확인이 필요합니다.
+## 다음으로 읽기
+
+- **재현:** [전체 가이드](reproduction/README.ko.md), [VELA v4.2](vela-v4.2/README.md), [LYRA v1](lyra-v1/README.md).
+- **세부 연구:** [가치·탐색과 별도 분기](topics/value-and-planning.md), [학습 성과·정체·열린 질문](topics/learning-and-plateaus.md).
+- **공통 기준:** [환경·상태 공간·Oracle 실험](topics/environment.md), [상태·정책·평가와 용어](topics/evaluation.md), [출처·근거의 범위](topics/sources.md).

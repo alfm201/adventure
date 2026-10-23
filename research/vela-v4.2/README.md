@@ -1,6 +1,6 @@
 # VELA v4.2 — COMPACT100 Hinge
 
-배포 모델은 동결된 `hinge_k256_e1.bin`입니다. SHA-256은 `3b25cacd47d1de76ef0a6d6ba60d0cf3e4ce6fcc946c3bfa305cdd3a04a879e9`, 크기는 91,179,876 bytes(86.96 MiB)입니다. 정책은 `base`, `gamma=0`, `OPT=4228`, 2-step expectimax와 실제 잔여 덱, DeckPotential β=0.6입니다. H24/Four 보정을 추가하지 않습니다.
+배포 모델은 동결된 `hinge_k256_e1.bin`입니다. SHA-256은 `3b25cacd47d1de76ef0a6d6ba60d0cf3e4ce6fcc946c3bfa305cdd3a04a879e9`, 크기는 91,179,876 bytes(86.96 MiB)입니다. 정책은 `base`, `gamma=0`, `OPT=4228`, 2-step expectimax와 실제 잔여 덱, DeckPotential $`\beta=0.6`$입니다. H24/Four 보정을 추가하지 않습니다.
 
 이 패키지는 가치 모델 생성·압축·Hinge 학습에 필요한 코드, 실행 명령과 최종 결과 요약을 포함합니다. 최종 점수 예측기 학습 자료는 포함하지 않습니다. 배포 파일 설치와 WASM 빌드는 [실행 소스 안내](../../src/policies/vela/native/README.md)를 참고하세요.
 
@@ -27,7 +27,7 @@ g++ -std=c++17 -O3 -march=native -fopenmp -I research/vela-v4.2/include research
 ./research/vela-v4.2/bin/solve-hands.exe 5 100 research/vela-v4.2/full100/model/full100 6
 ```
 
-이는 전체 생성 명령입니다. cap5, r=0부터 100까지 생성하며 FULL48에서 재개하지 않습니다. tier 파일만 약 88 GiB가 필요하고 pair 투영·압축 중간 결과에 추가 공간이 필요합니다. 전체 생성은 이번 배포 준비에서 다시 실행하지 않았습니다. `ready.json`은 완료 레이어를 기록합니다. 일반 재실행은 출력을 덮어쓰므로 새 출력 폴더를 사용하세요.
+이는 전체 생성 명령입니다. cap5, $`r=0`$부터 100까지 생성하며 FULL48에서 재개하지 않습니다. tier 파일만 약 88 GiB가 필요하고 pair 투영·압축 중간 결과에 추가 공간이 필요합니다. 위 명령의 전체 재실행 검증은 수행하지 않았습니다. `ready.json`은 완료 레이어를 기록합니다. 일반 재실행은 출력을 덮어쓰므로 새 출력 폴더를 사용하세요.
 
 ## 선택된 Hinge 생성 경로
 
@@ -54,7 +54,7 @@ BLAS·컴파일러·부동소수점 차이로 재생성 결과가 달라질 수 
 
 ## 기존 평가 결과
 
-이번 패키징에서 게임 평가를 다시 실행하지 않았습니다.
+아래는 원 연구의 평가 결과이며, 이 소스 패키지로 새로 평가한 결과는 아닙니다.
 
 | 정책 | 게임 수 | 평균 점수 | 평균의 95% CI |
 |---|---:|---:|---|
@@ -70,10 +70,12 @@ v4.2와 v4.1은 독립 표본입니다. 기존 결과를 이용한 독립 두 �
 
 ## 원본 출처
 
-- `adventure_vela/research/full_hand_dp/oneshot_full100_20260928/`
-- `adventure_vela/research/value_compression/rethink100_20260929/`
-- `adventure_vela/research/value_compression/joint_search_v2_20260929/src/full100_reference.hpp`
-- `adventure_vela/bak/legacy_20260926/S2_20260919_RDC/vendor/research/`
-- `adventure_vela/research/web_integration/compact100_hinge_20261003/`
+다음 외부 보관 연구에서 소스를 가져왔습니다. 식별자는 원본 연구를 구분하기 위한 것이며 저장소 내부 경로가 아닙니다.
+
+- FULL100 생성: `oneshot_full100_20260928`
+- 가치 압축: `rethink100_20260929`
+- FULL100 참조 구현: `joint_search_v2_20260929`의 `full100_reference.hpp`
+- 이전 연구 의존 소스: `S2_20260919_RDC`
+- 웹 이식: `compact100_hinge_20261003`
 
 폴더 구조에 맞춘 include·입력 경로만 변경했습니다. 알고리즘·학습 하이퍼파라미터·seed는 유지합니다.

@@ -1,120 +1,107 @@
-# Model Reproduction Guide
+# Adventure Research Lineage
 
 English | [한국어](README.ko.md)
 
-## LYRA v1 — V₂₀ neural value model
+Adventure action recommendations evolved from X36 terminal rollouts to VELA value tables and LYRA neural values. This overview explains the reasons for each change, the reported performance, and the remaining research questions.
 
-The [LYRA package](lyra-v1/README.md) contains the V₂₀ training chain, board data, frozen checkpoint and browser FP32 conversion code. Training can start without LYRA checkpoints; the frozen VELA v4.2 teacher weights are a separate prerequisite. The application uses the π₂₀ 1-step policy.
-
-## VELA v4.2 — COMPACT100 Hinge
-
-The current model uses frozen Hinge epoch 1, horizon 100, 2-step expectimax and actual remaining deck with DeckPotential beta=0.6. The minimal FULL100 generator (one C++ file and three headers), compression/training dependencies, commands and final result summaries are in [the v4.2 package](vela-v4.2/README.md). The original FULL100 table is not needed at runtime. The separate Hinge score predictor is connected in the application runtime; predictor training data is not part of this value-model research package.
-
-## VELA v4.1 — COMPACT48
-
-| Directory | Purpose |
+| Read about | Guide |
 |---|---|
-| `vela-v4.1/full48/` | One-shot cap-5, horizon-48 table generator |
-| `vela-v4.1/include/` | Required generator headers |
-| `vela-v4.1/compression/src/` | Shared time/hand structure fitting and quantized export |
+| Generation, training and conversion | [Reproduction guide](reproduction/README.md) |
+| Finite-resource MDP, state space and oracle experiments | [Environment and computational cost — Korean](topics/environment.md) |
+| X36, value tables and planning | [Value representation and planning — Korean](topics/value-and-planning.md) |
+| Earlier neural branches and LYRA's plateau | [Learning and plateaus — Korean](topics/learning-and-plateaus.md) |
+| Scores, evidence and terminology | [Evaluation and shared criteria — Korean](topics/evaluation.md) |
+| Reports and shared-hub evidence | [Sources and scope — Korean](topics/sources.md) |
 
-The selected output is `vela-v4.1/compression/models/quant_q6_k64_t12.bin` (37.68 MiB). FULL48 tables are required for generation, not runtime. The WASM build guide is in [native](../src/policies/vela/native/README.md).
+## At a glance
 
-Run the following from the project root on Windows with MSYS2 UCRT64 g++, Python and NumPy. These commands perform full model generation; they were not rerun when packaging these sources. FULL48 tables alone occupy about 42.72 GiB, with additional space required for the final FP32 snapshot and compression intermediates.
+Solid arrows show development within a family and the labeled teacher relationship; dotted arrows mark changes of approach and related work. Scores are rounded from evaluations with different conditions. Checkpoint inheritance and performance gains require the evidence in each report.
 
-```powershell
-Push-Location research/vela-v4.1
-try {
-    New-Item -ItemType Directory -Force bin, compression/results | Out-Null
-    g++ -std=c++17 -O3 -march=native -fopenmp -I include full48/solve-hands-full48.cpp -o bin/solve-hands.exe
-    ./bin/solve-hands.exe 5 48 full48/model/full48 12
-    python compression/src/analyze_low.py
-    python compression/src/fit_shared.py 6
-    '[]' | Set-Content -Encoding ascii compression/results/models.json
-    python compression/src/export_quantized.py
-} finally {
-    Pop-Location
-}
+```mermaid
+flowchart TD
+    subgraph X["X36 family · fast policies and rollout evaluation"]
+        X0["Early heuristic (Fast) → X36 → G2 → G3<br/>Direct policy ≈1724 → 1776 → 1779 → 1792"]
+        X1["G3 + candidate-action terminal rollouts<br/>R100K evaluation ≈1860"]
+        X0 --> X1
+    end
+    subgraph V["VELA family · value tables and expectimax"]
+        V1["v1 → v2 · hand projection and remaining deck<br/>≈1857 → 1864"]
+        V2["v3 → v4 · five-card hands and execution structure<br/>≈1874 → 1875"]
+        V3["v4.1 → v4.2 · compression and longer horizon<br/>≈1877 → 1878 · report evaluations"]
+        V1 --> V2 --> V3
+    end
+    subgraph L["LYRA family · neural values and expectimax"]
+        L0["Hinge teacher → Actor → initial value network V₀"]
+        L1["Value iteration → V₂₀ / π₂₀<br/>LYRA v1 · adjusted research score ≈1879"]
+        L2["Follow-up research<br/>Iterative self-improvement and generalization"]
+        L0 --> L1 --> L2
+    end
+    X1 -. "Change of evaluation approach" .-> V1
+    X0 -.-> N["Earlier learned-policy branches<br/>Distillation, corrections and return-based learning"]
+    V3 -->|"VELA v4.2 as teacher"| L0
+    V2 -.-> E["Separate branch · exact solutions and action certification"]
+    V3 -.-> S["Separate branch · selective additional search"]
+    L1 -.-> S
 ```
 
-The original exporter also writes a T8 comparison candidate. The selected v4.1 file is T12. Linear algebra implementations can produce different bytes; regenerated models require value/action and policy-score validation.
+## The major transitions
 
-See the [final research report](vela-v4.1/report-ko.md). In 90,000 independent paired games, the candidate scored 1876.5108 versus FULL48's 1878.0848; the original noninferiority gate was not met. This comparison is against FULL48, not the deployed H24+Four model.
+### 1. X36: improve a fast policy with terminal rollouts
 
-Sources: `adventure_vela/research/full_hand_dp/oneshot_full48_20260927/` (generator), `adventure_vela/research/value_compression/full48_shared_structure_v1_20260927/` (compression/report), and `adventure_vela/bak/legacy_20260926/S2_20260919_RDC/vendor/research/` (headers). Only the input path in `common.py` was adjusted for this layout. Report figure embeds and machine-local links are represented as text; original evidence remains in the source research directory.
+The initial heuristic was implemented as `chooseAction()`. It was later split into `chooseActionFast()` and adjusted when the engine selector was introduced. Fast is the evaluation label for that implementation.
 
-Reference decoded model SHA-256: `261ed5f731511119391278ae8800597ded67dbb882808e06ba2633ee58a292dc`.
+X36 used a weighted board/card/hand scorer, followed by G2's revised late-game terms and G3's future-card term. The service uses the direct policy as a **continuation policy**: fix each candidate first action, simulate to termination, and compare final scores. Its recommendation score therefore differs from the ≈1792-point direct G3 score.
 
----
+Some earlier learned policies improved direct play. They still required separate tests of recommendation quality and the cost of running the model at every simulated decision.
 
-## VELA v1–v4 — Previous generation workflow
+### 2. VELA v1–v3: represent more of the state's value
 
-To generate the VELA-v4 models from scratch, use the generators from **V1, V3, and V4**. Do not use the V2 generator for this workflow.
+VELA moved to precomputed values and probability-weighted action outcomes. v2 strengthened remaining-deck effects; v3 directly represented five-card hand interactions. Both improved their paired baselines, even though v3 reduced online search to 1-step.
 
-## Required directories
+### 3. VELA v4–v4.2: make large value tables usable
 
-| Directory | Purpose |
-|---|---|
-| `vela-v1/research/` | Compute DP4 values and generate `four-projected-24.bin` |
-| `vela-v3/research/` | Compute DP5 values and export the H24 checkpoint |
-| `vela-v4/research/` | Convert the H24 checkpoint to `h24.raw` |
+Representing larger hands and longer horizons requires larger tables. v4 combined retained H24 values with a time correction; v4.1 compressed FULL48 with a shared structure; v4.2 compressed horizon-100 values using Hinge training. These changes addressed model size and decision latency while preserving useful values. Score improvements over the original policy and suitability for service use were evaluated separately.
 
-Use all 16 files across these directories, including the headers and scripts.
+### 4. LYRA v1: learn a value representation
 
-## Generation steps
+LYRA aimed to build an iterative self-improvement loop: collect games with a model, train its successor, and repeat. It began with VELA v4.2 imitation followed by PPO, which did not deliver the desired improvement. The research then moved to value iteration using neural child-state values and exact expectations over actual-deck transitions. **LYRA v1 is the V₂₀ value network with the π₂₀ 1-step policy.** The older QStar `v20` is a separate research version.
 
-1. **V1:** Compile `four-project.cpp` and run it with horizon argument `24`. The output is `results/four-projected-24.bin`.
-2. **V3:** Generate the DP5 tables with `build-model.sh`. Preserve the script's restart from the saved H2 values.
-3. **V3:** Use `export-checkpoint.cpp` to export horizon `24`. Decompress and concatenate the resulting `*_part1.qdelta.gz` and `*_part2.qdelta.gz`, in that order, to create `h24.qdelta`.
-4. **V4:** Run the executable compiled from `convert-checkpoint.cpp` with arguments `h24.qdelta h24.raw`.
+### 5. Follow-up: better prediction is not always better control
 
-The required final value tables are **`four-projected-24.bin` and `h24.raw`**. Place both files in the model location expected by the existing VELA-v4 runtime. The runtime itself is not included in this directory.
+After π₂₀, lower training loss or value error often failed to improve game score. Early analyses suggested that approximation error introduced during distillation was offsetting the gains from iterative updates. Later post-hoc analyses of changed actions found gains from correcting poor choices alongside losses from damaging previously good choices.
 
-## Command example
+Additional search delivers gains, but transferring them into an inexpensive 1-step value network remains difficult. Follow-up studies test whether representation, training distribution and model scale change the plateau under iterative updates. See [the learning discussion](topics/learning-and-plateaus.md#후속-연구-질문) for the designs and evidence limits.
 
-Run the following in **Linux/WSL Bash**, starting from the repository root (the parent of `research/`). This example assumes a fresh output directory and the dependencies listed below are installed. It performs the full model computation; it is not a quick smoke test. The `4` passed to `build-model.sh` selects four threads.
+## Representative research evaluations
 
-```bash
-(
-  set -euo pipefail
-  cd research
+These evaluations used fixed policies. Seed sets, sample sizes and statistical adjustments differ, so individual report means can differ from the service references (X36 ≈1860, VELA ≈1877, LYRA ≈1879). Read each improvement claim within its stated comparison.
 
-  # V1: DP4, horizon 24
-  (
-    cd vela-v1
-    mkdir -p bin results
-    g++ -std=c++17 -O3 -ffp-contract=off -fopenmp \
-      research/four-project.cpp -o bin/four-project
-    ./bin/four-project 24
-  )
+| Milestone | Mean score | Evaluation and interpretation | Evidence |
+|---|---:|---|---|
+| Early X36 / G2 / G3, direct | 1776.42 / 1779.30 / 1791.76 | 10M episodes each under common evaluation conditions; not root-engine scores | [Historical evaluation](topics/value-and-planning.md#x36-계열의-두-층) |
+| G3-based R100K | 1860.11 | Archived 512 episodes; mean CI [1842.29, 1877.94] | [Historical evaluation](topics/value-and-planning.md#x36-계열의-두-층) |
+| VELA v1 | 1857.11013 | Independent 100K episodes | [Report](vela-v1/report-ko.md) |
+| VELA v2 | 1863.96061 | Paired v1 delta +6.20234, CI [4.85477, 7.54991] | [Report](vela-v2/report-ko.md) |
+| VELA v3 | 1873.62695 | Paired v2 delta +9.80262, CI [8.28441, 11.32083] | [Report](vela-v3/report-ko.md) |
+| VELA v4 | 1874.83320 | Independent 50K; a higher point estimate does not establish superiority to v3 | [Report](vela-v4/report-ko.md) |
+| VELA v4.1 / COMPACT48 | 1876.5108 | Independent 90K pairs; FULL48 delta -1.5740; original noninferiority gate not met | [Report](vela-v4.1/report-ko.md) |
+| VELA v4.2 / Hinge | 1878.13502 | Frozen 100K; FULL100 delta +0.09784, CI [-1.04640, 1.24208]; superiority not established | [Generation and evaluation](vela-v4.2/README.md#기존-평가-결과) |
+| LYRA v1 / π₂₀ | ≈1879 | Control-variate-adjusted reference; v4.2 deltas +1.30 / +1.49 in separate sets of 10K episode pairs | [Learning and evaluation](topics/learning-and-plateaus.md#lyra의-전환과-대표-성능) |
 
-  # V3: DP5 with the H2 restart, then export H24
-  (
-    cd vela-v3
-    bash research/build-model.sh 4
-    g++ -std=c++17 -O3 -ffp-contract=off \
-      research/export-checkpoint.cpp -o bin/export-checkpoint -lz
-    ./bin/export-checkpoint model/dp5 24 model/checkpoint
-    gzip -dc model/checkpoint_part1.qdelta.gz \
-      model/checkpoint_part2.qdelta.gz > model/h24.qdelta
-  )
+CI denotes a confidence interval. The [evaluation guide](topics/evaluation.md) explains raw and adjusted scores and how the comparisons were made.
 
-  # V4: convert H24 and collect both runtime tables
-  (
-    cd vela-v4
-    mkdir -p bin model
-    g++ -std=c++17 -O3 -ffp-contract=off \
-      research/convert-checkpoint.cpp -o bin/convert-checkpoint
-    ./bin/convert-checkpoint ../vela-v3/model/h24.qdelta model/h24.raw
-    cp ../vela-v1/results/four-projected-24.bin model/four-projected-24.bin
-  )
-)
-```
+## Naming
 
-Both final files will be in `research/vela-v4/model/`. V3 intermediates remain in `research/vela-v3/model/`. `build-model.sh` refuses to overwrite a non-empty `model/dp5/` directory; it is not a general interrupted-run recovery command.
+VELA and LYRA take their names from the story of Jason and the Argonauts' quest for the Golden Fleece in Greek mythology. The constellation names and their connections to the expedition give the research a shared narrative: departure, journey and achievement.
 
-## Environment and verification status
+**VELA** comes from the Sails, one of the constellations formed from the former Argo Navis constellation. Raising the sails for an unfamiliar voyage symbolizes exploring possibilities and seeking solutions. Within this naming scheme, VELA marks the departure: setting out to find better ways to make decisions.
 
-C++17, OpenMP, Python 3, Bash, and gzip are required. The V3 exporter uses POSIX mmap and zlib, so this workflow targets Linux/WSL.
+**LYRA** comes from the constellation associated with the lyre of Orpheus, a member of the Argonauts whose music helped the expedition on its voyage. It symbolizes the journey and harmony, with an emphasis on refining decisions through experience. The research began with VELA as a teacher, then pursued iterative self-improvement: using experience collected by a model and newly computed training targets to improve its successor.
 
-No compilation, model recomputation, or execution was performed while assembling this package. Hash equality between regenerated and existing models still requires separate verification.
+**ARIES**, a candidate name for a future model, comes from the constellation associated with the ram that bore the Golden Fleece. The expedition's pursuit of the fleece gives the name its meaning of achievement. It is reserved for a model or policy with mathematically proven global optimality, or a demonstrated very small error relative to the global optimum.
+
+## Continue reading
+
+- **Reproduce:** [overview](reproduction/README.md), [VELA v4.2](vela-v4.2/README.md), [LYRA v1](lyra-v1/README.md).
+- **Research detail:** [values and search](topics/value-and-planning.md), [learning and plateaus](topics/learning-and-plateaus.md).
+- **Shared foundations:** [environment, state space and oracle experiments — Korean](topics/environment.md), [state definitions, policies and evaluation criteria](topics/evaluation.md), [sources and evidence limits](topics/sources.md).
