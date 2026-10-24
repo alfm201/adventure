@@ -34,10 +34,32 @@ export function createRunChart(run) {
     gradient.append(svgNode("stop", { offset: "0%", "stop-color": color, "stop-opacity": .22 }), svgNode("stop", { offset: "100%", "stop-color": color, "stop-opacity": 0 })); defs.append(gradient);
   }
   chart.append(defs); node.append(chart);
+  const gapSteps = [...new Set(run.rows.filter(r => r.action.kind === "gap").map(r => r.step))].sort((a, b) => a - b);
+  const gapLabels = gapSteps.length ? el("div", "run-gap-labels") : null;
+  if (gapLabels) { gapLabels.setAttribute("role", "note"); gapLabels.setAttribute("aria-label", t("기록 공백")); chart.before(gapLabels); }
   const values = [...points.map(p => p.value), run.finalScore], low = Math.min(...values), high = Math.max(...values);
   const span = Math.max(100, high - low), min = Math.floor((low - span * .16) / 25) * 25;
   const max = Math.ceil((high + span * .16) / 25) * 25;
   const maxStep = Math.max(1, run.actions), x = step => 58 + step / maxStep * 464;
+  let gapWidth = -1, gapObserver;
+  const layoutGaps = () => {
+    if (!gapLabels || !gapLabels.clientWidth || gapLabels.clientWidth === gapWidth) return;
+    gapWidth = gapLabels.clientWidth;
+    const sample = el("span", "run-gap-label", t("기록 공백")); gapLabels.replaceChildren(sample);
+    const labelWidth = sample.getBoundingClientRect().width, half = labelWidth / 2;
+    const clamp = center => Math.max(half, Math.min(gapWidth - half, center));
+    const groups = [];
+    for (const step of gapSteps) {
+      const position = x(step) / 540 * gapWidth, previous = groups.at(-1);
+      if (previous && clamp(position) - previous.center < labelWidth + 8) {
+        previous.center = clamp((previous.first + position) / 2);
+      } else groups.push({ first: position, center: clamp(position) });
+    }
+    gapLabels.replaceChildren(...groups.map(group => {
+      const label = el("span", "run-gap-label", t("기록 공백"));
+      label.style.left = `${group.center}px`; label.setAttribute("aria-hidden", "true"); return label;
+    }));
+  };
   const y = value => 187 - (value - min) / (max - min) * 161;
   for (let i = 0; i <= 2; i++) {
     const value = Math.round(min + (max - min) * i / 2);
@@ -61,7 +83,7 @@ export function createRunChart(run) {
   }
   const switches = points.filter((p, i) => i && p.modelKey !== points[i - 1].modelKey);
   for (const p of switches) chart.append(svgNode("line", { x1: x(p.step), x2: x(p.step), y1: 22, y2: 187, class: "run-switch" }));
-  for (const row of run.rows.filter(r => r.action.kind === "gap")) chart.append(svgNode("rect", { x: x(row.step) - 3, y: 26, width: 6, height: 161, fill: "#b59b68", opacity: .15 }));
+  for (const row of run.rows.filter(r => r.action.kind === "gap")) chart.append(svgNode("rect", { x: x(row.step) - 3, y: 26, width: 6, height: 161, fill: "#b59b68", opacity: .15, class: "run-gap-marker" }));
   chart.append(svgNode("line", { x1: 58, x2: 522, y1: y(run.finalScore), y2: y(run.finalScore), class: "run-final" }),
     svgNode("circle", { cx: x(run.actions), cy: y(run.finalScore), r: 3, fill: "#748b7e" }));
   const finalTick = svgNode("g", { class: "run-final-tick", "aria-label": t("실제 최종 점수") + ' ' + fmt(run.finalScore) });
@@ -149,9 +171,16 @@ export function createRunChart(run) {
   const outside = event => { if (!chart.contains(event.target) && !extrema.contains(event.target)) hide(); };
   document.addEventListener("pointerdown", outside);
   return { node, hide,
-    attach: modal => modal.append(tooltip),
+    attach: modal => {
+      modal.append(tooltip);
+      if (gapLabels) {
+        layoutGaps();
+        if (typeof ResizeObserver === "function") { gapObserver = new ResizeObserver(layoutGaps); gapObserver.observe(gapLabels); }
+        else addEventListener("resize", layoutGaps);
+      }
+    },
     reveal: progress => revealRect.setAttribute("width", progress * 464),
     setBusy(value) { busy = value; chart.setAttribute("aria-disabled", String(value)); chart.setAttribute("tabindex", value ? "-1" : "0"); select.disabled = value; buttons.forEach(b => b.disabled = value); if (value) hide(); },
-    dispose() { tooltip.remove(); document.removeEventListener("pointerdown", outside); },
+    dispose() { gapObserver?.disconnect(); removeEventListener("resize", layoutGaps); tooltip.remove(); document.removeEventListener("pointerdown", outside); },
   };
 }
