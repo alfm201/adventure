@@ -48,9 +48,11 @@ Open **Help** in the app for controls and keyboard shortcuts. If something goes 
 
 ## Model research and builds
 
-The [LYRA reproduction guide](../../research/lyra-v1/README.md) includes the code and instructions for V₂₀ training and conversion to the browser's FP32 model format. The app uses the π₂₀ 1-step policy.
+The [research overview](../../research/README.md) traces X36 → VELA → LYRA, with the main transitions and evaluation results. [Environment and computational cost](../../research/topics/environment.md) covers the finite-resource MDP formulation, state space, search branching and Oracle experiments (in Korean).
 
-For VELA v4.2 FULL100 generation, Hinge training and a summary of the results, see the [research guide](../../research/vela-v4.2/README.md). WASM build instructions are in the [build guide](../../src/policies/vela/native/README.md). The original FULL100 table is not required to run the app. These guides are in Korean.
+Start with the [reproduction guide](../../research/reproduction/README.md) for model generation, training and conversion. The [LYRA v1 guide](../../research/lyra-v1/README.md) includes the code and instructions for V₂₀ training and conversion to the browser's FP32 model format. The app uses the π₂₀ 1-step policy.
+
+For VELA v4.2 FULL100 generation, Hinge training and a summary of the results, see the [VELA v4.2 guide](../../research/vela-v4.2/README.md). WASM build instructions are in the [build guide](../../src/policies/vela/native/README.md). The original FULL100 table is not required to run the app. The model-specific and WASM build guides are in Korean.
 
 ## License
 
