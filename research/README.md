@@ -70,7 +70,7 @@ LYRA aimed to build an iterative self-improvement loop: collect games with a mod
 
 After π₂₀, lower training loss or value error often failed to improve game score. Early analyses suggested that approximation error introduced during distillation was offsetting the gains from iterative updates. Later post-hoc analyses of changed actions found gains from correcting poor choices alongside losses from damaging previously good choices.
 
-Additional search delivers gains, but transferring them into an inexpensive 1-step value network remains difficult. Follow-up studies test whether representation, training distribution and model scale change the plateau under iterative updates. See [the learning discussion](topics/learning-and-plateaus.md#후속-연구-질문) for the designs and evidence limits.
+Additional search delivers gains, but transferring them into an inexpensive 1-step value network remains difficult. Follow-up studies test whether representation, training distribution and model scale change the plateau under iterative updates. A 15.4M research model, iterated from V₀ with one fixed recipe, scored +0.64 points above π₂₀ in a sealed evaluation on new seeds (simultaneous CI [0.19, 1.08]); it is not deployed. See [the learning discussion](topics/learning-and-plateaus.md#후속-연구-질문) for the designs and evidence limits.
 
 ## Representative research evaluations
 
