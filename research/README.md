@@ -8,6 +8,7 @@ Adventure action recommendations evolved from X36 terminal rollouts to VELA valu
 |---|---|
 | Generation, training and conversion | [Reproduction guide](reproduction/README.md) |
 | Finite-resource MDP, state space and oracle experiments | [Environment and computational cost — Korean](topics/environment.md) |
+| Exact solutions under the real rules (Q\*, V\*, a\*) and search cost | [Exact solutions — Korean](topics/exact-solutions.md) |
 | X36, value tables and planning | [Value representation and planning — Korean](topics/value-and-planning.md) |
 | Earlier neural branches and LYRA's plateau | [Learning and plateaus — Korean](topics/learning-and-plateaus.md) |
 | Scores, evidence and terminology | [Evaluation and shared criteria — Korean](topics/evaluation.md) |

@@ -8,6 +8,7 @@ Adventure의 행동 추천은 X36의 후속 게임 시뮬레이션, VELA의 사�
 |---|---|
 | 모델 생성·학습·변환 | [재현 가이드](reproduction/README.ko.md) |
 | 유한 자원 MDP, 상태 공간과 Oracle 실험 | [환경과 계산량](topics/environment.md) |
+| 실제 규칙으로 끝까지 푼 정확해(Q\*·V\*·a\*)와 탐색량 | [실제 게임 정확해](topics/exact-solutions.md) |
 | X36의 형성, 가치표와 탐색의 발전 | [가치 표현과 탐색](topics/value-and-planning.md) |
 | 과거 신경망 연구부터 LYRA의 학습 정체까지 | [학습과 정체](topics/learning-and-plateaus.md) |
 | 점수·정확성·용어의 해석 | [평가와 공통 기준](topics/evaluation.md) |

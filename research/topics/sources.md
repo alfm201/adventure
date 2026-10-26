@@ -72,6 +72,7 @@ LYRA의 학습 단계는 [포함된 재현 코드](../lyra-v1/README.md)와 대�
 | E3 | Clairvoyant ceiling probe의 `README.md`, `RESULTS.md`, `limited_preview_probe.js`와 아래 결과 JSON | 행동별 미래 난수 공개 범위, 제한 미리보기·전체 미래 공개 점수와 해석 |
 | E4 | [VELA v1의 수학적 정의](../vela-v1/report-ko.md#3-문제의-수학적-정의), 일반굴리기 seed 연구의 `PROOF.md`, `DECK_DP.md`의 Bellman 잔차 분석 | 최종 점수 목적함수, 합법 정책에서 시작하는 하한 반복, 고정 정책의 잔차 항등식 |
 | E5 | 환경 구조 측정의 `README.md`(보드 전수 계산, v4.2 1만 판 드로우·재충전, 잠재량 감소량 2×2,000판), 손패×덱 랭크 연구의 `REPORT_KO.md`와 엇갈린 순서 TT 판정 `PROTOCOL.md`, 공통 허브 `ENV_STRUCTURE_20261026.md` | 잠재량의 행동별 감소량, 보드 동치·굴림 분기, 재충전 빈도, 손패×덱 정확 표현의 크기 |
+| E6 | 종반 정확해 연구(`l0_exact.cpp`, ENDGAME-1)의 상태별 결과, 정확 DP 최적화·근 행동 인증·FULL100 대 정확 DP 비교 연구의 `REPORT.md`와 결과 JSON, 공통 허브 `common/exact_oracle/README.md` | 정확해 카탈로그의 Q\*·V\*·a\*, 탐색량·메모리·시간, 풀리지 않은 범위 |
 
 E3의 수치는 `limited_preview_1000ep_seed1000_h1_w4096.json`, `limited_preview_1000ep_seed1000_h2_h3_h4_w4096.json`, `limited_preview_1000ep_seed1000_h5_w4096.json`, `oracle_1000ep_seed1000_w64.json`의 집계와 대조했습니다. 이 결과 파일은 외부 보관 자료이며 저장소에는 포함하지 않습니다.
 
