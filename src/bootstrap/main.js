@@ -100,6 +100,7 @@ const resize = () => {
 addEventListener("resize", resize);
 resize();
 addEventListener("pagehide", () => {
+  view.dispose();
   disposeStatistics(); statistics.dispose();
   voice.dispose();
   assist.dispose();

@@ -2,6 +2,7 @@ import { tiles } from "../../rules/index.js";
 import { stageNames } from "../../content/board-layout.js";
 import { cardLabels, cardIcons } from "../../content/cards.js";
 import { numberLocale, pageLanguage, translate, message, setLocalizedText } from "../../localization/index.js";
+import { InferenceIndicator } from "./inference-indicator.js";
 export const number = (n, digits = 1) =>
   Number.isFinite(n)
     ? n.toLocaleString(numberLocale(), { maximumFractionDigits: digits })
@@ -9,6 +10,7 @@ export const number = (n, digits = 1) =>
 export class GameView {
   constructor(assets) {
     this.assets = assets;
+    this.inferenceIndicator = new InferenceIndicator(document.querySelector('#score-forecast'));
     this.rows = [];
     this.hand = [];
     this.info = [];
@@ -49,6 +51,11 @@ export class GameView {
     }
   }
   render(session, result) {
+    this.inferenceIndicator.update({
+      running: session.canRecommend && result.status === 'running',
+      key: JSON.stringify([result.model || result.profile?.model, result.requestId, session.revision]),
+      startedAt: result.startedAt,
+    });
     // Keep prior values for display while assist is observing an action. The
     // coordinator/voice still receive only the actual current result.
     const stateKey = JSON.stringify(session.state);
@@ -238,5 +245,9 @@ export class GameView {
           ? vela ? `${result.modelName}${lyra ? ` · ${result.profile?.device === 'auto' ? '자동 · ' : ''}${result.profile?.engine.toUpperCase()}` : ''} · ${number(result.elapsedMs / 1000, 3)}초` : `${result.profile?.engine.toUpperCase()} · G3 · ${number(result.elapsedMs / 1000, 2)}초 · 실제 ${number(result.totalSamples, 0)}회${result.status === "running" ? " · 계산중" : ""}`
           : "",
     );
+  }
+  dispose() {
+    clearTimeout(this.detailTimer);
+    this.inferenceIndicator.dispose();
   }
 }

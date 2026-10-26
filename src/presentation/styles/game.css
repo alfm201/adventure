@@ -247,12 +247,47 @@ button:disabled {
     0 0 0 2px #ffedbf,
     inset 0 4px 0 5px #ffffff22;
 }
-.score-forecast { height: 35px; display: flex; align-items: center; gap: 4px; padding: 0 3px; border-bottom: 1px solid #e3ecee; color: #56686b; white-space: nowrap; }
+.score-forecast { position: relative; height: 35px; display: flex; align-items: center; gap: 4px; padding: 0 3px; border-bottom: 1px solid #e3ecee; color: #56686b; white-space: nowrap; }
 .score-forecast > span { font-size: 10px; margin-right: auto; }
 .score-forecast output { font-size: 14px; font-weight: 700; color: #243f43; font-variant-numeric: tabular-nums; }
 .score-forecast small { font-size: 10px; font-variant-numeric: tabular-nums; }
 .score-forecast small[data-direction="up"] { color: #377b72; }
 .score-forecast small[data-direction="down"] { color: #a36159; }
+.estimate-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 150ms ease-out, visibility 0s linear 150ms;
+}
+.estimate-progress.is-visible {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 150ms ease-in, visibility 0s;
+}
+.estimate-progress-segment {
+  display: block;
+  width: 44%;
+  height: 100%;
+  border-radius: 1px;
+  background: #268fe5;
+  animation: estimate-inference 1.25s cubic-bezier(.4, 0, .3, 1) infinite;
+  animation-play-state: paused;
+}
+.estimate-progress.is-visible .estimate-progress-segment { animation-play-state: running; }
+@keyframes estimate-inference {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(235%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .estimate-progress { transition: none; }
+  .estimate-progress-segment { animation: none; transform: translateX(64%); }
+}
 .dice-used {
   height: 26px;
   flex-shrink: 0;
