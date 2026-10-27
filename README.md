@@ -29,7 +29,7 @@ VELA는 처음에 약 **68MB**, LYRA는 약 **31MB**의 모델 패키지를 불�
 1. 프로젝트를 내려받아 압축을 풉니다.
 2. 사용할 모델의 파일을 아래 **GitHub Releases**에서 내려받아, **압축을 풀지 말고** 다음 경로에 넣으세요. X36 · G3만 사용한다면 이 단계는 건너뛰어도 됩니다.
    - **[VELA v4.2](https://github.com/alfm201/adventure/releases/tag/vela-v4.2):** `model.bin.gz` → `public/models/vela-v4.2/model.bin.gz`
-   - **[LYRA v1 · 연구용 pre-release](https://github.com/alfm201/adventure/releases/tag/lyra-v1):** `lyra-v1.bin.gz` → `public/models/lyra-v1/lyra-v1.bin.gz`
+   - **[LYRA v1](https://github.com/alfm201/adventure/releases/tag/lyra-v1):** `lyra-v1.bin.gz` → `public/models/lyra-v1/lyra-v1.bin.gz`
 3. 프로젝트 폴더에서 터미널을 열고 다음을 실행합니다.
 
    ```sh
@@ -39,6 +39,21 @@ VELA는 처음에 약 **68MB**, LYRA는 약 **31MB**의 모델 패키지를 불�
 4. 브라우저에서 **[http://127.0.0.1:4173/](http://127.0.0.1:4173/)**을 엽니다. `PORT` 환경 변수로 포트를 지정할 수도 있습니다.
 
 `npm start`로도 실행할 수 있습니다. 사용하는 동안 터미널을 켜 두고, 종료할 때는 `Ctrl+C`를 누르세요. `index.html`을 직접 더블클릭하는 `file://` 방식은 지원하지 않습니다.
+
+## 모델 다운로드·활용
+
+자체 VELA·LYRA 모델은 다른 서비스에서도 자유롭게 활용할 수 있습니다. 패키지에 포함된 외부 구성 요소의 이용·재배포 조건은 [라이선스 안내](LICENSING.md)를 확인하세요.
+
+모델 파일은 [GitHub Releases](https://github.com/alfm201/adventure/releases)에서도 계속 제공합니다. Cloudflare에서 받으려면 `https://adventure.alfm201.workers.dev`에 아래 경로로 `GET` 요청을 보내세요.
+
+| 모델 | Cloudflare 다운로드 경로 |
+| --- | --- |
+| VELA v4.2 | [/models/vela-v4.2/model.bin.gz](https://adventure.alfm201.workers.dev/models/vela-v4.2/model.bin.gz) |
+| LYRA v1 | [/models/lyra-v1/lyra-v1.bin.gz](https://adventure.alfm201.workers.dev/models/lyra-v1/lyra-v1.bin.gz) |
+
+LYRA 패키지 안의 `LICENSES.txt`에는 외부 런타임의 라이선스 고지가 들어 있습니다. 패키지를 재배포할 때도 이 파일을 유지해 주세요.
+
+단일 서비스에서 하루 수천 건 이상의 모델 다운로드 요청이 발생하는 경우, 모델 파일을 자체 호스팅으로 제공해 주시면 감사하겠습니다.
 
 ## 사용 도움말
 

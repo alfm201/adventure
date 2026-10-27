@@ -3,36 +3,42 @@
   "id": "lyra-v1",
   "format": "lyra-pack-gzip-v1",
   "file": "lyra-v1.bin.gz",
-  "bytes": 31029778,
-  "sha256": "274b82225574723b6236c9f87da653b22c2d5bb0318c00241c4e7af91055ddcd",
-  "decodedBytes": 66752274,
-  "decodedSha256": "810126819bf5aab6d522ea2f839b0cac97fa2237c473185667119c5e12fe4f19",
+  "bytes": 31036272,
+  "sha256": "2fc0788c2345c4dd0288237b3154f655220126391fa54f5853da8a0029bc3458",
+  "decodedBytes": 67093015,
+  "decodedSha256": "9c8f79635075c1ffab9af1415c1b00a6b2e1a99a35dd307ae4c5c7479aed76c1",
   "assetsSha256": "cfaad02340bd0fd7e936ec88178397a51216fbc32f097edb80ca656de118889a",
   "ortVersion": "1.30.0",
   "files": [
     {
+      "bytes": 19089549,
       "file": "lyra-v20-fp32.onnx",
       "offset": 0,
-      "bytes": 19089549,
       "sha256": "bbab87b3d9f11b2f04e3936c15b6085bb8129fd964486f3aa4da20b72250725f"
     },
     {
+      "bytes": 5110064,
       "file": "features.bin",
       "offset": 19089549,
-      "bytes": 5110064,
       "sha256": "c8b39ce537ac64d7f74848fb28579544e5b46bcd690eabc3553672cdd61950f6"
     },
     {
+      "bytes": 14239897,
       "file": "ort-wasm-simd-threaded.wasm",
       "offset": 24199613,
-      "bytes": 14239897,
       "sha256": "3398c10d07d229bd91b364548e130e0e51a8e5704b88c7c083ebbeb78842dee2"
     },
     {
+      "bytes": 28312028,
       "file": "ort-wasm-simd-threaded.jsep.wasm",
       "offset": 38439510,
-      "bytes": 28312028,
       "sha256": "3ad23231b5bd6d9dda55a7f84606315e0bf35b6750c28ee993c987c54cacab0f"
+    },
+    {
+      "file": "LICENSES.txt",
+      "offset": 66751538,
+      "bytes": 340608,
+      "sha256": "2d03a0f68a5bba6c57737bc88117068bb239a3338d2fa7d9a3fdf591438f0d4b"
     }
   ],
   "suggestedPath": "/models/lyra-v1/lyra-v1.bin.gz"

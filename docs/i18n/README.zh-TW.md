@@ -31,7 +31,7 @@
 1. 下載專案並解壓縮。
 2. 從下方的 **GitHub Releases** 下載要使用的模型，**不要解壓縮模型檔案**，直接放到指定路徑。若只使用 X36 · G3，可以略過此步驟。
    - **[VELA v4.2](https://github.com/alfm201/adventure/releases/tag/vela-v4.2)：** `model.bin.gz` → `public/models/vela-v4.2/model.bin.gz`
-   - **[LYRA v1 · 研究預覽版](https://github.com/alfm201/adventure/releases/tag/lyra-v1)：** `lyra-v1.bin.gz` → `public/models/lyra-v1/lyra-v1.bin.gz`
+   - **[LYRA v1](https://github.com/alfm201/adventure/releases/tag/lyra-v1)：** `lyra-v1.bin.gz` → `public/models/lyra-v1/lyra-v1.bin.gz`
 3. 在專案資料夾中開啟終端機，執行以下指令：
 
    ```sh
@@ -41,6 +41,21 @@
 4. 在瀏覽器中開啟 **[http://127.0.0.1:4173/](http://127.0.0.1:4173/)**。也可以透過 `PORT` 環境變數指定其他連接埠。
 
 也可以使用 `npm start` 啟動。使用期間請保持終端機開啟，結束時按 `Ctrl+C`。不支援連按兩下 `index.html`、透過 `file://` 直接開啟的方式。
+
+## 模型下載與使用
+
+本專案自有的 VELA、LYRA 模型可自由用於其他服務。模型套件內第三方元件的使用與再散布條件，請參閱[授權與使用許可說明](../../LICENSING.md)（英語）。
+
+模型檔案仍會透過 [GitHub Releases](https://github.com/alfm201/adventure/releases) 提供。如需從 Cloudflare 下載，請向 `https://adventure.alfm201.workers.dev` 的以下路徑傳送 `GET` 請求。
+
+| 模型 | Cloudflare 下載路徑 |
+| --- | --- |
+| VELA v4.2 | [/models/vela-v4.2/model.bin.gz](https://adventure.alfm201.workers.dev/models/vela-v4.2/model.bin.gz) |
+| LYRA v1 | [/models/lyra-v1/lyra-v1.bin.gz](https://adventure.alfm201.workers.dev/models/lyra-v1/lyra-v1.bin.gz) |
+
+LYRA 模型套件內的 `LICENSES.txt` 包含第三方執行階段的授權聲明。再散布套件時，請保留此檔案。
+
+如果單一服務每天產生數千次以上的模型下載請求，希望您能自行託管模型檔案並提供下載，感謝您的協助。
 
 ## 使用說明
 

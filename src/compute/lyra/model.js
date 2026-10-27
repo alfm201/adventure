@@ -7,7 +7,7 @@ export const ORT_URL = new URL('../../../public/runtime/onnxruntime-web/1.30.0/'
 export const PACKAGE_URL = 'https://adventure.alfm201.workers.dev/models/lyra-v1/lyra-v1.bin.gz';
 export const LOCAL_MODEL = isLocalModelSource(ASSET_URL);
 export const LOCAL_PACKAGE_URL = new URL('lyra-v1.bin.gz', ASSET_URL);
-export const PACKAGE_SHA256 = '274b82225574723b6236c9f87da653b22c2d5bb0318c00241c4e7af91055ddcd';
+export const PACKAGE_SHA256 = '2fc0788c2345c4dd0288237b3154f655220126391fa54f5853da8a0029bc3458';
 export const MANIFEST = Object.freeze({
   id: MODEL_ID, name: MODEL_NAME, version: '1', researchValue: 'V₂₀', researchPolicy: 'π₂₀', horizon: 1,
   precision: 'fp32', sourceSha256: 'b4edb84d4c64cd4b7d0d16bcc8db0eab6f521d5090b13426f797b50ac363d09a',

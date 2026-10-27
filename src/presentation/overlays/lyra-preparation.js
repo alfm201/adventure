@@ -14,7 +14,7 @@ export function showLyraPreparation(coordinator, { device, usage, initial, persi
   const resume = coordinator.suspend(), body = document.createElement('div');
   let busy = false;
   const node = dialog('LYRA 준비', body, { className: 'model-dialog lyra-preparation-dialog', parent, closeOnOutside: () => !busy });
-  const heading = node.querySelector('h2'), bytes = 31029778;
+  const heading = node.querySelector('h2'), bytes = 31036272;
   const memory = () => {
     const gpu = device === 'gpu' || device === 'auto' && coordinator.lyraGpuSupport.available;
     const budget = lyraMemory[gpu ? 'gpu' : 'cpu'][usage];

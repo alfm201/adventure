@@ -3,9 +3,9 @@
 - 화면 흐름은 모델 선택 → 실행 장치·사용량 선택 → 모델 준비(저장 선택·다운로드·완료) → 시작/적용이다. 준비 화면은 VELA와 공통 컴포넌트를 사용하며, 실행 설정의 `다음`에서는 모델을 다운로드하지 않는다. 이전 단계로 돌아가면 선택값을 유지한다.
 
 - 제품명 `LYRA v1`, 연구 기준 `V₂₀` 가치망 + `π₂₀` 1-step 정책.
-- 모델·특징·CPU/GPU WASM은 단일 `lyra-v1.bin.gz`(31,029,778 bytes)로 제공한다. 로컬 호스트에서는 프로젝트 파일을 읽고, 일반 호스팅에서는 Cloudflare에서 받는다. 메타데이터는 `public/models/lyra-v1/`, JavaScript는 `public/runtime/onnxruntime-web/1.30.0/`에 있다. 모델 학습·변환 코드와 설명은 `research/lyra-v1/`에 있다.
+- 모델·특징·CPU/GPU WASM·라이선스 고지는 단일 `lyra-v1.bin.gz`(31,036,272 bytes)로 제공한다. 로컬 호스트에서는 프로젝트 파일을 읽고, 일반 호스팅에서는 Cloudflare에서 받는다. 메타데이터는 `public/models/lyra-v1/`, JavaScript는 `public/runtime/onnxruntime-web/1.30.0/`에 있다. 모델 학습·변환 코드와 설명은 `research/lyra-v1/`에 있다.
 - `model.js`에 원본 체크포인트·ONNX·특징·메타데이터·패키지 SHA-256을 고정했다. 모델 로딩 시 패키지 전체와 내부 모델·특징·WASM 파일을 검증한다.
-- `package.js`는 다운로드 크기·SHA-256, 압축 해제 크기·해시, 내부 4개 파일을 검증한다. 브라우저 저장 선택 시 압축 패키지를 Cache Storage에 보관하며 저장 실패는 현재 접속의 사용을 막지 않는다. 패키지는 메모리에서도 재사용하므로 저장하지 않은 경우에도 같은 페이지의 엔진 전환에 추가 모델 요청이 없다.
+- `package.js`는 다운로드 크기·SHA-256, 압축 해제 크기·해시, 라이선스 고지를 포함한 내부 5개 파일을 검증한다. 브라우저 저장 선택 시 압축 패키지를 Cache Storage에 보관하며 저장 실패는 현재 접속의 사용을 막지 않는다. 패키지는 메모리에서도 재사용하므로 저장하지 않은 경우에도 같은 페이지의 엔진 전환에 추가 모델 요청이 없다.
 - ONNX Runtime Web 1.30.0의 CPU는 `ort.wasm.min.mjs`, GPU는 업로드된 JSEP WASM과 맞는 `ort.all.min.mjs`를 사용한다. `wasmBinary`로 검증된 바이트를 전달하며 별도 WASM 네트워크 요청은 하지 않는다. 이전 webgpu-only frontend는 asyncify 바이너리를 요구하므로 이 JSEP 패키지와 섞지 않는다.
 - VELA와 같은 로컬 호스트 판별을 사용한다. localhost·127.x·루프백에서는 `public/models/lyra-v1/lyra-v1.bin.gz`를 읽고, 일반 호스팅에서는 Cloudflare를 사용한다. 패키지는 Git 제외 대상이다. 임시 중계 경로와 Origin 헤더 설정은 제거했다.
 - 선택 장치: `auto`(기본), `cpu`, `gpu`. CPU는 WASM 1스레드이며 사이트의 공유 메모리 헤더를 변경하지 않는다. WebGPU는 하드웨어 어댑터만 허용한다.

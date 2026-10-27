@@ -27,7 +27,7 @@ export async function loadPackage({persist=cacheAllowed(),signal,onProgress=()=>
   const response=await fetch(new URL('download.json',ASSET_URL),{signal,cache:'no-cache'});
   if(!response.ok)throw Error('LYRA download metadata unavailable');
   const manifest=await response.json();
-  if(manifest.format!=='lyra-pack-gzip-v1'||manifest.sha256!==PACKAGE_SHA256||manifest.bytes!==31029778||manifest.assetsSha256!==MANIFEST.metadataSha256||manifest.decodedBytes!==66752274)
+  if(manifest.format!=='lyra-pack-gzip-v1'||manifest.sha256!==PACKAGE_SHA256||manifest.bytes!==31036272||manifest.assetsSha256!==MANIFEST.metadataSha256||manifest.decodedBytes!==67093015)
     throw Error('Invalid LYRA package manifest');
   let bytes=resident,cache,fromCache=false,cacheFailed=false,cacheSaved=false;
   if(persist){
@@ -77,7 +77,7 @@ export async function unpackPackage(bytes,manifest){
   const length=new DataView(decoded.buffer).getUint32(8,true);
   if(length>65536||12+length>decoded.length)throw Error('Invalid LYRA package header');
   const header=JSON.parse(new TextDecoder().decode(decoded.subarray(12,12+length)));
-  if(header.schemaVersion!==1||header.assetsSha256!==MANIFEST.metadataSha256||header.ortVersion!=='1.30.0'||header.files.length!==4)throw Error('Incompatible LYRA package');
+  if(header.schemaVersion!==1||header.assetsSha256!==MANIFEST.metadataSha256||header.ortVersion!=='1.30.0'||header.files.length!==5)throw Error('Incompatible LYRA package');
   const files={};let end=0;
   for(const file of header.files){
     const expected=manifest.files.find(entry=>entry.file===file.file);

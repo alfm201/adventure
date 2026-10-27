@@ -29,7 +29,7 @@ With **Node.js 22 or later**, no package installation or build is required.
 1. Download and extract the project.
 2. Download your chosen model from **GitHub Releases** and place it at the following path **without extracting it**. Skip this step if you only use X36 · G3.
    - **[VELA v4.2](https://github.com/alfm201/adventure/releases/tag/vela-v4.2):** `model.bin.gz` → `public/models/vela-v4.2/model.bin.gz`
-   - **[LYRA v1 · research pre-release](https://github.com/alfm201/adventure/releases/tag/lyra-v1):** `lyra-v1.bin.gz` → `public/models/lyra-v1/lyra-v1.bin.gz`
+   - **[LYRA v1](https://github.com/alfm201/adventure/releases/tag/lyra-v1):** `lyra-v1.bin.gz` → `public/models/lyra-v1/lyra-v1.bin.gz`
 3. Open a terminal in the project folder and run:
 
    ```sh
@@ -39,6 +39,21 @@ With **Node.js 22 or later**, no package installation or build is required.
 4. Open **[http://127.0.0.1:4173/](http://127.0.0.1:4173/)** in your browser. You can set a different port with the `PORT` environment variable.
 
 You can also use `npm start`. Keep the terminal open while using the app; press `Ctrl+C` to stop it. Opening `index.html` directly with `file://` is not supported.
+
+## Download and reuse models
+
+Our VELA and LYRA models may be freely used in other services. See [Licensing and permissions](../../LICENSING.md) for terms covering third-party components included in the packages.
+
+Model files remain available on [GitHub Releases](https://github.com/alfm201/adventure/releases). To download from Cloudflare, send a `GET` request to `https://adventure.alfm201.workers.dev` using one of these paths:
+
+| Model | Cloudflare download path |
+| --- | --- |
+| VELA v4.2 | [/models/vela-v4.2/model.bin.gz](https://adventure.alfm201.workers.dev/models/vela-v4.2/model.bin.gz) |
+| LYRA v1 | [/models/lyra-v1/lyra-v1.bin.gz](https://adventure.alfm201.workers.dev/models/lyra-v1/lyra-v1.bin.gz) |
+
+The LYRA package includes third-party runtime notices in `LICENSES.txt`. Keep this file when redistributing the package.
+
+If a single service generates several thousand or more model download requests per day, we would appreciate it if you hosted the model files yourself.
 
 ## Help
 

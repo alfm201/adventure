@@ -29,7 +29,7 @@
 1. プロジェクトをダウンロードして展開します。
 2. 使いたいモデルを以下の**GitHub Releases**からダウンロードし、**解凍せずに**指定の場所へ置きます。X36 · G3だけを使う場合、この手順は不要です。
    - **[VELA v4.2](https://github.com/alfm201/adventure/releases/tag/vela-v4.2)：** `model.bin.gz` → `public/models/vela-v4.2/model.bin.gz`
-   - **[LYRA v1 · 研究用プレリリース](https://github.com/alfm201/adventure/releases/tag/lyra-v1)：** `lyra-v1.bin.gz` → `public/models/lyra-v1/lyra-v1.bin.gz`
+   - **[LYRA v1](https://github.com/alfm201/adventure/releases/tag/lyra-v1)：** `lyra-v1.bin.gz` → `public/models/lyra-v1/lyra-v1.bin.gz`
 3. プロジェクトフォルダーでターミナルを開き、次のコマンドを実行します。
 
    ```sh
@@ -39,6 +39,21 @@
 4. ブラウザーで**[http://127.0.0.1:4173/](http://127.0.0.1:4173/)**を開きます。環境変数`PORT`でポート番号を変更することもできます。
 
 `npm start`でも起動できます。利用中はターミナルを開いたままにし、終了するときは`Ctrl+C`を押してください。`index.html`をダブルクリックして直接開く`file://`形式には対応していません。
+
+## モデルのダウンロード・利用
+
+独自のVELA・LYRAモデルは、他のサービスでも自由に利用できます。パッケージに含まれる外部コンポーネントの利用・再配布条件は、[ライセンスと利用許可](../../LICENSING.md)（英語）を確認してください。
+
+モデルファイルは[GitHub Releases](https://github.com/alfm201/adventure/releases)でも引き続き提供します。Cloudflareからダウンロードする場合は、`https://adventure.alfm201.workers.dev`に以下のパスで`GET`リクエストを送信してください。
+
+| モデル | Cloudflareのダウンロードパス |
+| --- | --- |
+| VELA v4.2 | [/models/vela-v4.2/model.bin.gz](https://adventure.alfm201.workers.dev/models/vela-v4.2/model.bin.gz) |
+| LYRA v1 | [/models/lyra-v1/lyra-v1.bin.gz](https://adventure.alfm201.workers.dev/models/lyra-v1/lyra-v1.bin.gz) |
+
+LYRAパッケージ内の`LICENSES.txt`には、外部ランタイムのライセンス告知が含まれます。再配布時もこのファイルを保持してください。
+
+単一のサービスから1日あたり数千件以上のモデルダウンロードリクエストが発生する場合は、モデルファイルをご自身のホスティング環境から配信していただけると助かります。
 
 ## 使い方・トラブル対応
 

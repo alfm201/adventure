@@ -4,7 +4,7 @@ import { ASSET_URL, MANIFEST, PACKAGE_SHA256 } from './model.js';
 import { hashBytes } from './package.js';
 
 export const SCORE_ID = 'lyra-v1-score-v1';
-export const SCORE_SHA256 = '68fbb7f3f212fa6a8908b9105b2ca914a11eb1bc0a426d7dfe8f53cf118c94e4';
+export const SCORE_SHA256 = '68284138211148822856667503e2ea4dae58c81b8ace884c676b9283606ab440';
 
 export function matchedPredictor(model, rules) {
   if (MANIFEST.horizon !== 1 || MANIFEST.precision !== 'fp32'
