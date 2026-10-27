@@ -59,7 +59,8 @@ TT의 제한된 생성 실험은 `TT_GLOBAL_PREFLIGHT_20260930.md`, 정확한 �
 | L3 | `S2G_PROTOCOL.md`, `COST_PROTOCOL.md`, `DIST_PROTOCOL.md` | 추가 탐색의 이득과 비용, π₂₀ 배포 정책과의 차이 |
 | L4 | `SCALE_PROTOCOL.md`의 M2 비교 기준 정정 | 고정 교사 학습에서 규모·학습 이력의 효과 |
 | L5 | `VMU_PROTOCOL.md` | 강한 정책의 가치 학습 파일럿과 한계 |
-| L6 | `SCALE_VI_PLAN.md`, `results/svi/` | 같은 처방으로 V₀부터 각자 반복한 규모 비교의 사전 선별·봉인 평가, 평가 대상 망을 운 측정기로 쓰는 추정기 |
+| L6 | `SCALE_VI_PLAN.md`, `results/svi/` | 같은 처방으로 V₀부터 각자 반복한 규모 비교의 사전 선별·봉인 평가, M의 V₄₀ 연장과 연장 봉인 평가, 평가 대상 망을 운 측정기로 쓰는 추정기 |
+| L7 | `ENDGAME_PROTOCOL.md`, `scripts/endgame_policy_check.py`, `results/endgame_policy_{pi20,M20}.json` | 종반 정확해 상태에서 π₂₀·M₂₀의 regret, 손패 수별 행동가치 상대 오차, 회수 가능 점수의 하한 |
 
 LYRA의 학습 단계는 [포함된 재현 코드](../lyra-v1/README.md)와 대조했습니다. 후속 연구는 인용한 프로토콜에서 보고한 범위까지만 설명합니다. 고정 교사 학습의 정체, 정책 평가 파일럿의 판정 기준 불합격, 독립 가치 반복의 결과는 서로 다른 결과로 구분했습니다.
 
