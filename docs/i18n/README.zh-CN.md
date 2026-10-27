@@ -65,9 +65,9 @@ LYRA 模型包内的 `LICENSES.txt` 包含第三方运行时的许可证声明�
 
 [研究概览](../../research/README.md)（英语）介绍 X36 → VELA → LYRA 的演进、主要转折与评测结果。[环境与计算量](../../research/topics/environment.md)（韩语）说明有限资源 MDP 的数学模型、状态空间、搜索分支数及 Oracle 实验。
 
-模型生成、训练与转换流程请从[复现指南](../../research/reproduction/README.md)（英语）开始。LYRA v1 的 V₂₀ 训练代码，以及转换为浏览器用 FP32 模型的代码和说明，见 [LYRA v1 指南](../../research/lyra-v1/README.md)。应用采用 π₂₀ 单步策略。
+模型生成、训练与转换流程请从[复现指南](../../research/reproduction/README.md)（英语）开始。LYRA v1 的 V₂₀ 训练代码，以及转换为浏览器用 FP32 模型的代码和说明，见 [复现指南的 LYRA v1 一节](../../research/reproduction/README.md#lyra-v1--v₂₀-neural-value-model)。应用采用 π₂₀ 单步策略。
 
-VELA v4.2 的 FULL100 生成、Hinge 训练代码及最终结果摘要，见[VELA v4.2 指南](../../research/vela-v4.2/README.md)；WASM 构建方法见[构建指南](../../src/policies/vela/native/README.md)。运行应用不需要 FULL100 原始表。各模型的详细指南与 WASM 构建指南均为韩语。
+VELA v4.2 的 FULL100 生成、Hinge 训练代码及最终结果摘要，见[复现指南的 VELA v4.2 一节](../../research/reproduction/README.md#vela-v42--compact100-hinge)；WASM 构建方法见[构建指南](../../src/policies/vela/native/README.md)。运行应用不需要 FULL100 原始表。各模型的详细指南与 WASM 构建指南均为韩语。
 
 ## 许可证
 

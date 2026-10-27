@@ -65,9 +65,9 @@ LYRAパッケージ内の`LICENSES.txt`には、外部ランタイムのライ�
 
 [研究概要](../../research/README.md)（英語）では、X36 → VELA → LYRAの系譜と主な転換点・評価結果をまとめています。[環境と計算量](../../research/topics/environment.md)（韓国語）では、有限資源MDPの数式、状態空間、探索の分岐数、Oracle実験を説明しています。
 
-モデルの生成・学習・変換は、[再現ガイド](../../research/reproduction/README.md)（英語）を参照してください。LYRA v1のV₂₀学習と、ブラウザー向けFP32モデルへの変換コード・手順は、[LYRA v1のガイド](../../research/lyra-v1/README.md)にあります。アプリではπ₂₀の1ステップ方策を使っています。
+モデルの生成・学習・変換は、[再現ガイド](../../research/reproduction/README.md)（英語）を参照してください。LYRA v1のV₂₀学習と、ブラウザー向けFP32モデルへの変換コード・手順は、[再現ガイドのLYRA v1の節](../../research/reproduction/README.md#lyra-v1--v₂₀-neural-value-model)にあります。アプリではπ₂₀の1ステップ方策を使っています。
 
-VELA v4.2のFULL100生成、Hinge学習のコードと結果の概要は[VELA v4.2のガイド](../../research/vela-v4.2/README.md)、WASMのビルド方法は[ビルド手順](../../src/policies/vela/native/README.md)を参照してください。アプリの実行にFULL100の元テーブルは必要ありません。モデル別のガイドとWASMのビルド手順は韓国語です。
+VELA v4.2のFULL100生成、Hinge学習のコードと結果の概要は[再現ガイドのVELA v4.2の節](../../research/reproduction/README.md#vela-v42--compact100-hinge)、WASMのビルド方法は[ビルド手順](../../src/policies/vela/native/README.md)を参照してください。アプリの実行にFULL100の元テーブルは必要ありません。モデル別のガイドとWASMのビルド手順は韓国語です。
 
 ## ライセンス
 

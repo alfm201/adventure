@@ -65,7 +65,7 @@ LYRA 패키지 안의 `LICENSES.txt`에는 외부 런타임의 라이선스 고�
 
 X36 → VELA → LYRA의 계보와 주요 전환·평가 결과는 [연구 개요](research/README.ko.md)에 정리했습니다. 유한 자원 MDP의 수식 분석, 상태 공간과 탐색 분기, Oracle 실험은 [환경과 계산량](research/topics/environment.md)에서 설명합니다.
 
-모델 생성·학습·변환 절차는 [재현 가이드](research/reproduction/README.ko.md)에서 시작합니다. 버전별 상세 설명은 [LYRA v1 학습·변환](research/lyra-v1/README.md), [VELA v4.2 생성·평가](research/vela-v4.2/README.md)를 참고하세요. VELA의 WASM 빌드는 [빌드 안내](src/policies/vela/native/README.md)에 있습니다. FULL100 원본 테이블은 앱 실행에 필요하지 않습니다.
+모델 생성·학습·변환 절차는 [재현 가이드](research/reproduction/README.ko.md)에서 시작합니다. 버전별 보고서는 [LYRA v2](research/lyra-v2/report-ko.md), [LYRA v1](research/lyra-v1/report-ko.md), [VELA v4.2](research/vela-v4.2/report-ko.md)를 참고하세요. VELA의 WASM 빌드는 [빌드 안내](src/policies/vela/native/README.md)에 있습니다. FULL100 원본 테이블은 앱 실행에 필요하지 않습니다.
 
 ## 라이선스
 

@@ -13,8 +13,9 @@
 | [VELA v3 보고서](../vela-v3/report-ko.md) | 다섯 장 직접 가치와 1-step 전환 |
 | [VELA v4 보고서](../vela-v4/report-ko.md) | H24 체크포인트·시간 보정·별도 정확해 연구 |
 | [VELA v4.1 보고서](../vela-v4.1/report-ko.md) | FULL48 압축·비열등성 판정과 한계 |
-| [VELA v4.2 생성·평가 요약](../vela-v4.2/README.md) | FULL100·Hinge·고정 평가와 모델 식별 |
-| [LYRA v1 학습·변환](../lyra-v1/README.md) | Hinge에서 V₂₀까지의 학습 경로 |
+| [VELA v4.2 보고서](../vela-v4.2/report-ko.md) | FULL100·Hinge·고정 평가와 모델 식별 |
+| [LYRA v1 보고서](../lyra-v1/report-ko.md) | Hinge에서 V₂₀까지의 학습 경로 |
+| [LYRA v2 보고서](../lyra-v2/report-ko.md) | V₀부터 고정 처방으로 반복한 M₄₀, 봉인·FP32 평가, 예측기 |
 | [전체 재현 가이드](../reproduction/README.ko.md) | 생성·학습·변환 명령 |
 
 서비스 선택창의 반올림 점수는 [모델 표시 설정](../../src/content/models.js)에 있습니다. 성능 비교에는 각 연구 보고서의 평가 조건과 결과를 사용합니다.
@@ -61,8 +62,9 @@ TT의 제한된 생성 실험은 `TT_GLOBAL_PREFLIGHT_20260930.md`, 정확한 �
 | L5 | `VMU_PROTOCOL.md` | 강한 정책의 가치 학습 파일럿과 한계 |
 | L6 | `SCALE_VI_PLAN.md`, `results/svi/` | 같은 처방으로 V₀부터 각자 반복한 규모 비교의 사전 선별·봉인 평가, M의 V₄₀ 연장과 연장 봉인 평가, 평가 대상 망을 운 측정기로 쓰는 추정기 |
 | L7 | `ENDGAME_PROTOCOL.md`, `scripts/endgame_policy_check.py`, `results/endgame_policy_{pi20,M20}.json` | 종반 정확해 상태에서 π₂₀·M₂₀의 regret, 손패 수별 행동가치 상대 오차, 회수 가능 점수의 하한 |
+| L8 | `SCALE_VI_PLAN.md`의 FP32 확인 평가·예측기 절, `scripts/svi_eval.py`, `scripts/score_ref.py`, `scripts/score_predictor.py`, `results/score_m40/` | LYRA v2의 FP32 확인 평가, 예상 최종 점수 예측기의 라벨·초기 상태 보정·정확도 |
 
-LYRA의 학습 단계는 [포함된 재현 코드](../lyra-v1/README.md)와 대조했습니다. 후속 연구는 인용한 프로토콜에서 보고한 범위까지만 설명합니다. 고정 교사 학습의 정체, 정책 평가 파일럿의 판정 기준 불합격, 독립 가치 반복의 결과는 서로 다른 결과로 구분했습니다.
+LYRA의 학습 단계는 [포함된 재현 코드](../reproduction/README.ko.md#lyra-v1--v₂₀-신경망-가치-모델)와 대조했습니다. 후속 연구는 인용한 프로토콜에서 보고한 범위까지만 설명합니다. 고정 교사 학습의 정체, 정책 평가 파일럿의 판정 기준 불합격, 독립 가치 반복의 결과는 서로 다른 결과로 구분했습니다.
 
 ## 환경 연구
 

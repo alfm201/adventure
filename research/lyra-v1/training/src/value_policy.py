@@ -9,7 +9,7 @@ from dk import Kernel, mix
 torch.backends.cuda.matmul.allow_tf32 = False; torch.backends.cudnn.allow_tf32 = False
 
 
-PREC = "fp32"   # module-level precision for ValueNet inference: fp32 | tf32 | bf16
+PREC = "fp32"   # module-level precision for ValueNet inference: fp32 | tf32 | bf16 | fp16 (LYRA v2)
 
 
 @torch.no_grad()
@@ -19,7 +19,7 @@ def value_of(V, K, board, raw, dev, bs=int(os.environ.get("VP_BS", 8192))):   # 
     torch.backends.cuda.matmul.allow_tf32 = PREC == "tf32"; torch.backends.cudnn.allow_tf32 = PREC == "tf32"
     D = raw_features(board, raw); T = tensors(D, dev); out = np.zeros(len(raw))
     for i in range(0, len(raw), bs):
-        j = torch.arange(i, min(i + bs, len(raw)), device=dev); out[i:i + bs] = V(*batch(T, j), prec="bf16" if PREC == "bf16" else "fp32").double().cpu().numpy()
+        j = torch.arange(i, min(i + bs, len(raw)), device=dev); out[i:i + bs] = V(*batch(T, j), prec=PREC if PREC in ("bf16", "fp16") else "fp32").double().cpu().numpy()
     return np.where(raw[:, 10] == 1, raw[:, 0], out)
 
 
@@ -40,9 +40,11 @@ def greedy(K, V, board, raw, dev):
     return act, vmax, (pi, cl, q)
 
 
-def load_value(path, board, dev, d=256, layers=6, heads=8):
-    m = ValueNet(board, d=d, layers=layers, heads=heads).to(dev)
-    sd = torch.load(path, map_location=dev, weights_only=False); m.load_state_dict(sd["model"] if "model" in sd else sd); m.eval(); return m
+def load_value(path, board, dev, heads=8):
+    """Width and depth are read from the checkpoint (LYRA v1: 256/6, LYRA v2: 384/8)."""
+    sd = torch.load(path, map_location=dev, weights_only=False); sd = sd["model"] if "model" in sd else sd
+    d = sd["vhead.weight"].shape[1]; layers = len({k.split(".")[2] for k in sd if k.startswith("enc.layers.")})
+    m = ValueNet(board, d=d, layers=layers, heads=heads).to(dev); m.load_state_dict(sd); m.eval(); return m
 
 
 @torch.no_grad()

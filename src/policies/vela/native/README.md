@@ -31,6 +31,6 @@ python scripts/vela/build.py
 
 ## 출처·검증
 
-연구 원본 `adventure_vela/research/value_compression/rethink100_20260929/src/runtime/`을 메모리 입력 및 WASM 환경에 맞춰 이식한 기존 검증 소스를 승격했습니다. 압축·planner의 산술은 변경하지 않았습니다. 가치 모델 생성 명령과 연구 결과 요약은 [연구 패키지](../../../../research/vela-v4.2/README.md)에 있습니다.
+연구 원본 `adventure_vela/research/value_compression/rethink100_20260929/src/runtime/`을 메모리 입력 및 WASM 환경에 맞춰 이식한 기존 검증 소스를 승격했습니다. 압축·planner의 산술은 변경하지 않았습니다. 가치 모델 생성 명령과 연구 결과 요약은 [연구 패키지](../../../../research/vela-v4.2/report-ko.md)에 있습니다.
 
 기존 native 대비 WASM 검증은 5,460상태에서 행동 불일치 0, 최대 Q 오차 0입니다. 승격한 실행 파일도 별도로 다시 검증합니다. 관측 WASM heap은 319,225,856 bytes이며 브라우저 전체 메모리나 모든 상태의 최대 사용량은 아닙니다.

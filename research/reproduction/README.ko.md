@@ -4,13 +4,124 @@
 
 버전별 폴더는 `research/` 아래에 있습니다. 별도 표시가 없으면 명령은 저장소 루트에서 실행합니다.
 
+각 모델이 무엇인지와 평가 결과는 모델 폴더의 보고서(`report-ko.md`)에 있고, 이 문서에는 다시 만드는 절차만 둡니다.
+
+## LYRA v2 — M₄₀ 신경망 가치 모델
+
+[LYRA v2 보고서](../lyra-v2/report-ko.md)의 M₄₀(15.4M, 384/8/8)을 다시 만드는 절차입니다. LYRA v1과 같은 교사·Actor·V₀ 자료를 쓰므로, 아래 LYRA v1 절의 환경과 교사 가중치를 먼저 준비합니다. FP16 혼합정밀도를 지원하는 NVIDIA GPU가 필요합니다.
+
+아래 명령은 **계획 출력만** 합니다.
+
+```sh
+python research/lyra-v2/training/run.py
+```
+
+실제 학습은 교사 파일 경로와 `--execute`를 지정합니다. LYRA v1 패키지의 교사 데이터·G1·DAgger·X2 Actor·V₀ 자료 단계를 먼저 실행하고(이미 있으면 건너뜀), 이어서 새 384/8/8 가치망의 V₀와 V₁–V₄₀을 만듭니다.
+
+```sh
+python research/lyra-v2/training/run.py --execute --teacher "D:/models/hinge_k256_e1.bin"
+```
+
+| 단계 | 설정 |
+|---|---|
+| V₀ | LYRA v1의 V₀ 학습 자료, 384/8/8, batch 2048, lr 1e-3, 2 epoch, seed 1, FP16 혼합정밀도 |
+| V₁–V₄₀ | self-play 2,000게임(seed `mix(1800000000 + 1000000*k + i)`, k = 0…39), 부모 150,000개, 행동당 자식 4개, V₀ 정답 혼합 없음, X2 상위 2개 backup, self-play·정답 계산 FP16. 직전 가중치에서 lr 3e-4, 2 epoch |
+
+최종 가중치는 `research/lyra-v2/training/runs/v40/model.pt`에 생성됩니다. 원본 연구는 반복 도중 개발 평가로 연장 여부를 정했지만, 이 절차는 선택된 V₄₀까지의 경로를 고정해 실행하며 평가는 포함하지 않습니다.
+
+브라우저용 FP32 변환은 다음과 같습니다. 포함된 고정 M₄₀을 변환하고 원본 해시를 확인합니다. 새로 학습한 가중치는 `--checkpoint`로 지정합니다.
+
+```sh
+python research/lyra-v2/export.py
+python research/lyra-v2/export.py --checkpoint research/lyra-v2/training/runs/v40/model.pt --out research/lyra-v2/output/retrained
+```
+
+GPU·CUDA·PyTorch·부동소수점 차이로 재학습 결과가 달라질 수 있습니다. 학습부터의 바이트 동일 재현이나 동일 점수를 보증하지 않으며, 전체 재학습 검증은 수행하지 않았습니다.
+
 ## LYRA v1 — V₂₀ 신경망 가치 모델
 
-[LYRA 학습·변환 자료](../lyra-v1/README.md)에는 V₂₀ 학습 코드, 보드 데이터, 고정 체크포인트와 브라우저용 FP32 변환 코드가 있습니다. 처음부터 학습할 때는 LYRA 체크포인트가 필요 없지만, 초기 교사인 VELA v4.2 가중치는 준비해야 합니다. 앱에서는 π₂₀ 1-step 정책을 사용합니다.
+[LYRA v1 보고서](../lyra-v1/report-ko.md)의 V₂₀을 다시 만드는 절차입니다. 기존 LYRA 체크포인트 없이 학습을 시작하거나, 포함된 고정 V₂₀ 체크포인트를 변환할 수 있습니다.
+
+### 체크포인트 없이 학습
+
+Windows, MSYS2 UCRT64 g++(C++20), NumPy와 CUDA 지원 PyTorch가 필요합니다. 원본 Actor 학습은 BF16, 가치망 학습은 FP32, 가치 반복의 self-play·정답 생성은 TF32를 사용하므로 BF16·TF32를 지원하는 NVIDIA GPU를 준비합니다. 원본 학습 코드는 데이터 전체를 GPU에 올리며, CPU 전용 학습 경로는 포함하지 않습니다. 데이터·특징 캐시·중간 체크포인트에 큰 저장 공간이 필요합니다.
+
+LYRA 가중치는 필요 없지만, **초기 교사인 VELA v4.2 Hinge 가중치는 필요합니다.** 배포된 `model.bin.gz`를 별도 작업 폴더에 압축 해제한 `hinge_k256_e1.bin`을 준비하세요. 압축 해제한 파일은 91,179,876 bytes이고 SHA-256은 `3b25cacd47d1de76ef0a6d6ba60d0cf3e4ce6fcc946c3bfa305cdd3a04a879e9`입니다. VELA도 직접 생성하려면 아래 VELA v4.2 절을 따릅니다.
+
+먼저 `C:/msys64/ucrt64/bin`을 PATH에 추가하고 교사 커널을 빌드합니다.
+
+```powershell
+g++ -std=c++20 -O3 -march=native -pthread -shared -static-libgcc -static-libstdc++ research/lyra-v1/training/kernel/dk.cpp -o research/lyra-v1/training/kernel/dk.dll
+```
+
+아래 명령은 **계획 출력만** 하며 데이터 생성이나 학습을 시작하지 않습니다.
+
+```sh
+python research/lyra-v1/training/run.py
+```
+
+실제 학습을 시작하려면 교사 파일의 실제 경로와 `--execute`를 지정합니다. 단계별 설정은 [LYRA v1 보고서](../lyra-v1/report-ko.md#2-학습-경로)에 있습니다.
+
+```sh
+python research/lyra-v1/training/run.py --execute --teacher "D:/models/hinge_k256_e1.bin"
+```
+
+데이터와 중간 가중치는 `training/data/`, `training/runs/`, 최종 가중치는 `training/runs/v20_value/model.pt`에 생성됩니다. 포함된 고정 `model.pt`는 학습 과정에서 읽거나 덮어쓰지 않습니다. 결과·캐시·중간 체크포인트는 같은 폴더의 임시 파일에 저장한 뒤 교체합니다. 재실행 시 NPZ·PyTorch 파일의 무결성과 teacher/DAgger 기록 크기를 확인해 완료된 단계만 건너뛰며, 유효한 `ckpt.pt`가 있을 때만 학습을 재개합니다. 손상된 데이터·캐시는 다시 만들고 손상된 체크포인트는 사용하지 않습니다. 학습을 일시 정지하려면 해당 `training/runs/<단계>/PAUSE` 파일을 만들면 됩니다. 데이터 생성 중 중단된 teacher/DAgger/V₀ 단계는 다시 생성하며, 가치 반복 정답은 저장 지점에서 재개합니다.
+
+학습 중 validation과 진행 로그는 유지하지만, 별도 성능 평가·후보 탐색·봉인 평가 실행기와 기존 실험 산출물은 포함하지 않습니다. 원본 연구의 V₂₀까지 선택된 학습 경로를 고정해 실행하며, 과거 평가에 따른 중단·재개 의사결정은 다시 수행하지 않습니다.
+
+### 브라우저용 모델 변환
+
+Python에 NumPy, PyTorch, ONNX가 설치된 상태에서 실행합니다. 기존 변환 버전은 NumPy 2.4.0, PyTorch 2.11.0, ONNX 1.23.2입니다.
+
+```sh
+python research/lyra-v1/export.py
+```
+
+위 명령은 포함된 고정 V₂₀을 변환하고 원본 해시도 확인합니다. 새로 학습한 가중치를 변환하려면 명시적으로 지정합니다.
+
+```sh
+python research/lyra-v1/export.py --checkpoint research/lyra-v1/training/runs/v20_value/model.pt --out research/lyra-v1/output/retrained
+```
+
+기본 생성 위치는 `research/lyra-v1/output/`이며 `--out 경로`로 바꿀 수 있습니다. 생성 파일은 `lyra-v20-fp32.onnx`, `features.bin`, `assets.json`입니다. `assets.json`은 생성 정보이며 기존 벤치마크의 부가 기록은 포함하지 않습니다.
+
+고정 체크포인트의 변환 결과는 현재 브라우저용 모델과 ONNX·특징 데이터 SHA-256 및 배열 정의·게임 규칙이 일치하는 것을 확인했습니다. 포함된 학습 파이프라인의 전체 재학습 검증은 수행하지 않았습니다. GPU·CUDA·PyTorch·부동소수점 연산 차이로 재학습 결과가 달라질 수 있으므로, 학습부터의 바이트 동일 재현이나 동일 점수를 보증하지 않습니다. 새 가중치 변환은 앱이나 배포 모델을 자동 교체하지 않습니다.
 
 ## VELA v4.2 — COMPACT100 Hinge
 
-VELA v4.2는 고정된 Hinge epoch 1, horizon 100, 2-step expectimax, 실제 잔여 덱과 DeckPotential $`\beta=0.6`$을 사용합니다. [v4.2 패키지](../vela-v4.2/README.md)에 FULL100 생성기(C++ 1개·헤더 3개), 압축·학습 의존 소스, 실행 명령과 최종 평가 요약이 있습니다. FULL100 원본은 앱 실행에 필요하지 않습니다. 앱의 Hinge 최종 점수 예측기는 별도로 학습한 모델입니다. 예측기 학습 자료는 이 가치 모델 패키지에 포함하지 않습니다.
+[VELA v4.2 보고서](../vela-v4.2/report-ko.md)의 동결 Hinge 모델을 다시 만드는 절차입니다. FULL100 원본은 앱 실행에 필요하지 않습니다. 앱의 Hinge 최종 점수 예측기는 별도로 학습한 모델이며, 예측기 학습 자료는 이 패키지에 포함하지 않습니다.
+
+### FULL100 생성
+
+Windows MSYS2 UCRT64 g++(C++17/OpenMP), Python 3 및 NumPy를 준비합니다.
+
+```powershell
+New-Item -ItemType Directory -Force research/vela-v4.2/bin | Out-Null
+g++ -std=c++17 -O3 -march=native -fopenmp -I research/vela-v4.2/include research/vela-v4.2/full100/solve-hands-full100.cpp -o research/vela-v4.2/bin/solve-hands.exe
+./research/vela-v4.2/bin/solve-hands.exe 5 100 research/vela-v4.2/full100/model/full100 6
+```
+
+이는 전체 생성 명령입니다. cap5, $`r=0`$부터 100까지 생성하며 FULL48에서 재개하지 않습니다. tier 파일만 약 88 GiB가 필요하고 pair 투영·압축 중간 결과에 추가 공간이 필요합니다. 위 명령의 전체 재실행 검증은 수행하지 않았습니다. `ready.json`은 완료 레이어를 기록합니다. 일반 재실행은 출력을 덮어쓰므로 새 출력 폴더를 사용하세요.
+
+### 선택된 Hinge 생성 경로
+
+아래는 고비용 연구 재현 명령입니다. 실행용 모델을 다운로드해서 사용하는 데 필요하지 않습니다. Windows에서 `C:/msys64/ucrt64/bin`을 PATH에 추가한 뒤 실행합니다.
+
+```powershell
+g++ -std=c++20 -O3 -ffp-contract=off research/vela-v4.2/compression/src/action_train/study.cpp -o research/vela-v4.2/compression/src/action_train/study.exe
+Copy-Item research/vela-v4.2/compression/src/action_train/study.exe research/vela-v4.2/compression/src/action_train/study_student.exe
+Push-Location research/vela-v4.2/compression
+try {
+    python -c "from build_models import *; fit(False, {'unified_k192_t24': (192,24), 'unified_k256_t16': (256,16)}, 'unified')"
+    python make_diagnostic_queries.py
+    python quant_balance.py unified_k256_t16
+    python collect_q.py
+    python refine_actions.py
+} finally { Pop-Location }
+```
+
+`make_diagnostic_queries.py`는 원본과 같은 고정 20,000개 가치 진단 표본만 생성합니다. 선택된 파일은 `models/hinge_k256_e1.bin`입니다. 생성 경로의 의미와 재생성 모델의 검증 조건은 [보고서](../vela-v4.2/report-ko.md#2-생성-경로)에 있습니다.
 
 ## VELA v4.1 — COMPACT48
 

@@ -110,10 +110,10 @@ class ValueNet(Actor):
         self.vhead = nn.Linear(self.head.in_features, 1); self.g = nn.Embedding(202, 1); nn.init.zeros_(self.g.weight)
 
     def forward(self, p, r, b, n, hc, dc, prec="fp32"):
-        """prec: fp32 | tf32 | bf16 (bf16 encoder; the output head and base always in fp32)."""
+        """prec: fp32 | tf32 | bf16 | fp16 (low-precision encoder; the output head and base always in fp32). fp16 is used by LYRA v2."""
         base = p.float() + self.g(r * 2 + b).squeeze(-1)
-        if prec == "bf16":
-            with torch.autocast("cuda", torch.bfloat16):
+        if prec in ("bf16", "fp16"):
+            with torch.autocast("cuda", torch.bfloat16 if prec == "bf16" else torch.float16):
                 x0 = self.encode(p, r, b, n, hc, dc)[:, 0]
             x0 = x0.float()
         else:

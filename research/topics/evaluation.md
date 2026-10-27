@@ -12,7 +12,7 @@
 - 반환 행동은 주사위와 **현재 입력 손패 슬롯**을 구분합니다. 카드 사용 뒤 슬롯이 이동할 수 있습니다.
 - 모델 이름과 함께 **가치 추정 방식·탐색 깊이·실제 덱 처리·보정 항목**을 적습니다. 같은 가중치를 사용해도 1-step과 2-step은 다른 정책입니다.
 
-배열·패키지의 입출력 형식과 horizon 제한은 실행기별 정의를 따릅니다. [VELA 실행 소스](../../src/policies/vela/native/README.md), [LYRA 학습·변환](../lyra-v1/README.md)을 참고하세요.
+배열·패키지의 입출력 형식과 horizon 제한은 실행기별 정의를 따릅니다. [VELA 실행 소스](../../src/policies/vela/native/README.md), [LYRA 재현 가이드](../reproduction/README.ko.md)를 참고하세요.
 
 ## 점수를 읽는 기준
 

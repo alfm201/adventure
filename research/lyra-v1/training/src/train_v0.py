@@ -1,4 +1,4 @@
-"""V0: fit ValueNet to exact V2 targets (V0_PROTOCOL.md). fp32, resume/PAUSE supported."""
+"""V0: fit ValueNet to exact V2 targets (V0_PROTOCOL.md). fp32 (LYRA v1) or --amp fp16 (LYRA v2), resume/PAUSE supported."""
 import argparse, json, math, os, sys, time, numpy as np, torch
 H = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, H); sys.path.insert(0, os.path.join(H, "..", "kernel"))
 sys.path.insert(0, os.path.join(H, ".."))
@@ -37,6 +37,7 @@ def main():
     ap.add_argument("--wd", type=float, default=0.01); ap.add_argument("--d", type=int, default=256); ap.add_argument("--layers", type=int, default=6); ap.add_argument("--heads", type=int, default=8)
     ap.add_argument("--seed", type=int, default=1); ap.add_argument("--data", default=os.path.join(ROOT, "data", "v0", "train.npz"))
     ap.add_argument("--out", required=True); ap.add_argument("--resume", action="store_true"); ap.add_argument("--init", default=None, help="start from these weights (skips g init)")
+    ap.add_argument("--amp", default="fp32", choices=["fp32", "fp16"], help="fp16: encoder autocast + GradScaler, head/base fp32 (LYRA v2)")
     a = ap.parse_args(); os.makedirs(a.out, exist_ok=True); torch.manual_seed(a.seed); dev = "cuda"; t0 = time.time()
     ckpt = os.path.join(a.out, "ckpt.pt"); pause = os.path.join(a.out, "PAUSE")
     if a.resume and os.path.exists(pause): os.remove(pause)
@@ -58,26 +59,32 @@ def main():
         if not a.init: model.g.weight[:, 0] = torch.where(c > 0, s / c.clamp_min(1), 0)
         del key, diff, s, c
     del allp; torch.cuda.empty_cache()
-    opt = torch.optim.AdamW(model.parameters(), lr=a.lr, weight_decay=a.wd)
+    opt = torch.optim.AdamW(model.parameters(), lr=a.lr, weight_decay=a.wd); scaler = torch.amp.GradScaler("cuda", enabled=a.amp == "fp16")
     steps = int(math.ceil(len(tr) / a.bs * a.epochs)); warm = min(1000, steps // 10)
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda s: min(1, (s + 1) / warm) * 0.5 * (1 + math.cos(math.pi * min(1, s / steps))))
     gen = torch.Generator(device=dev); gen.manual_seed(a.seed + 1); step = pos = 0; el0 = 0.0
     if a.resume:
         ck = torch.load(ckpt, map_location=dev, weights_only=False); model.load_state_dict(ck["model"]); opt.load_state_dict(ck["opt"]); sched.load_state_dict(ck["sched"])
         step, pos, el0 = ck["step"], ck["pos"], ck["elapsed"]; gen.set_state(ck["perm_gen_state"].cpu())
+        if "scaler" in ck: scaler.load_state_dict(ck["scaler"])
     pgs = gen.get_state().clone(); perm = tr[torch.randperm(len(tr), device=dev, generator=gen)]
     log = open(os.path.join(a.out, "log.jsonl"), "a" if a.resume else "w")
     print(f"rows train={len(tr)} val={len(va)} steps={steps} y_sd={T['y'][va].std().item():.2f}", flush=True)
 
     def save():
-        save_torch(ckpt, dict(model=model.state_dict(), opt=opt.state_dict(), sched=sched.state_dict(), step=step, pos=pos, perm_gen_state=pgs, elapsed=el0 + time.time() - t0, args=vars(a)))
+        save_torch(ckpt, dict(model=model.state_dict(), opt=opt.state_dict(), sched=sched.state_dict(), step=step, pos=pos, perm_gen_state=pgs, elapsed=el0 + time.time() - t0, args=vars(a), scaler=scaler.state_dict()))
 
     ev = max(1, steps // 10)
     while step < steps:
         if pos + a.bs > len(perm): pgs = gen.get_state().clone(); perm = tr[torch.randperm(len(tr), device=dev, generator=gen)]; pos = 0
         j = perm[pos:pos + a.bs]; pos += a.bs
-        loss = (((model(*batch(T, j)) - T["y"][j]) / 30) ** 2).mean()
-        opt.zero_grad(set_to_none=True); loss.backward(); torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0); opt.step(); sched.step(); step += 1
+        if a.amp == "fp16":
+            loss = (((model(*batch(T, j), prec="fp16") - T["y"][j]) / 30) ** 2).mean()
+            opt.zero_grad(set_to_none=True); scaler.scale(loss).backward(); scaler.unscale_(opt); torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0); scaler.step(opt); scaler.update()
+        else:
+            loss = (((model(*batch(T, j)) - T["y"][j]) / 30) ** 2).mean()
+            opt.zero_grad(set_to_none=True); loss.backward(); torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0); opt.step()
+        sched.step(); step += 1
         if step % ev == 0 or step == steps:
             pr = predict(model, T, va); err = (pr - T["y"][va]); m = dict(step=step, epoch=step * a.bs / len(tr), val_rmse=err.pow(2).mean().sqrt().item(), val_mae=err.abs().mean().item(), sec=el0 + time.time() - t0)
             log.write(json.dumps(m) + "\n"); log.flush(); print(m, flush=True); save()

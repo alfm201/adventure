@@ -34,8 +34,10 @@ flowchart TD
     subgraph L["LYRA family · neural values and expectimax"]
         L0["Hinge teacher → Actor → initial value network V₀"]
         L1["Value iteration → V₂₀ / π₂₀<br/>LYRA v1 · adjusted research score ≈1879"]
+        L3["Fixed recipe, 40 rounds from V₀ → M₄₀<br/>LYRA v2 · adjusted research score ≈1880"]
         L2["Follow-up research<br/>Iterative self-improvement and generalization"]
-        L0 --> L1 --> L2
+        L0 --> L1
+        L0 --> L3 --> L2
     end
     X1 -. "Change of evaluation approach" .-> V1
     X0 -.-> N["Earlier learned-policy branches<br/>Distillation, corrections and return-based learning"]
@@ -67,15 +69,19 @@ Representing larger hands and longer horizons requires larger tables. v4 combine
 
 LYRA aimed to build an iterative self-improvement loop: collect games with a model, train its successor, and repeat. It began with VELA v4.2 imitation followed by PPO, which did not deliver the desired improvement. The research then moved to value iteration using neural child-state values and exact expectations over actual-deck transitions. **LYRA v1 is the V₂₀ value network with the π₂₀ 1-step policy.** The older QStar `v20` is a separate research version.
 
-### 5. Follow-up: better prediction is not always better control
+### 5. LYRA v2: same policy, larger value network
+
+LYRA v2 uses the same 1-step policy with the 15.4M value network **M₄₀**. Instead of continuing from V₂₀, the larger network was trained from V₀ for 40 rounds with one fixed recipe. In a sealed evaluation on 10K new seed pairs it scored +1.00 points above π₂₀ (simultaneous CI [0.53, 1.46]), and +1.08 in a confirmation at deployment precision (FP32). It comes from a single training run, so the reading that scale raises the plateau remains a hypothesis. [LYRA v2 report (Korean)](lyra-v2/report-ko.md)
+
+### 6. Follow-up: better prediction is not always better control
 
 After π₂₀, lower training loss or value error often failed to improve game score. Early analyses suggested that approximation error introduced during distillation was offsetting the gains from iterative updates. Later post-hoc analyses of changed actions found gains from correcting poor choices alongside losses from damaging previously good choices.
 
-Additional search delivers gains, but transferring them into an inexpensive 1-step value network remains difficult. Follow-up studies test whether representation, training distribution and model scale change the plateau under iterative updates. A 15.4M research model, iterated from V₀ with one fixed recipe, scored +0.64 points above π₂₀ in a sealed evaluation on new seeds (simultaneous CI [0.19, 1.08]); it is not deployed. See [the learning discussion](topics/learning-and-plateaus.md#후속-연구-질문) for the designs and evidence limits.
+Additional search delivers gains, but transferring them into an inexpensive 1-step value network remains difficult. Follow-up studies test whether representation, training distribution and model scale change the plateau under iterative updates. The 15.4M model iterated from V₀ with one fixed recipe became LYRA v2. See [the learning discussion](topics/learning-and-plateaus.md#후속-연구-질문) for the designs and evidence limits.
 
 ## Representative research evaluations
 
-These evaluations used fixed policies. Seed sets, sample sizes and statistical adjustments differ, so individual report means can differ from the service references (X36 ≈1860, VELA ≈1877, LYRA ≈1879). Read each improvement claim within its stated comparison.
+These evaluations used fixed policies. Seed sets, sample sizes and statistical adjustments differ, so individual report means can differ from the service references (X36 ≈1860, VELA ≈1877, LYRA v1 ≈1879, LYRA v2 ≈1880). Read each improvement claim within its stated comparison.
 
 | Milestone | Mean score | Evaluation and interpretation | Evidence |
 |---|---:|---|---|
@@ -86,8 +92,9 @@ These evaluations used fixed policies. Seed sets, sample sizes and statistical a
 | VELA v3 | 1873.62695 | Paired v2 delta +9.80262, CI [8.28441, 11.32083] | [Report](vela-v3/report-ko.md) |
 | VELA v4 | 1874.83320 | Independent 50K; a higher point estimate does not establish superiority to v3 | [Report](vela-v4/report-ko.md) |
 | VELA v4.1 / COMPACT48 | 1876.5108 | Independent 90K pairs; FULL48 delta -1.5740; original noninferiority gate not met | [Report](vela-v4.1/report-ko.md) |
-| VELA v4.2 / Hinge | 1878.13502 | Frozen 100K; FULL100 delta +0.09784, CI [-1.04640, 1.24208]; superiority not established | [Generation and evaluation](vela-v4.2/README.md#기존-평가-결과) |
-| LYRA v1 / π₂₀ | ≈1879 | Control-variate-adjusted reference; v4.2 deltas +1.30 / +1.49 in separate sets of 10K episode pairs | [Learning and evaluation](topics/learning-and-plateaus.md#lyra의-전환과-대표-성능) |
+| VELA v4.2 / Hinge | 1878.13502 | Frozen 100K; FULL100 delta +0.09784, CI [-1.04640, 1.24208]; superiority not established | [Report](vela-v4.2/report-ko.md#3-평가-결과) |
+| LYRA v1 / π₂₀ | ≈1879 | Control-variate-adjusted reference; v4.2 deltas +1.30 / +1.49 in separate sets of 10K episode pairs | [Report](lyra-v1/report-ko.md) |
+| LYRA v2 / M₄₀ | ≈1880 | Control-variate-adjusted reference; sealed 10K new-seed pairs: +1.00 vs π₂₀, simultaneous CI [0.53, 1.46]; FP32 confirmation on 10K pairs: +1.08 | [Report](lyra-v2/report-ko.md) |
 
 CI denotes a confidence interval. The [evaluation guide](topics/evaluation.md) explains raw and adjusted scores and how the comparisons were made.
 
@@ -103,6 +110,6 @@ VELA and LYRA take their names from the story of Jason and the Argonauts' quest 
 
 ## Continue reading
 
-- **Reproduce:** [overview](reproduction/README.md), [VELA v4.2](vela-v4.2/README.md), [LYRA v1](lyra-v1/README.md).
+- **Reproduce:** [guide](reproduction/README.md). Model reports (Korean): [VELA v4.2](vela-v4.2/report-ko.md), [LYRA v1](lyra-v1/report-ko.md), [LYRA v2](lyra-v2/report-ko.md).
 - **Research detail:** [values and search](topics/value-and-planning.md), [learning and plateaus](topics/learning-and-plateaus.md).
 - **Shared foundations:** [environment, state space and oracle experiments — Korean](topics/environment.md), [state definitions, policies and evaluation criteria](topics/evaluation.md), [sources and evidence limits](topics/sources.md).
