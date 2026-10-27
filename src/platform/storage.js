@@ -6,6 +6,10 @@ import { CACHE_PREFIX } from '../speech/manifest.js';
 const voiceRoot = new URL('../../public/voice/', import.meta.url).href;
 const voiceEntry = url => url.startsWith(voiceRoot);
 const modelEntry = name => /^vela-[a-z0-9.-]+$/.test(name);
+const lyraName = url => {
+  const version = new URL(url).pathname.match(/\/lyra-(v\d+(?:\.\d+)*)\/__cache__\//)?.[1];
+  return version ? `LYRA ${version}` : 'LYRA';
+};
 async function responseSize(response) {
   if (!response) return 0;
   const length = response.headers.get('Content-Length');
@@ -43,7 +47,7 @@ export async function inspectBrowserStorage() {
           if (kind === 'images') { imageBytes += bytes; imageFiles++; continue; }
           const pack = kind === 'voice' ? new URL(request.url).pathname.split('/').pop().match(/^(ko|en|ja|zh)-(F|M)-/) : null;
           items.push({ kind, cache: name, url: request.url, bytes, files: 1,
-            name: kind === 'lyra' ? 'LYRA v1' : '음성 파일', language: pack?.[1], voice: pack?.[2] });
+            name: kind === 'lyra' ? lyraName(request.url) : '음성 파일', language: pack?.[1], voice: pack?.[2] });
         }
         if (imageFiles) items.push({ kind: 'images', cache: name, name: '게임 이미지', bytes: imageBytes, files: imageFiles });
       }

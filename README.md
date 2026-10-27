@@ -10,7 +10,7 @@
 
 | 모델 | 계산 방식 | 평균 기록 |
 | --- | --- | ---: |
-| **LYRA · v1 (연구용)** | CPU 또는 GPU에서 신경망과 1-step 탐색으로 행동 평가 | 연구 평가 약 1,879점 |
+| **LYRA · v2 (연구용)** | CPU 또는 GPU에서 신경망과 1-step 탐색으로 행동 평가 | 연구 평가 약 1,880점 |
 | **VELA · v4.2** | CPU로 다음 상황을 전개해 행동 평가 | 약 1,877점 |
 | **X36 · G3** | CPU 또는 GPU로 여러 번 시뮬레이션해 선택 비교 | 약 1,860점 |
 
@@ -18,9 +18,9 @@
 
 기본 선택은 VELA입니다. LYRA는 연구용 모델이며 실행 장치를 자동·CPU·GPU 중 선택할 수 있습니다. 자동은 사용 가능한 GPU를 우선 사용하고, 준비·추론에 실패하면 CPU로 전환합니다.
 
-VELA는 처음에 약 **68MB**, LYRA는 약 **31MB**의 모델 패키지를 불러옵니다. 웹사이트에서는 브라우저 저장에 동의하면 다음 접속부터 저장된 모델을 재사용합니다. 최신 모델 정보를 확인하면 호환되지 않는 이전 버전의 저장 데이터를 먼저 정리합니다. 로컬 실행에서는 프로젝트의 모델 파일을 사용하며 브라우저에 추가로 저장하지 않습니다. LYRA는 CPU/GPU를 전환해도 같은 패키지를 재사용합니다.
+VELA는 처음에 약 **68MB**, LYRA는 약 **68MB**의 모델 패키지를 불러옵니다. 웹사이트에서는 브라우저 저장에 동의하면 다음 접속부터 저장된 모델을 재사용합니다. VELA는 최신 모델 정보를 확인한 뒤 호환되지 않는 이전 모델을 정리하고, LYRA는 새 패키지를 검증·저장한 뒤 이전 패키지를 정리합니다. 로컬 실행에서는 프로젝트의 모델 파일을 사용하며 브라우저에 추가로 저장하지 않습니다. LYRA는 CPU/GPU를 전환해도 같은 패키지를 재사용합니다.
 
-행동별 평가값은 선택의 유리함을 나타냅니다. 예상 최종 점수는 선택한 모델의 추천을 계속 따를 때의 예측입니다. VELA v4.2와 LYRA v1은 각각의 정책에 맞춰 학습한 전용 예측기를 사용합니다. 게임이 끝나면 실제 점수를 표시합니다. 모델 선택을 취소하면 추천 없이도 사용할 수 있습니다.
+행동별 평가값은 선택의 유리함을 나타냅니다. 예상 최종 점수는 선택한 모델의 추천을 계속 따를 때의 예측입니다. VELA v4.2와 LYRA v2는 각각의 정책에 맞춰 학습한 전용 예측기를 사용합니다. 게임이 끝나면 실제 점수를 표시합니다. 모델 선택을 취소하면 추천 없이도 사용할 수 있습니다.
 
 ## 내 PC에서 실행
 
@@ -29,7 +29,7 @@ VELA는 처음에 약 **68MB**, LYRA는 약 **31MB**의 모델 패키지를 불�
 1. 프로젝트를 내려받아 압축을 풉니다.
 2. 사용할 모델의 파일을 아래 **GitHub Releases**에서 내려받아, **압축을 풀지 말고** 다음 경로에 넣으세요. X36 · G3만 사용한다면 이 단계는 건너뛰어도 됩니다.
    - **[VELA v4.2](https://github.com/alfm201/adventure/releases/tag/vela-v4.2):** `model.bin.gz` → `public/models/vela-v4.2/model.bin.gz`
-   - **[LYRA v1](https://github.com/alfm201/adventure/releases/tag/lyra-v1):** `lyra-v1.bin.gz` → `public/models/lyra-v1/lyra-v1.bin.gz`
+   - **[LYRA v2](https://github.com/alfm201/adventure/releases/tag/lyra-v2):** `lyra-v2.bin.gz` → `public/models/lyra-v2/lyra-v2.bin.gz`
 3. 프로젝트 폴더에서 터미널을 열고 다음을 실행합니다.
 
    ```sh
@@ -49,7 +49,7 @@ VELA는 처음에 약 **68MB**, LYRA는 약 **31MB**의 모델 패키지를 불�
 | 모델 | Cloudflare 다운로드 경로 |
 | --- | --- |
 | VELA v4.2 | [/models/vela-v4.2/model.bin.gz](https://adventure.alfm201.workers.dev/models/vela-v4.2/model.bin.gz) |
-| LYRA v1 | [/models/lyra-v1/lyra-v1.bin.gz](https://adventure.alfm201.workers.dev/models/lyra-v1/lyra-v1.bin.gz) |
+| LYRA v2 | [/models/lyra-v2/lyra-v2.bin.gz](https://adventure.alfm201.workers.dev/models/lyra-v2/lyra-v2.bin.gz) |
 
 LYRA 패키지 안의 `LICENSES.txt`에는 외부 런타임의 라이선스 고지가 들어 있습니다. 패키지를 재배포할 때도 이 파일을 유지해 주세요.
 

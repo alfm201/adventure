@@ -6,6 +6,7 @@ import { velaRequirements, probeVela } from "../compute/vela/support.js";
 import { compatibilityMessage } from "../content/compatibility.js";
 import { diagnostics } from "../platform/report.js";
 import { Forecast } from "./forecast.js";
+import { MODEL_ID as LYRA_MODEL_ID, MODEL_NAME as LYRA_MODEL_NAME } from "../compute/lyra/model.js";
 import { loadG3Predictor } from "../evaluation/g3-score.js";
 export class Coordinator extends EventTarget {
   constructor(session) {
@@ -142,7 +143,7 @@ export class Coordinator extends EventTarget {
     if (this.lyra?.ready && this.lyra.info.preference === options.device) {
       const info = await this.lyra.prepare({ ...options, deferUsage: true });
       if (options.signal?.aborted || epoch !== this.modelEpoch) throw new DOMException("Cancelled", "AbortError");
-      diagnostics.record('model.reuse', { id:'lyra-v1', device:options.device, usage:options.usage ?? 'medium' });
+      diagnostics.record('model.reuse', { id:LYRA_MODEL_ID, device:options.device, usage:options.usage ?? 'medium' });
       return info;
     }
     const backend = this.preparedLyra = new LyraBackend();
@@ -155,7 +156,7 @@ export class Coordinator extends EventTarget {
         this.supportChanged(); this.notice("GPU 계산을 중단하고 CPU로 전환했습니다.");
       }
     });
-    diagnostics.record("model.prepare", { id: "lyra-v1", device: options.device, usage: options.usage ?? 'medium' });
+    diagnostics.record("model.prepare", { id: LYRA_MODEL_ID, device: options.device, usage: options.usage ?? 'medium' });
     const info = await backend.prepare(options);
     if (options.signal?.aborted || epoch !== this.modelEpoch) throw new DOMException("Cancelled", "AbortError");
     return info;
@@ -276,7 +277,7 @@ export class Coordinator extends EventTarget {
       model: this.settings.model,
       actions: state.hand.map(() => null),
       profile: p,
-      ...(p.model === "lyra" ? { modelName: this.lyra?.info?.manifest?.name ?? "LYRA v1" } : {}),
+      ...(p.model === "lyra" ? { modelName: this.lyra?.info?.manifest?.name ?? LYRA_MODEL_NAME } : {}),
       requestId: id,
     });
     const current = () =>

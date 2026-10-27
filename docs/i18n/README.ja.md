@@ -10,7 +10,7 @@
 
 | モデル | 評価方法 | 平均スコア |
 | --- | --- | ---: |
-| **LYRA · v1（研究用）** | CPUまたはGPUでニューラルネットワークと1ステップ探索を使って行動を評価 | 研究時の評価で約1,879点 |
+| **LYRA · v2（研究用）** | CPUまたはGPUでニューラルネットワークと1ステップ探索を使って行動を評価 | 研究時の評価で約1,880点 |
 | **VELA · v4.2** | CPUで先の展開を調べて行動を評価 | 約1,877点 |
 | **X36 · G3** | CPUまたはGPUでシミュレーションを繰り返し、選択肢を比較 | 約1,860点 |
 
@@ -18,9 +18,9 @@
 
 初期設定ではVELAが選択されています。LYRAは研究用モデルで、実行デバイスを自動・CPU・GPUから選べます。自動では利用可能なGPUを優先し、準備や推論に失敗した場合はCPUに切り替わります。
 
-初回の読み込みには、VELAで約**68 MB**、LYRAで約**31 MB**のモデルパッケージが必要です。公開サイトでは、ブラウザーへの保存に同意すると、次回から保存済みのモデルを再利用できます。最新のモデル情報を確認した時点で、互換性のない旧バージョンの保存データは削除されます。自分のPCで起動する場合はプロジェクト内のモデルファイルを使い、ブラウザーには重複して保存しません。LYRAはCPUとGPUを切り替えても同じパッケージを使います。
+初回の読み込みには、VELAで約**68 MB**、LYRAで約**68 MB**のモデルパッケージが必要です。公開サイトでは、ブラウザーへの保存に同意すると、次回から保存済みのモデルを再利用できます。VELAは最新のモデル情報を確認して互換性のない旧モデルを削除し、LYRAは新しいパッケージを検証・保存した後に旧パッケージを削除します。自分のPCで起動する場合はプロジェクト内のモデルファイルを使い、ブラウザーには重複して保存しません。LYRAはCPUとGPUを切り替えても同じパッケージを使います。
 
-行動ごとの評価値は、各選択肢の有利さを表します。予想最終スコアは、選択したモデルのおすすめに従い続けた場合の見込みです。VELA v4.2とLYRA v1には、それぞれの方策に合わせて学習した専用のスコア予測器を使っています。ゲーム終了時には実際のスコアを表示します。モデル選択をキャンセルすれば、おすすめ表示なしでも利用できます。
+行動ごとの評価値は、各選択肢の有利さを表します。予想最終スコアは、選択したモデルのおすすめに従い続けた場合の見込みです。VELA v4.2とLYRA v2には、それぞれの方策に合わせて学習した専用のスコア予測器を使っています。ゲーム終了時には実際のスコアを表示します。モデル選択をキャンセルすれば、おすすめ表示なしでも利用できます。
 
 ## 自分のPCで起動する
 
@@ -29,7 +29,7 @@
 1. プロジェクトをダウンロードして展開します。
 2. 使いたいモデルを以下の**GitHub Releases**からダウンロードし、**解凍せずに**指定の場所へ置きます。X36 · G3だけを使う場合、この手順は不要です。
    - **[VELA v4.2](https://github.com/alfm201/adventure/releases/tag/vela-v4.2)：** `model.bin.gz` → `public/models/vela-v4.2/model.bin.gz`
-   - **[LYRA v1](https://github.com/alfm201/adventure/releases/tag/lyra-v1)：** `lyra-v1.bin.gz` → `public/models/lyra-v1/lyra-v1.bin.gz`
+   - **[LYRA v2](https://github.com/alfm201/adventure/releases/tag/lyra-v2)：** `lyra-v2.bin.gz` → `public/models/lyra-v2/lyra-v2.bin.gz`
 3. プロジェクトフォルダーでターミナルを開き、次のコマンドを実行します。
 
    ```sh
@@ -49,7 +49,7 @@
 | モデル | Cloudflareのダウンロードパス |
 | --- | --- |
 | VELA v4.2 | [/models/vela-v4.2/model.bin.gz](https://adventure.alfm201.workers.dev/models/vela-v4.2/model.bin.gz) |
-| LYRA v1 | [/models/lyra-v1/lyra-v1.bin.gz](https://adventure.alfm201.workers.dev/models/lyra-v1/lyra-v1.bin.gz) |
+| LYRA v2 | [/models/lyra-v2/lyra-v2.bin.gz](https://adventure.alfm201.workers.dev/models/lyra-v2/lyra-v2.bin.gz) |
 
 LYRAパッケージ内の`LICENSES.txt`には、外部ランタイムのライセンス告知が含まれます。再配布時もこのファイルを保持してください。
 
@@ -65,7 +65,7 @@ LYRAパッケージ内の`LICENSES.txt`には、外部ランタイムのライ�
 
 [研究概要](../../research/README.md)（英語）では、X36 → VELA → LYRAの系譜と主な転換点・評価結果をまとめています。[環境と計算量](../../research/topics/environment.md)（韓国語）では、有限資源MDPの数式、状態空間、探索の分岐数、Oracle実験を説明しています。
 
-モデルの生成・学習・変換は、[再現ガイド](../../research/reproduction/README.md)（英語）を参照してください。LYRA v1のV₂₀学習と、ブラウザー向けFP32モデルへの変換コード・手順は、[再現ガイドのLYRA v1の節](../../research/reproduction/README.md#lyra-v1--v₂₀-neural-value-model)にあります。アプリではπ₂₀の1ステップ方策を使っています。
+モデルの生成・学習・変換は、[再現ガイド](../../research/reproduction/README.md)（英語）を参照してください。LYRA v2のM₄₀学習と、ブラウザー向けFP32モデルへの変換コード・手順は、[再現ガイドのLYRA v2の節](../../research/reproduction/README.md#lyra-v2--m₄₀-neural-value-model)にあります。アプリではM₄₀と1ステップのexpectimaxを使っています。
 
 VELA v4.2のFULL100生成、Hinge学習のコードと結果の概要は[再現ガイドのVELA v4.2の節](../../research/reproduction/README.md#vela-v42--compact100-hinge)、WASMのビルド方法は[ビルド手順](../../src/policies/vela/native/README.md)を参照してください。アプリの実行にFULL100の元テーブルは必要ありません。モデル別のガイドとWASMのビルド手順は韓国語です。
 

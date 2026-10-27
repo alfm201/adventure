@@ -10,7 +10,7 @@ Assist mode offers **voice guidance** in Korean, English, Japanese and Chinese, 
 
 | Model | How it evaluates actions | Average score |
 | --- | --- | ---: |
-| **LYRA · v1 (research)** | Neural network with 1-step search on CPU or GPU | About 1,879 in research testing |
+| **LYRA · v2 (research)** | Neural network with 1-step search on CPU or GPU | About 1,880 in research testing |
 | **VELA · v4.2** | Evaluates future states on CPU | About 1,877 |
 | **X36 · G3** | Compares actions through repeated simulations on CPU or GPU | About 1,860 |
 
@@ -18,9 +18,9 @@ These scores are reference figures from different evaluations. Computation time 
 
 VELA is selected by default. LYRA is a research model that can run on CPU or GPU. With device selection set to Automatic, it uses an available GPU first and falls back to CPU if initialization or inference fails.
 
-VELA loads a model package of about **68 MB** on first use; LYRA loads about **31 MB**. On the hosted site, you can allow the app to save the model in your browser for future visits. Once the app checks the latest model information, it removes any incompatible older model data from browser storage. When running locally, it reads the project's model files without saving an extra browser copy. LYRA uses the same package for both CPU and GPU.
+VELA loads a model package of about **68 MB** on first use; LYRA loads about **68 MB**. On the hosted site, you can allow the app to save the model in your browser for future visits. VELA removes incompatible older models after checking current metadata; LYRA clears its previous package after the new one has been verified and saved. When running locally, it reads the project's model files without saving an extra browser copy. LYRA uses the same package for both CPU and GPU.
 
-Action values help you compare the available choices. The expected final score estimates your result if you keep following the selected model's recommendations. VELA v4.2 and LYRA v1 each use a score predictor trained for their own policy. Once the game ends, the actual score is displayed. You can also cancel model selection and use the app without recommendations.
+Action values help you compare the available choices. The expected final score estimates your result if you keep following the selected model's recommendations. VELA v4.2 and LYRA v2 each use a score predictor trained for their own policy. Once the game ends, the actual score is displayed. You can also cancel model selection and use the app without recommendations.
 
 ## Run on your PC
 
@@ -29,7 +29,7 @@ With **Node.js 22 or later**, no package installation or build is required.
 1. Download and extract the project.
 2. Download your chosen model from **GitHub Releases** and place it at the following path **without extracting it**. Skip this step if you only use X36 · G3.
    - **[VELA v4.2](https://github.com/alfm201/adventure/releases/tag/vela-v4.2):** `model.bin.gz` → `public/models/vela-v4.2/model.bin.gz`
-   - **[LYRA v1](https://github.com/alfm201/adventure/releases/tag/lyra-v1):** `lyra-v1.bin.gz` → `public/models/lyra-v1/lyra-v1.bin.gz`
+   - **[LYRA v2](https://github.com/alfm201/adventure/releases/tag/lyra-v2):** `lyra-v2.bin.gz` → `public/models/lyra-v2/lyra-v2.bin.gz`
 3. Open a terminal in the project folder and run:
 
    ```sh
@@ -49,7 +49,7 @@ Model files remain available on [GitHub Releases](https://github.com/alfm201/adv
 | Model | Cloudflare download path |
 | --- | --- |
 | VELA v4.2 | [/models/vela-v4.2/model.bin.gz](https://adventure.alfm201.workers.dev/models/vela-v4.2/model.bin.gz) |
-| LYRA v1 | [/models/lyra-v1/lyra-v1.bin.gz](https://adventure.alfm201.workers.dev/models/lyra-v1/lyra-v1.bin.gz) |
+| LYRA v2 | [/models/lyra-v2/lyra-v2.bin.gz](https://adventure.alfm201.workers.dev/models/lyra-v2/lyra-v2.bin.gz) |
 
 The LYRA package includes third-party runtime notices in `LICENSES.txt`. Keep this file when redistributing the package.
 
@@ -65,7 +65,7 @@ Open **Help** in the app for controls and keyboard shortcuts. If something goes 
 
 The [research overview](../../research/README.md) traces X36 → VELA → LYRA, with the main transitions and evaluation results. [Environment and computational cost](../../research/topics/environment.md) covers the finite-resource MDP formulation, state space, search branching and Oracle experiments (in Korean).
 
-Start with the [reproduction guide](../../research/reproduction/README.md) for model generation, training and conversion. The [LYRA v1 section](../../research/reproduction/README.md#lyra-v1--v₂₀-neural-value-model) covers the code and instructions for V₂₀ training and conversion to the browser's FP32 model format. The app uses the π₂₀ 1-step policy.
+Start with the [reproduction guide](../../research/reproduction/README.md) for model generation, training and conversion. The [LYRA v2 section](../../research/reproduction/README.md#lyra-v2--m₄₀-neural-value-model) covers M₄₀ training and conversion to the browser's FP32 model format. The app uses M₄₀ with 1-step expectimax.
 
 For VELA v4.2 FULL100 generation, Hinge training and a summary of the results, see the [VELA v4.2 section](../../research/reproduction/README.md#vela-v42--compact100-hinge) and its linked report. WASM build instructions are in the [build guide](../../src/policies/vela/native/README.md). The original FULL100 table is not required to run the app. The model-specific and WASM build guides are in Korean.
 

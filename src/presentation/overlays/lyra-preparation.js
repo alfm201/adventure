@@ -5,7 +5,7 @@ import { showSupport } from '../components/support.js';
 import { showDiagnostics } from './diagnostics.js';
 import { cacheAllowed, rememberCacheChoice, hasSavedPackage } from '../../compute/lyra/package.js';
 import { diagnostics } from '../../platform/report.js';
-import { LOCAL_MODEL } from '../../compute/lyra/model.js';
+import { LOCAL_MODEL, PACKAGE_BYTES } from '../../compute/lyra/model.js';
 import { lyraMemory } from '../../content/models.js';
 
 export function showLyraPreparation(coordinator, { device, usage, initial, persist = cacheAllowed(), onBack, onCancel, onFinish, parent = null }) {
@@ -14,7 +14,7 @@ export function showLyraPreparation(coordinator, { device, usage, initial, persi
   const resume = coordinator.suspend(), body = document.createElement('div');
   let busy = false;
   const node = dialog('LYRA 준비', body, { className: 'model-dialog lyra-preparation-dialog', parent, closeOnOutside: () => !busy });
-  const heading = node.querySelector('h2'), bytes = 31036272;
+  const heading = node.querySelector('h2'), bytes = PACKAGE_BYTES;
   const memory = () => {
     const gpu = device === 'gpu' || device === 'auto' && coordinator.lyraGpuSupport.available;
     const budget = lyraMemory[gpu ? 'gpu' : 'cpu'][usage];

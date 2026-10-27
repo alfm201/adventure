@@ -1,4 +1,4 @@
-// LYRA v1 final-score predictor evaluator (adapted from temp/vela-v4.1-score/predictor.mjs). q = LYRA v1 best 1-step Q.
+// Shared LYRA score schema. q is the matched checkpoint's FP32 best 1-step Q.
 export function createPredictor(model) {
   if (model.format !== "lyra-v1-score-v1") throw Error("Unsupported predictor format");
   const trees = model.trees.map(tree => ({
@@ -11,7 +11,7 @@ export function createPredictor(model) {
   const classOf = Uint8Array.from(model.classOf);
   return function predictFinalScore(state, q, phi) {
     if (state.diceUsed >= 100 && !state.bonusRoll) return state.position;
-    if (!Number.isFinite(q)) throw Error("A finite LYRA v1 best action Q is required");
+    if (!Number.isFinite(q)) throw Error("A finite LYRA best action Q is required");
     if (model.usePhi && !Number.isFinite(phi)) throw Error("phi is not used by this predictor");
     const r = 100 - state.diceUsed;
     if (!Number.isInteger(r) || r < 0 || r > 100) throw Error("Invalid diceUsed");

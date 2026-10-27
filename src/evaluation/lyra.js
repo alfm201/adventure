@@ -1,4 +1,4 @@
-import { MODEL_ID, MODEL_NAME } from '../compute/lyra/model.js';
+import { MODEL_ID, MODEL_NAME, MANIFEST } from '../compute/lyra/model.js';
 import { BOARD_SIZE } from '../rules/index.js';
 export async function evaluateLyra({ snapshot, backend, signal, requestId, revision }) {
   const terminal = snapshot.diceUsed >= 100 && !snapshot.bonusRoll;
@@ -9,7 +9,7 @@ export async function evaluateLyra({ snapshot, backend, signal, requestId, revis
   const recommended = terminal ? [] : result.values.flatMap((v, i) => v === highest ? [i] : []);
   return { status: 'complete', model: 'lyra', requestId, revision,
     profile: { model: 'lyra', engine: result.engine ?? backend?.info?.engine ?? 'cpu', device: backend?.info?.preference ?? 'auto', usage: backend?.info?.usage ?? 'medium' },
-    policyVersion: MODEL_ID, modelName: MODEL_NAME, modelVersion: '1', elapsedMs: result.elapsedMs,
+    policyVersion: MODEL_ID, modelName: MODEL_NAME, modelVersion: MANIFEST.version, elapsedMs: result.elapsedMs,
     expectedFinalScore: terminal ? snapshot.position : Number.isFinite(result.expectedFinalScore)
       ? Math.min(BOARD_SIZE, result.expectedFinalScore) : undefined,
     best: result.best, bestClass: result.bestClass, recommended,

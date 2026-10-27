@@ -1,4 +1,4 @@
-import { ASSET_URL, PACKAGE_URL, PACKAGE_SHA256, MANIFEST, LOCAL_MODEL, LOCAL_PACKAGE_URL } from './model.js';
+import { ASSET_URL, PACKAGE_URL, PACKAGE_SHA256, PACKAGE_BYTES, DECODED_BYTES, MODEL_ID, MANIFEST, LOCAL_MODEL, LOCAL_PACKAGE_URL } from './model.js';
 const consentKey='adventure-lyra-cache-consent-v2';
 export const PACKAGE_CACHE_NAME=`adventure-lyra-package-v1:${new URL('../',ASSET_URL).pathname}`;
 const cacheName=PACKAGE_CACHE_NAME;
@@ -27,7 +27,7 @@ export async function loadPackage({persist=cacheAllowed(),signal,onProgress=()=>
   const response=await fetch(new URL('download.json',ASSET_URL),{signal,cache:'no-cache'});
   if(!response.ok)throw Error('LYRA download metadata unavailable');
   const manifest=await response.json();
-  if(manifest.format!=='lyra-pack-gzip-v1'||manifest.sha256!==PACKAGE_SHA256||manifest.bytes!==31036272||manifest.assetsSha256!==MANIFEST.metadataSha256||manifest.decodedBytes!==67093015)
+  if(manifest.id!==MODEL_ID||manifest.format!=='lyra-pack-gzip-v1'||manifest.sha256!==PACKAGE_SHA256||manifest.bytes!==PACKAGE_BYTES||manifest.assetsSha256!==MANIFEST.metadataSha256||manifest.decodedBytes!==DECODED_BYTES)
     throw Error('Invalid LYRA package manifest');
   let bytes=resident,cache,fromCache=false,cacheFailed=false,cacheSaved=false;
   if(persist){

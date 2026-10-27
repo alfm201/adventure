@@ -3,12 +3,13 @@ import { deadline } from '../../platform/requests.js';
 import { ASSET_URL, MANIFEST, PACKAGE_SHA256 } from './model.js';
 import { hashBytes } from './package.js';
 
-export const SCORE_ID = 'lyra-v1-score-v1';
-export const SCORE_SHA256 = '68284138211148822856667503e2ea4dae58c81b8ace884c676b9283606ab440';
+export const SCORE_ID = 'lyra-v2-score-v1';
+const SCORE_FORMAT = 'lyra-v1-score-v1'; // v2 retains the v1 serialized predictor schema.
+export const SCORE_SHA256 = '1b0b203bd4b4438cde952763e0a9142b4e9029215b8794e25ed9041b3223b9fa';
 
 export function matchedPredictor(model, rules) {
   if (MANIFEST.horizon !== 1 || MANIFEST.precision !== 'fp32'
-      || model.format !== SCORE_ID || model.usePhi !== false
+      || model.format !== SCORE_FORMAT || model.usePhi !== false
       || model.sourceModelSha256 !== MANIFEST.sourceSha256
       || model.sourceOnnxSha256 !== MANIFEST.sha256
       || model.sourcePackageSha256 !== PACKAGE_SHA256

@@ -34,7 +34,7 @@ This does not assert ownership or copyright protection over every coordinate, nu
 
 Retain the applicable license texts, copyright notices and modification notices when redistributing these components. ONNX Runtime's upstream notice file covers the wider project; individual entries apply only to components included in the distributed build. The local runtime modification is described in [LYRA-CACHE.md](public/runtime/onnxruntime-web/1.30.0/LYRA-CACHE.md).
 
-`public/models/lyra-v1/lyra-v1.bin.gz` is a mixed package: `lyra-v20-fp32.onnx` and `features.bin` are author-owned model data; `ort-wasm-simd-threaded.wasm` and `ort-wasm-simd-threaded.jsep.wasm` are third-party runtime files. The package includes `LICENSES.txt`; retain it when redistributing the package. A [standalone copy](public/models/lyra-v1/LICENSES.txt) is also provided. The whole package must not be described as exclusively author-owned or notice-free.
+`public/models/lyra-v2/lyra-v2.bin.gz` is a mixed package: `lyra-m40-fp32.onnx` and `features.bin` are author-owned model data; `ort-wasm-simd-threaded.wasm` and `ort-wasm-simd-threaded.jsep.wasm` are third-party runtime files. LYRA v1 uses `lyra-v20-fp32.onnx` instead. Both packages include `LICENSES.txt`; retain it when redistributing them. Standalone copies are provided for [v2](public/models/lyra-v2/LICENSES.txt) and [v1](public/models/lyra-v1/LICENSES.txt). The whole package must not be described as exclusively author-owned or notice-free.
 
 ## AI-generated voice guidance
 

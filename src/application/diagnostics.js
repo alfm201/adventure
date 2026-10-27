@@ -2,10 +2,11 @@ import { diagnostics } from "../platform/report.js";
 import { RULES_VERSION } from "../rules/index.js";
 import { POLICY_VERSION } from "../policies/versions.js";
 import { MODEL_ID } from "../compute/vela/model.js";
+import { MODEL_ID as LYRA_MODEL_ID } from "../compute/lyra/model.js";
 
 const activePolicyVersion = coordinator => !coordinator.enabled ? null
   : coordinator.settings.model === "vela" ? coordinator.vela?.info?.manifest?.id ?? MODEL_ID
-  : coordinator.settings.model === "lyra" ? "lyra-v1"
+  : coordinator.settings.model === "lyra" ? LYRA_MODEL_ID
   : POLICY_VERSION;
 
 const modelInfo = info => info ? {

@@ -27,7 +27,7 @@ async function verified(file, hash) {
   return bytes;
 }
 async function infer({ tokens, base }, count) {
-  const a = new ort.Tensor('float32', tokens, [count, 24, 256]);
+  const a = new ort.Tensor('float32', tokens, [count, 24, meta.d]);
   const b = new ort.Tensor('float32', base, [count]);
   let output;
   try {
@@ -41,9 +41,10 @@ async function predict({ tokens, base }, count) {
   const batch = usage === 'low' ? (runningEngine === 'cpu' ? 8 : 16) : usage === 'medium' ? 64 : count;
   const pauseMs = usage === 'low' ? (runningEngine === 'cpu' ? 16 : 8) : 0;
   const values = [];
+  const stride = 24 * meta.d;
   for (let offset = 0; offset < count; offset += batch) {
     const end = Math.min(count, offset + batch);
-    values.push(...await infer({ tokens: tokens.subarray(offset * 6144, end * 6144), base: base.subarray(offset, end) }, end - offset));
+    values.push(...await infer({ tokens: tokens.subarray(offset * stride, end * stride), base: base.subarray(offset, end) }, end - offset));
     if (end < count && usage !== 'high') await new Promise(resolve => setTimeout(resolve, pauseMs));
   }
   return values;
@@ -108,14 +109,15 @@ async function prepare(device, level = 'medium', data) {
   post('ready', info);
 }
 async function loadAssets(data, device) {
-  // This scope ends before ORT compilation: no views keep the decoded 66 MB
+  // This scope ends before ORT compilation: no views keep the decoded
   // container alive while the engine allocates its own model and working memory.
   const files = await unpackPackage(data.packageBytes, data.packageManifest);
   packageInfo = data.packageInfo; data.packageBytes = null;
   meta = JSON.parse(new TextDecoder().decode(await verified('assets.json', MANIFEST.metadataSha256)));
-  if (meta.model_sha256 !== MANIFEST.sourceSha256 || meta.onnx_sha256 !== MANIFEST.sha256 || meta.features_sha256 !== MANIFEST.featuresSha256)
+  if (meta.model_sha256 !== MANIFEST.sourceSha256 || meta.onnx_sha256 !== MANIFEST.sha256 || meta.features_sha256 !== MANIFEST.featuresSha256
+      || meta.d !== MANIFEST.d || meta.layers !== MANIFEST.layers || meta.heads !== MANIFEST.heads)
     throw Error('Unexpected LYRA checkpoint');
-  model = files['lyra-v20-fp32.onnx'].slice();
+  model = files[MANIFEST.modelFile].slice();
   features = new Features(meta, files['features.bin'].slice().buffer);
   // Auto without WebGPU uses the small CPU runtime from the start.
   wasmBinaries = {};

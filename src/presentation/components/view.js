@@ -3,6 +3,7 @@ import { stageNames } from "../../content/board-layout.js";
 import { cardLabels, cardIcons } from "../../content/cards.js";
 import { numberLocale, pageLanguage, translate, message, setLocalizedText } from "../../localization/index.js";
 import { InferenceIndicator } from "./inference-indicator.js";
+import { MODEL_NAME as LYRA_MODEL_NAME } from "../../compute/lyra/model.js";
 export const number = (n, digits = 1) =>
   Number.isFinite(n)
     ? n.toLocaleString(numberLocale(), { maximumFractionDigits: digits })
@@ -224,7 +225,7 @@ export class GameView {
     text("center-label", vela ? "평가값" : result.profile?.engine === "cpu" ? "중앙값" : "평균");
     clearTimeout(this.detailTimer);
     if (lyra && result.status === "running" && Number.isFinite(result.startedAt)) {
-      const model = result.modelName ?? 'LYRA v1', engine = (result.profile?.engine ?? 'cpu').toUpperCase();
+      const model = result.modelName ?? LYRA_MODEL_NAME, engine = (result.profile?.engine ?? 'cpu').toUpperCase();
       const description = result.profile?.device === 'auto'
         ? message('{0} · {1} · {2}', model, message('자동'), engine) : `${model} · ${engine}`;
       const detail = document.getElementById('evaluation-detail');

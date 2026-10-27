@@ -12,7 +12,7 @@
 
 | 模型 | 評估方式 | 平均分數 |
 | --- | --- | ---: |
-| **LYRA · v1（研究版）** | 在 CPU 或 GPU 上結合神經網路與單步搜尋，評估各項行動 | 研究測試中約 1,879 分 |
+| **LYRA · v2（研究版）** | 在 CPU 或 GPU 上結合神經網路與單步搜尋，評估各項行動 | 研究測試中約 1,880 分 |
 | **VELA · v4.2** | 在 CPU 上推演後續局面，評估各項行動 | 約 1,877 分 |
 | **X36 · G3** | 在 CPU 或 GPU 上反覆模擬，比較不同選擇 | 約 1,860 分 |
 
@@ -20,9 +20,9 @@
 
 預設選擇 VELA。LYRA 為研究版模型，執行裝置可設為自動、CPU 或 GPU。選擇自動時，會優先使用可用的 GPU；若初始化或推論失敗，則改用 CPU。
 
-首次使用時，VELA 需要載入約 **68 MB** 的模型套件，LYRA 約為 **31 MB**。使用線上網站時，如果同意將模型儲存在瀏覽器中，下次造訪即可重複使用。工具確認最新模型資訊後，會先清除不相容的舊版模型資料。在自己的電腦上執行時，直接使用專案中的模型檔案，不會在瀏覽器中額外儲存一份。LYRA 切換 CPU 或 GPU 時，使用的是同一份模型套件。
+首次使用時，VELA 需要載入約 **68 MB** 的模型套件，LYRA 約為 **68 MB**。使用線上網站時，如果同意將模型儲存在瀏覽器中，下次造訪即可重複使用。VELA 確認最新模型資訊後會清除不相容的舊模型；LYRA 則在驗證並儲存新套件後清除舊套件。在自己的電腦上執行時，直接使用專案中的模型檔案，不會在瀏覽器中額外儲存一份。LYRA 切換 CPU 或 GPU 時，使用的是同一份模型套件。
 
-各項行動的評估值可用來比較不同選擇的優劣。預估最終分數，是持續依照所選模型的建議行動時的預測結果。VELA v4.2 和 LYRA v1 分別使用依各自策略訓練的專用分數預測器。遊戲結束後，會顯示實際分數。也可以取消模型選擇，在不顯示行動建議的情況下使用工具。
+各項行動的評估值可用來比較不同選擇的優劣。預估最終分數，是持續依照所選模型的建議行動時的預測結果。VELA v4.2 和 LYRA v2 分別使用依各自策略訓練的專用分數預測器。遊戲結束後，會顯示實際分數。也可以取消模型選擇，在不顯示行動建議的情況下使用工具。
 
 ## 在自己的電腦上執行
 
@@ -31,7 +31,7 @@
 1. 下載專案並解壓縮。
 2. 從下方的 **GitHub Releases** 下載要使用的模型，**不要解壓縮模型檔案**，直接放到指定路徑。若只使用 X36 · G3，可以略過此步驟。
    - **[VELA v4.2](https://github.com/alfm201/adventure/releases/tag/vela-v4.2)：** `model.bin.gz` → `public/models/vela-v4.2/model.bin.gz`
-   - **[LYRA v1](https://github.com/alfm201/adventure/releases/tag/lyra-v1)：** `lyra-v1.bin.gz` → `public/models/lyra-v1/lyra-v1.bin.gz`
+   - **[LYRA v2](https://github.com/alfm201/adventure/releases/tag/lyra-v2)：** `lyra-v2.bin.gz` → `public/models/lyra-v2/lyra-v2.bin.gz`
 3. 在專案資料夾中開啟終端機，執行以下指令：
 
    ```sh
@@ -51,7 +51,7 @@
 | 模型 | Cloudflare 下載路徑 |
 | --- | --- |
 | VELA v4.2 | [/models/vela-v4.2/model.bin.gz](https://adventure.alfm201.workers.dev/models/vela-v4.2/model.bin.gz) |
-| LYRA v1 | [/models/lyra-v1/lyra-v1.bin.gz](https://adventure.alfm201.workers.dev/models/lyra-v1/lyra-v1.bin.gz) |
+| LYRA v2 | [/models/lyra-v2/lyra-v2.bin.gz](https://adventure.alfm201.workers.dev/models/lyra-v2/lyra-v2.bin.gz) |
 
 LYRA 模型套件內的 `LICENSES.txt` 包含第三方執行階段的授權聲明。再散布套件時，請保留此檔案。
 
@@ -67,7 +67,7 @@ LYRA 模型套件內的 `LICENSES.txt` 包含第三方執行階段的授權聲�
 
 [研究概覽](../../research/README.md)（英語）介紹 X36 → VELA → LYRA 的演進、主要轉折與評估結果。[環境與計算量](../../research/topics/environment.md)（韓語）說明有限資源 MDP 的數學模型、狀態空間、搜尋分支數及 Oracle 實驗。
 
-模型產生、訓練與轉換流程請從[重現指南](../../research/reproduction/README.md)（英語）開始。LYRA v1 的 V₂₀ 訓練程式碼，以及轉換為瀏覽器用 FP32 模型的程式碼與步驟，請參閱 [重現指南的 LYRA v1 一節](../../research/reproduction/README.md#lyra-v1--v₂₀-neural-value-model)。工具採用 π₂₀ 單步策略。
+模型產生、訓練與轉換流程請從[重現指南](../../research/reproduction/README.md)（英語）開始。LYRA v2 的 M₄₀ 訓練程式碼，以及轉換為瀏覽器用 FP32 模型的程式碼與步驟，請參閱[重現指南的 LYRA v2 一節](../../research/reproduction/README.md#lyra-v2--m₄₀-neural-value-model)。工具採用 M₄₀ 與單步 expectimax 策略。
 
 VELA v4.2 的 FULL100 產生程式、Hinge 訓練程式碼與最終結果摘要，請參閱[重現指南的 VELA v4.2 一節](../../research/reproduction/README.md#vela-v42--compact100-hinge)；WASM 建置方式請參閱[建置指南](../../src/policies/vela/native/README.md)。執行工具不需要 FULL100 原始表。各模型的詳細指南與 WASM 建置指南皆為韓語。
 

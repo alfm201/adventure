@@ -2,3 +2,6 @@ src/policies/vela/vela.mjs -text
 research/vela-v4.2/** text eol=lf
 # Preserve byte-exact metadata verified by the LYRA package and runtime.
 public/models/lyra-v1/assets.json -text
+public/models/lyra-v2/assets.json -text
+public/models/lyra-v2/predictor.json -text
+public/models/lyra-v2/LICENSES.txt -text

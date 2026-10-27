@@ -31,7 +31,7 @@ export function branches(raw, R) {
 
 export class Features {
   constructor(meta,buffer){
-    this.meta=meta;this.rules=meta.rules;this.cache=new Map();this.A={};
+    this.meta=meta;this.d=meta.d??meta.arrays.pos.shape[1];this.rules=meta.rules;this.cache=new Map();this.A={};
     for(const [key,a] of Object.entries(meta.arrays))this.A[key]=new (a.dtype==='uint16'?Uint16Array:Float32Array)(buffer,a.offset,a.bytes/(a.dtype==='uint16'?2:4));
   }
   counts(raw){
@@ -43,29 +43,29 @@ export class Features {
   key(raw){const {hc,dc}=this.counts(raw);return [raw[0],raw[1],raw[2],raw[3],...hc,...dc].join(',');}
   position(p){
     if(this.cache.has(p)){const a=this.cache.get(p);this.cache.delete(p);this.cache.set(p,a);return a;}
-    const {pos,land,weights}=this.A,a=new Float32Array(23*256);
+    const {pos,land,weights}=this.A,d=this.d,a=new Float32Array(23*d);
     for(let cl=0;cl<23;cl++)for(let k=0;k<11;k++){
-      const w=weights[cl*11+k],start=land[(p*23+cl)*11+k]*256;
+      const w=weights[cl*11+k],start=land[(p*23+cl)*11+k]*d;
       if(w===0)continue;
-      for(let j=0;j<256;j++)a[cl*256+j]=f(a[cl*256+j]+f(pos[start+j]*w));
+      for(let j=0;j<d;j++)a[cl*d+j]=f(a[cl*d+j]+f(pos[start+j]*w));
     }
     this.cache.set(p,a);if(this.cache.size>64)this.cache.delete(this.cache.keys().next().value);return a;
   }
   create(rows){
-    const A=this.A,tokens=new Float32Array(rows.length*24*256),base=new Float32Array(rows.length);
+    const A=this.A,d=this.d,tokens=new Float32Array(rows.length*24*d),base=new Float32Array(rows.length);
     for(let i=0;i<rows.length;i++){
-      const raw=rows[i],p=raw[0],r=Math.max(0,Math.min(100,100-raw[1])),b=raw[2],n=raw[3],{hc,dc,dn}=this.counts(raw),ap=this.position(p),off=i*24*256;
+      const raw=rows[i],p=raw[0],r=Math.max(0,Math.min(100,100-raw[1])),b=raw[2],n=raw[3],{hc,dc,dn}=this.counts(raw),ap=this.position(p),off=i*24*d;
       const gfeatures=[f(n/5),f(dn/30)];
       base[i]=f(p+A.g[r*2+b]);
-      for(let j=0;j<256;j++){
+      for(let j=0;j<d;j++){
         let linear=0;for(let k=0;k<2;k++)linear=f(linear+f(A.gW[j*2+k]*gfeatures[k]));linear=f(linear+A.gB[j]);
-        tokens[off+j]=f(f(f(A.pos[p*256+j]+A.r[r*256+j])+A.b[b*256+j])+linear);
+        tokens[off+j]=f(f(f(A.pos[p*d+j]+A.r[r*d+j])+A.b[b*d+j])+linear);
       }
       for(let cl=0;cl<23;cl++){
         const k=cl-1,features=[A.scal[(p*23+cl)*2],A.scal[(p*23+cl)*2+1],cl?f(hc[k]/A.cap[k]):0,cl?+(hc[k]>0):0,cl?f(hc[k]/5):0,cl?f(dc[k]/A.cap[k]):0];
-        for(let j=0;j<256;j++){
+        for(let j=0;j<d;j++){
           let linear=0;for(let k=0;k<6;k++)linear=f(linear+f(A.aW[j*6+k]*features[k]));linear=f(linear+A.aB[j]);
-          tokens[off+(cl+1)*256+j]=f(f(ap[cl*256+j]+A.act[cl*256+j])+linear);
+          tokens[off+(cl+1)*d+j]=f(f(ap[cl*d+j]+A.act[cl*d+j])+linear);
         }
       }
     }
@@ -89,7 +89,7 @@ export async function evaluate(raw,R,F,predict){
 }
 
 // Temporary test-page experiment. Two actions of exact expectimax, followed
-// by the unchanged V20 network; no policy bonus or new model weights.
+// by the same value network; no policy bonus or new model weights.
 export async function evaluateTwoStep(raw,R,F,predict){
   const P=branches(raw,R),states=[],stateIndex=new Map(),rootBack=[];
   for(const child of P.children){
