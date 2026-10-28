@@ -73,7 +73,7 @@ export class Features {
   }
 }
 
-export async function evaluate(raw,R,F,predict){
+export async function evaluate(raw,R,F,predict,options={}){
   const P=branches(raw,R),unique=[],back=[],seen=new Map();
   for(const child of P.children){
     if(child[10]){back.push(-1);continue;}
@@ -81,16 +81,14 @@ export async function evaluate(raw,R,F,predict){
     if(!seen.has(key)){seen.set(key,unique.length);unique.push(child);}
     back.push(seen.get(key));
   }
-  const v=unique.length?await predict(F.create(unique),unique.length):[];
+  const v=unique.length?await (options.predictStates?options.predictStates(unique):predict(F.create(unique),unique.length)):[];
   const values=P.children.map((c,i)=>back[i]<0?c[0]:Number(v[back[i]]));
   const q=P.classes.map((_,a)=>{let sum=0;for(let j=P.offsets[a];j<P.offsets[a+1];j++)sum+=P.probabilities[j]*values[j];return sum;});
   let best=0;for(let a=1;a<q.length;a++)if(q[a]>q[best])best=a;
   return {...P,values,q,best:P.classes[best],unique:unique.length};
 }
 
-// Temporary test-page experiment. Two actions of exact expectimax, followed
-// by the same value network; no policy bonus or new model weights.
-export async function evaluateTwoStep(raw,R,F,predict){
+export async function evaluateTwoStep(raw,R,F,predict,options={}){
   const P=branches(raw,R),states=[],stateIndex=new Map(),rootBack=[];
   for(const child of P.children){
     if(child[10]){rootBack.push(-1);continue;}
@@ -99,7 +97,10 @@ export async function evaluateTwoStep(raw,R,F,predict){
     rootBack.push(stateIndex.get(key));
   }
   const leaves=[],leafIndex=new Map();
-  const plans=states.map(state=>{
+  const plans=[];
+  for(let i=0;i<states.length;i++){
+    if(i%16===0)await options.checkpoint?.();
+    const state=states[i];
     const plan=branches(state,R);
     const back=plan.children.map(child=>{
       if(child[10])return -1;
@@ -107,10 +108,10 @@ export async function evaluateTwoStep(raw,R,F,predict){
       if(!leafIndex.has(key)){leafIndex.set(key,leaves.length);leaves.push(child);}
       return leafIndex.get(key);
     });
-    return {plan,back};
-  });
-  // A single prediction request preserves the high profile's full batch.
-  const predicted=leaves.length?await predict(F.create(leaves),leaves.length):[];
+    plans.push({plan,back});
+  }
+  await options.checkpoint?.();
+  const predicted=leaves.length?await (options.predictStates?options.predictStates(leaves):predict(F.create(leaves),leaves.length)):[];
   const middle=plans.map(({plan,back})=>{
     let best=-Infinity;
     for(let a=0;a<plan.classes.length;a++){

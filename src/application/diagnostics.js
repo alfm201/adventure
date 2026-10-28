@@ -6,7 +6,7 @@ import { MODEL_ID as LYRA_MODEL_ID } from "../compute/lyra/model.js";
 
 const activePolicyVersion = coordinator => !coordinator.enabled ? null
   : coordinator.settings.model === "vela" ? coordinator.vela?.info?.manifest?.id ?? MODEL_ID
-  : coordinator.settings.model === "lyra" ? LYRA_MODEL_ID
+  : coordinator.settings.model === "lyra" ? (coordinator.settings.lyraDepth === 2 ? `${LYRA_MODEL_ID}-depth2` : LYRA_MODEL_ID)
   : POLICY_VERSION;
 
 const modelInfo = info => info ? {
@@ -16,7 +16,7 @@ const modelInfo = info => info ? {
   researchValue: info.manifest?.researchValue, researchPolicy: info.manifest?.researchPolicy,
   sourceSha256: info.manifest?.sourceSha256, precision: info.manifest?.precision,
   preference: info.preference, engine: info.engine,
-  usage: info.usage, batchSize: info.batchSize, runtimeCachePolicy: info.runtimeCachePolicy,
+  usage: info.usage, batchSize: info.batchSize, searchDepth: info.searchDepth, runtimeCachePolicy: info.runtimeCachePolicy,
   scorePredictor: info.scorePredictor,
 } : null;
 export function attachDiagnostics(session, coordinator, assets) {
@@ -47,7 +47,7 @@ export function attachDiagnostics(session, coordinator, assets) {
     if (!control) return;
     diagnostics.record("ui.click", { control: control.id || control.className,
       action: control.dataset.nav || control.dataset.cardAction,
-      choice: ["model", "engine", "usage", "workers", "cache", "lyra-device"].includes(control.name) ? { name: control.name, value: control.value } : null });
+      choice: ["model", "engine", "usage", "depth", "workers", "cache", "lyra-device"].includes(control.name) ? { name: control.name, value: control.value } : null });
   }, true);
   diagnostics.record("game.ready", { rulesVersion: RULES_VERSION, policyVersion: activePolicyVersion(coordinator), state: session.state });
 }

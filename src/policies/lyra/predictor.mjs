@@ -1,4 +1,4 @@
-// Shared LYRA score schema. q is the matched checkpoint's FP32 best 1-step Q.
+// Shared LYRA score schema, trained on the matched checkpoint's FP32 best 1-step Q.
 export function createPredictor(model) {
   if (model.format !== "lyra-v1-score-v1") throw Error("Unsupported predictor format");
   const trees = model.trees.map(tree => ({

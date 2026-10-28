@@ -8,7 +8,7 @@ import { diagnostics } from '../../platform/report.js';
 import { LOCAL_MODEL, PACKAGE_BYTES } from '../../compute/lyra/model.js';
 import { lyraMemory } from '../../content/models.js';
 
-export function showLyraPreparation(coordinator, { device, usage, initial, persist = cacheAllowed(), onBack, onCancel, onFinish, parent = null }) {
+export function showLyraPreparation(coordinator, { device, usage, searchDepth = 1, initial, persist = cacheAllowed(), onBack, onCancel, onFinish, parent = null }) {
   if (!canOpenDialog(parent)) return;
   persist = !LOCAL_MODEL && persist;
   const resume = coordinator.suspend(), body = document.createElement('div');
@@ -18,7 +18,8 @@ export function showLyraPreparation(coordinator, { device, usage, initial, persi
   const memory = () => {
     const gpu = device === 'gpu' || device === 'auto' && coordinator.lyraGpuSupport.available;
     const budget = lyraMemory[gpu ? 'gpu' : 'cpu'][usage];
-    return `RAM 여유 약 ${memorySize(budget.ram)} 이상 권장 · 기기별 차이` + (gpu ? `<br>VRAM 여유 약 ${memorySize(budget.gpu)} 이상 권장 · 기기별 차이` : '');
+    return `RAM 여유 약 ${memorySize(budget.ram)} 이상 권장 · 기기별 차이` + (gpu ? `<br>VRAM 여유 약 ${memorySize(budget.gpu)} 이상 권장 · 기기별 차이` : '')
+      + (searchDepth === 2 ? '<br>깊은 탐색에서는 더 많은 메모리가 필요할 수 있습니다.' : '');
   };
   let controller, transfer, epoch = 0, handedOff = false, ready = false;
   const focusPrimary = () => body.querySelector('.primary:not(:disabled)')?.focus({ preventScroll: true });
@@ -29,7 +30,7 @@ export function showLyraPreparation(coordinator, { device, usage, initial, persi
     stop(); resume();
     if (!ready) coordinator.cancelModelPreparation();
     if (handedOff) return;
-    if (ready) { coordinator.configure({ model: 'lyra', lyraDevice: device, lyraUsage: usage }); onFinish?.(); return; }
+    if (ready) { coordinator.configure({ model: 'lyra', lyraDevice: device, lyraUsage: usage, lyraDepth: searchDepth }); onFinish?.(); return; }
     if (onCancel) onCancel();
     else { if (coordinator.enabled) coordinator.recalculate(); onFinish?.(); }
   }, { once: true });
@@ -66,7 +67,7 @@ export function showLyraPreparation(coordinator, { device, usage, initial, persi
     body.querySelector('.model-cancel').onclick = () => node.close();
     transfer = downloadProgress(body.querySelector('.model-transfer-detail'));
     try {
-      const info = await coordinator.prepareLyra({ device, usage, persist, signal, onProgress: data => {
+      const info = await coordinator.prepareLyra({ device, usage, searchDepth, persist, signal, onProgress: data => {
         if (signal.aborted || !node.open || current !== epoch) return;
         transfer.update(data);
         const downloading = data.phase === 'download';

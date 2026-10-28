@@ -231,7 +231,8 @@ export class GameView {
       const detail = document.getElementById('evaluation-detail');
       const updateDetail = () => {
         const elapsed = Math.max(0, performance.now() - result.startedAt);
-        setLocalizedText(detail, '{0} · {1}초 · 계산중', description, number(elapsed / 1000, 1));
+        const seconds = (elapsed / 1000).toLocaleString(numberLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+        setLocalizedText(detail, '{0} · {1}초 · 계산중', description, seconds);
         // Refresh only this line; do not redraw the board or restart inference.
         this.detailTimer = setTimeout(updateDetail, 100);
       };

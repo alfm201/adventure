@@ -1,4 +1,4 @@
-import { Features, evaluate } from '../../policies/lyra/policy.js';
+import { Features, evaluate, evaluateTwoStep } from '../../policies/lyra/policy.js';
 import { MANIFEST, ASSET_URL, ORT_URL, adapterDetails, usageProfile } from './model.js';
 import { researchState, slotValues } from './state.js';
 import { unpackPackage } from './package.js';
@@ -7,6 +7,9 @@ import { loadScorePredictor, SCORE_ID, SCORE_SHA256 } from './score.js';
 let ort, session, features, meta, model, info, preference, usage, runningEngine, lost = false;
 let packageInfo,wasmBinaries;
 let predictScore, scoreInfo;
+let searchDepth = 1;
+const evaluations = new Map();
+const checkCancelled = task => { if (task?.cancelled) throw new DOMException('Calculation cancelled', 'AbortError'); };
 async function prepareScorePredictor() {
   try {
     const loaded = await loadScorePredictor(meta.rules);
@@ -37,15 +40,16 @@ async function infer({ tokens, base }, count) {
     return values;
   } finally { output?.value.dispose(); a.dispose(); b.dispose(); }
 }
-async function predict({ tokens, base }, count) {
-  const batch = usage === 'low' ? (runningEngine === 'cpu' ? 8 : 16) : usage === 'medium' ? 64 : count;
+async function predictStates(rows, task) {
+  const batch = usage === 'low' ? (runningEngine === 'cpu' ? 8 : 16) : usage === 'medium' ? 64 : rows.length;
   const pauseMs = usage === 'low' ? (runningEngine === 'cpu' ? 16 : 8) : 0;
   const values = [];
-  const stride = 24 * meta.d;
-  for (let offset = 0; offset < count; offset += batch) {
-    const end = Math.min(count, offset + batch);
-    values.push(...await infer({ tokens: tokens.subarray(offset * stride, end * stride), base: base.subarray(offset, end) }, end - offset));
-    if (end < count && usage !== 'high') await new Promise(resolve => setTimeout(resolve, pauseMs));
+  for (let offset = 0; offset < rows.length; offset += batch) {
+    checkCancelled(task);
+    const end = Math.min(rows.length, offset + batch);
+    values.push(...await infer(features.create(rows.slice(offset, end)), end - offset));
+    checkCancelled(task);
+    if (end < rows.length) await new Promise(resolve => setTimeout(resolve, pauseMs));
   }
   return values;
 }
@@ -76,8 +80,8 @@ async function initialize(engine) {
   }
   // A real model execution verifies more than adapter presence. No tuning.
   post('progress', { phase: 'warmup', engine });
-  await predict(features.create([[1, 0, 0, 0, 0, 0, 0, 0, 0, 0x3fffffff, 0]]), 1);
-  info = { ...packageInfo, manifest: MANIFEST, preference, engine, ...usageProfile(engine, usage), adapter: adapter ? adapterDetails(adapter) : null,
+  await predictStates([[1, 0, 0, 0, 0, 0, 0, 0, 0, 0x3fffffff, 0]]);
+  info = { ...packageInfo, manifest: MANIFEST, preference, engine, searchDepth, ...usageProfile(engine, usage), adapter: adapter ? adapterDetails(adapter) : null,
     runtimeCachePolicy: engine === 'gpu' ? 'lyra-postrun-v2' : null,
     ortVersion: ort.env.versions, threads: 1, fallback: info?.fallback ?? null, scorePredictor: scoreInfo };
 }
@@ -94,6 +98,8 @@ async function cpuFallback(error) {
 async function prepare(device, level = 'medium', data) {
   if (!['auto', 'cpu', 'gpu'].includes(device)) throw Error('Invalid LYRA device');
   if (!['low', 'medium', 'high'].includes(level)) throw Error('Invalid LYRA usage');
+  if (![1,2].includes(data.searchDepth ?? 1)) throw Error('Invalid LYRA search depth');
+  searchDepth = data.searchDepth ?? 1;
   preference = device; usage = level;
   post('progress', { phase: 'load' });
   await loadAssets(data, device);
@@ -106,6 +112,7 @@ async function prepare(device, level = 'medium', data) {
   if (device !== 'auto' || runningEngine === 'cpu') model = null;
   await predictorReady;
   info.scorePredictor = scoreInfo;
+  info.searchDepth = searchDepth;
   post('ready', info);
 }
 async function loadAssets(data, device) {
@@ -124,35 +131,59 @@ async function loadAssets(data, device) {
   if (device !== 'gpu') wasmBinaries.cpu = files['ort-wasm-simd-threaded.wasm'].slice();
   if (device !== 'cpu') wasmBinaries.gpu = files['ort-wasm-simd-threaded.jsep.wasm'].slice();
 }
-async function run(data) {
+async function run(data, task) {
   if (data.type === 'prepare') { await prepare(data.device, data.usage, data); return; }
   if (data.type === 'configure') {
-    if (!session || !['low','medium','high'].includes(data.usage)) throw Error('Invalid LYRA usage change');
+    if (!session || !['low','medium','high'].includes(data.usage) || ![1,2].includes(data.searchDepth ?? searchDepth)) throw Error('Invalid LYRA settings');
+    searchDepth = data.searchDepth ?? searchDepth;
     usage = data.usage; packageInfo = { ...packageInfo, ...data.cacheInfo };
     if (runningEngine === 'gpu') globalThis.__lyraTrimGpuCache?.(usage === 'low' ? 67108864 : usage === 'medium' ? 134217728 : 268435456);
-    info = { ...info, ...data.cacheInfo, ...usageProfile(runningEngine, usage) };
+    info = { ...info, ...data.cacheInfo, ...usageProfile(runningEngine, usage), searchDepth };
     post('configured', { id: data.id, info }); return;
   }
   if (data.type !== 'evaluate' || !session) throw Error('LYRA is not ready');
   const raw = researchState(data.snapshot), start = performance.now();
-  let result;
+  const evaluatePolicy = searchDepth === 2 ? evaluateTwoStep : evaluate;
+  let lastYield = performance.now();
+  const options = { predictStates: rows => predictStates(rows, task), checkpoint: async () => {
+    checkCancelled(task);
+    if (performance.now() - lastYield >= 8) {
+      await new Promise(resolve => setTimeout(resolve, 0));
+      lastYield = performance.now(); checkCancelled(task);
+    }
+  } };
+  let result, gpuCache;
   try {
+    checkCancelled(task);
     if (lost && info.engine === 'gpu') throw Error('WebGPU device lost');
-    result = await evaluate(raw, meta.rules, features, predict);
+    result = await evaluatePolicy(raw, meta.rules, features, null, options);
   } catch (error) {
+    checkCancelled(task);
+    if (error.name === 'AbortError') throw error;
     if (preference !== 'auto' || info.engine !== 'gpu') throw error;
     await cpuFallback(error);
-    result = await evaluate(raw, meta.rules, features, predict);
+    info.searchDepth = searchDepth;
+    checkCancelled(task);
+    result = await evaluatePolicy(raw, meta.rules, features, null, options);
+  } finally {
+    // Outputs are disposed before the next request reuses the session.
+    gpuCache = runningEngine === 'gpu' ? globalThis.__lyraTrimGpuCache?.() : undefined;
   }
-  // All session.run outputs have been read back and disposed at this point.
-  // Never trim the intra-run pool while graph nodes still need to reuse it.
-  const gpuCache = runningEngine === 'gpu' ? globalThis.__lyraTrimGpuCache?.() : undefined;
+  checkCancelled(task);
   let expectedFinalScore;
   try { expectedFinalScore = predictScore?.(data.snapshot, Math.max(...result.q)); }
   catch (error) { console.error('LYRA score prediction failed', error); }
   post('result', { id: data.id, ...slotValues(data.snapshot, result, meta.rules), expectedFinalScore,
-    elapsedMs: performance.now() - start, engine: info.engine, gpuCache });
+    elapsedMs: performance.now() - start, engine: info.engine, searchDepth, gpuCache });
 }
 // Session.run is asynchronous: never overlap evaluations on one GPU session.
 let queue = Promise.resolve();
-self.onmessage = ({ data }) => { queue = queue.then(() => run(data)).catch(error => post('error', { id: data.id, message: error.message, stack: error.stack, code: 'lyra-runtime' })); };
+self.onmessage = ({ data }) => {
+  if (data.type === 'cancel') { const task = evaluations.get(data.id); if (task) task.cancelled = true; return; }
+  const task = data.type === 'evaluate' ? { cancelled: false } : null;
+  if (task) evaluations.set(data.id, task);
+  queue = queue.then(() => run(data, task)).catch(error => {
+    if (task && error.name === 'AbortError') post('cancelled', { id: data.id });
+    else post('error', { id: data.id, message: error.message, stack: error.stack, code: 'lyra-runtime' });
+  }).finally(() => { if (task) evaluations.delete(data.id); });
+};

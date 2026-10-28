@@ -1,6 +1,23 @@
 // Korean source messages map to English, Japanese and Simplified Chinese.
 // Stage names use descriptive translations/transliterations, not verified regional game names.
 globalThis.adventureMessages = {
+  "탐색 깊이": ["Search depth", "探索の深さ", "搜索深度"],
+  "탐색 깊이 안내": ["About search depth", "探索の深さについて", "搜索深度说明"],
+  "깊게": ["Deep", "深く", "深入"],
+  "빠른 응답": ["Quick response", "素早い応答", "快速响应"],
+  "더 먼 상황까지 비교": ["Compare further ahead", "先の展開まで比較", "比较更远的后续情况"],
+  "사용량을 바꿔도 같은 탐색 결과를 제공합니다.": ["Changing resource usage does not change the search result.", "使用量を変えても探索結果は変わりません。", "更改资源用量不会改变搜索结果。"],
+  "낮음은 처리 부하를 줄이고, 높음은 빠른 계산을 우선합니다. 사용량을 바꿔도 같은 탐색 결과를 제공합니다.": ["Low reduces processing load; High prioritizes speed. Resource usage does not change the search result.", "低は処理負荷を抑え、高は計算速度を優先します。使用量を変えても探索結果は変わりません。", "低用量减少处理负荷，高用量优先计算速度。资源用量不会改变搜索结果。"],
+  "계산 시간과 메모리 사용량이 크게 늘어날 수 있습니다.": ["Calculation time and memory use may increase substantially.", "計算時間とメモリ使用量が大幅に増える場合があります。", "计算时间和内存用量可能大幅增加。"],
+  "메모리 사용 주의": ["High memory use", "メモリ使用量に注意", "内存用量警告"],
+  "높음과 깊은 탐색을 함께 사용하면 RAM·VRAM 사용량이 크게 늘어날 수 있습니다. 메모리가 부족하면 브라우저나 화면이 일시적으로 멈추거나 계산에 실패할 수 있습니다.": ["Combining High usage with Deep search may greatly increase RAM and VRAM use. Low memory may temporarily freeze the browser or display, or cause the calculation to fail.", "使用量「高」と深い探索を組み合わせると、RAM・VRAM使用量が大幅に増える場合があります。メモリが不足すると、ブラウザや画面の一時停止、計算の失敗が起こることがあります。", "高用量与深入搜索同时使用可能大幅增加RAM和VRAM用量。内存不足可能导致浏览器或画面暂时卡住，或计算失败。"],
+  "높음과 깊은 탐색을 함께 사용하면 RAM 사용량이 크게 늘어날 수 있습니다. 메모리가 부족하면 브라우저나 화면이 일시적으로 멈추거나 계산에 실패할 수 있습니다.": ["Combining High usage with Deep search may greatly increase RAM use. Low memory may temporarily freeze the browser or display, or cause the calculation to fail.", "使用量「高」と深い探索を組み合わせると、RAM使用量が大幅に増える場合があります。メモリが不足すると、ブラウザや画面の一時停止、計算の失敗が起こることがあります。", "高用量与深入搜索同时使用可能大幅增加RAM用量。内存不足可能导致浏览器或画面暂时卡住，或计算失败。"],
+  "부담을 줄이려면 사용량을 보통으로 바꿔 주세요.": ["Choose Medium usage to reduce memory demand.", "負荷を抑えるには使用量を「普通」に変更してください。", "如需降低内存需求，请将资源用量改为中等。"],
+  "그래도 계속 진행하시겠습니까?": ["Do you still want to continue?", "それでも続行しますか？", "仍要继续吗？"],
+  "계속 진행": ["Continue", "続行", "继续"],
+  "돌아가기": ["Go back", "戻る", "返回"],
+  "예상 최종 점수에는 기본 탐색용 보정 모델을 사용하며, 깊은 탐색에서의 예측 정확도는 검증되지 않았습니다.": ["Final score forecasts use the calibration model for basic search. Forecast accuracy with deep search has not been validated.", "最終スコアの予測には基本探索用の補正モデルを使います。深い探索での予測精度は未検証です。", "最终分数预测使用基本搜索的校准模型，深入搜索时的预测准确度尚未验证。"],
+  "깊은 탐색에서는 더 많은 메모리가 필요할 수 있습니다.": ["Deep search may require more memory.", "深い探索では、さらに多くのメモリが必要になる場合があります。", "深入搜索可能需要更多内存。"],
   "{0} · 약 {1} 남음": ["{0} · about {1} left", "{0}・残り約{1}", "{0} · 剩余约{1}"],
   "{0}: {1}": ["{0}: {1}", "{0}：{1}", "{0}：{1}"],
   "{0} · {1} 파일": ["{0} · {1} files", "{0} · {1} ファイル", "{0} · {1} 个文件"],

@@ -141,3 +141,13 @@
 .lyra-engine-options .model-choice.is-selected .model-check { border-width:4px; }
 .lyra-gpu-availability { margin:-9px 0 16px; color:#647579; font-size:11px; line-height:1.5; }
 .compute-choice:focus-within { outline:2px solid #297d78; outline-offset:2px; }
+.compute-dialog .lyra-depth-panel { margin-top: 17px; }
+.model-dialog .run-metric-hint { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; min-height:0; padding:0; margin:-5px 0 -5px 2px; border:0; background:transparent; box-shadow:none; color:#718780; font:12px Arial,sans-serif; vertical-align:middle; cursor:help; }
+.model-dialog .run-metric-hint:hover { color:#276f70; background:#edf5ef; border-radius:50%; }
+.model-dialog .run-metric-hint:focus-visible { outline:2px solid #297d78; outline-offset:2px; }
+.model-dialog .lyra-depth-warning { padding:9px 11px; border-left:2px solid #c49145; background:#fff7e8; color:#785116; }
+.lyra-memory-warning { border-color:#cd9393; }
+.lyra-memory-warning .dialog-header h2 { color:#993c3c; }
+.lyra-memory-warning p { margin:0 0 12px; font-size:13px; line-height:1.65; color:#52666a; }
+.lyra-memory-warning footer .primary { background:#a13e3e !important; border-color:#a13e3e; }
+.lyra-memory-warning footer .primary:hover { background:#893333 !important; }

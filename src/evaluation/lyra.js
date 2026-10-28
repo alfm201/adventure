@@ -7,9 +7,10 @@ export async function evaluateLyra({ snapshot, backend, signal, requestId, revis
   if (signal?.aborted) throw new DOMException('Cancelled', 'AbortError');
   const highest = result.values[result.best];
   const recommended = terminal ? [] : result.values.flatMap((v, i) => v === highest ? [i] : []);
+  const searchDepth = result.searchDepth ?? backend?.info?.searchDepth ?? 1;
   return { status: 'complete', model: 'lyra', requestId, revision,
-    profile: { model: 'lyra', engine: result.engine ?? backend?.info?.engine ?? 'cpu', device: backend?.info?.preference ?? 'auto', usage: backend?.info?.usage ?? 'medium' },
-    policyVersion: MODEL_ID, modelName: MODEL_NAME, modelVersion: MANIFEST.version, elapsedMs: result.elapsedMs,
+    profile: { model: 'lyra', engine: result.engine ?? backend?.info?.engine ?? 'cpu', device: backend?.info?.preference ?? 'auto', usage: backend?.info?.usage ?? 'medium', searchDepth },
+    policyVersion: searchDepth === 1 ? MODEL_ID : `${MODEL_ID}-depth${searchDepth}`, modelName: MODEL_NAME, modelVersion: MANIFEST.version, elapsedMs: result.elapsedMs,
     expectedFinalScore: terminal ? snapshot.position : Number.isFinite(result.expectedFinalScore)
       ? Math.min(BOARD_SIZE, result.expectedFinalScore) : undefined,
     best: result.best, bestClass: result.bestClass, recommended,

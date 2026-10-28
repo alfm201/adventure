@@ -2,6 +2,7 @@ import { dialog, paintChoices, canOpenDialog } from "./dialogs.js";
 import { showLyraPreparation } from "./lyra-preparation.js";
 import { compatibilityMessage } from "../../content/compatibility.js";
 import { showSupport } from "../components/support.js";
+import { bindMetricHints } from "../components/metric-hint.js";
 const usageOptions = [
   ["low", "낮음", "다른 작업 우선"],
   ["medium", "보통", "균형"],
@@ -30,7 +31,9 @@ export function showSettings(coordinator, { model = "x36", initial = false, sele
   <fieldset class="compute-engine-options lyra-engine-options" aria-label="LYRA 실행 장치">${choice("engine", "auto", "자동", "GPU 우선", true)}${choice("engine", "cpu", "CPU", "CPU로 계산")}${choice("engine", "gpu", "GPU", "GPU로 계산")}</fieldset>
   <p class="lyra-gpu-availability" aria-live="polite"></p>
   <fieldset class="lyra-usage-panel"><legend>사용량</legend><div class="compute-options">${usageOptions.map(([key, title, detail]) => choice("usage", key, title, detail, key === "medium")).join("")}</div></fieldset>
-  <p class="model-note">낮음은 처리 부하를 줄이고, 높음은 빠른 계산을 우선합니다. 모든 설정에서 같은 모델과 정책을 사용합니다.</p>
+  <p class="model-note">낮음은 처리 부하를 줄이고, 높음은 빠른 계산을 우선합니다. 사용량을 바꿔도 같은 탐색 결과를 제공합니다.</p>
+  <fieldset class="lyra-depth-panel"><legend>탐색 깊이<button type="button" class="run-metric-hint" aria-label="탐색 깊이 안내">ⓘ</button></legend><div class="compute-options">${choice("depth", "1", "기본", "빠른 응답", true)}${choice("depth", "2", "깊게", "더 먼 상황까지 비교")}</div></fieldset>
+  <p class="model-note lyra-depth-warning" hidden>계산 시간과 메모리 사용량이 크게 늘어날 수 있습니다.</p>
   ` : `
   <fieldset class="compute-engine-options" aria-label="계산 엔진">${choice("engine", "gpu", "GPU", "G3 · 더 많은 표본")}${choice("engine", "cpu", "CPU", "G3 · 적은 연산량")}</fieldset>
   <div class="model-support gpu-support"></div>
@@ -39,6 +42,7 @@ export function showSettings(coordinator, { model = "x36", initial = false, sele
   <footer><span></span><button type="submit" class="primary">${lyra ? "다음" : initial ? "시작" : "적용"}</button><button type="button" class="compute-cancel">취소</button></footer>`;
   for (const [key, value] of Object.entries(lyra ? {
     engine: selection?.engine ?? settings.lyraDevice ?? 'auto', usage: selection?.usage ?? settings.lyraUsage ?? 'medium',
+    depth: selection?.depth ?? settings.lyraDepth ?? 1,
   } : {
     engine: settings.engine,
     usage: settings.usage,
@@ -49,6 +53,7 @@ export function showSettings(coordinator, { model = "x36", initial = false, sele
   let engineChanged = false;
   const refresh = () => {
     const engine = body.elements.engine.value;
+    if (lyra) body.querySelector('.lyra-depth-warning').hidden = body.elements.depth.value !== '2';
     body.querySelectorAll("[data-engine-panel]").forEach((panel) => {
       panel.hidden = panel.dataset.enginePanel !== engine;
       panel
@@ -90,7 +95,19 @@ export function showSettings(coordinator, { model = "x36", initial = false, sele
     back.onclick = () => { returning = true; node.addEventListener("close", onBack, { once: true }); node.close(); };
   }
   const node = dialog(lyra ? "LYRA 실행 장치 선택" : "X36 엔진 선택", body, { className: "model-dialog compute-dialog", parent });
-  let applied = false, returning = false;
+  if (lyra) bindMetricHints(node, [{ button: body.querySelector('.run-metric-hint'), text: '예상 최종 점수에는 기본 탐색용 보정 모델을 사용하며, 깊은 탐색에서의 예측 정확도는 검증되지 않았습니다.' }]);
+  let applied = false, returning = false, confirming = false;
+  const confirmMemory = device => new Promise(resolve => {
+    const content = document.createElement('div');
+    const gpu = device !== 'cpu' && coordinator.lyraGpuSupport.available;
+    content.innerHTML = `<p>${gpu ? '높음과 깊은 탐색을 함께 사용하면 RAM·VRAM 사용량이 크게 늘어날 수 있습니다. 메모리가 부족하면 브라우저나 화면이 일시적으로 멈추거나 계산에 실패할 수 있습니다.' : '높음과 깊은 탐색을 함께 사용하면 RAM 사용량이 크게 늘어날 수 있습니다. 메모리가 부족하면 브라우저나 화면이 일시적으로 멈추거나 계산에 실패할 수 있습니다.'}</p><p>부담을 줄이려면 사용량을 보통으로 바꿔 주세요.</p><p>그래도 계속 진행하시겠습니까?</p><footer><button type="button" class="memory-back">돌아가기</button><span></span><button type="button" class="primary">계속 진행</button></footer>`;
+    const warning = dialog('메모리 사용 주의', content, { className:'model-dialog lyra-memory-warning', parent:node });
+    let accepted = false;
+    content.querySelector('.memory-back').onclick = () => warning.close();
+    content.querySelector('.primary').onclick = () => { accepted = true; warning.close(); };
+    warning.addEventListener('close', () => resolve(accepted), { once:true });
+    content.querySelector('.memory-back').focus({preventScroll:true});
+  });
   body.querySelector(".compute-cancel").onclick = () => node.close();
   node.addEventListener("close", () => {
     resume();
@@ -103,14 +120,21 @@ export function showSettings(coordinator, { model = "x36", initial = false, sele
       onFinish?.();
     }
   }, { once: true });
-  body.onsubmit = (e) => {
+  body.onsubmit = async (e) => {
     e.preventDefault();
     if (lyra) {
-      const device = body.elements.engine.value, usage = body.elements.usage.value;
+      const device = body.elements.engine.value, usage = body.elements.usage.value, depth = Number(body.elements.depth.value);
       if (device === 'gpu' && !coordinator.lyraGpuSupport.available) { refreshSupport(); return; }
+      if (usage === 'high' && depth === 2) {
+        if (confirming) return;
+        confirming = true;
+        const accepted = await confirmMemory(device);
+        confirming = false;
+        if (!accepted || !node.open || node.classList.contains('dialog-closing')) return;
+      }
       returning = true;
-      node.addEventListener("close", () => showLyraPreparation(coordinator, { device, usage, initial, parent, persist: selection?.persist,
-        onBack: persist => showSettings(coordinator, { model, initial, parent, selection: { engine: device, usage, persist }, onBack, onCancel, onFinish }),
+      node.addEventListener("close", () => showLyraPreparation(coordinator, { device, usage, searchDepth: depth, initial, parent, persist: selection?.persist,
+        onBack: persist => showSettings(coordinator, { model, initial, parent, selection: { engine: device, usage, depth, persist }, onBack, onCancel, onFinish }),
         onCancel, onFinish }), { once: true });
       node.close();
       return;

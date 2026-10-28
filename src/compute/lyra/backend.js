@@ -4,14 +4,15 @@ import { usageProfile } from './model.js';
 const aborted = () => new DOMException('Calculation cancelled', 'AbortError');
 export class LyraBackend extends EventTarget {
   constructor() { super(); this.sequence = 0; this.ready = false; this.configurations = new Map(); }
-  prepare({ device = 'auto', usage = 'medium', signal, onProgress = () => {}, persist, deferUsage = false } = {}) {
+  prepare({ device = 'auto', usage = 'medium', searchDepth = 1, signal, onProgress = () => {}, persist, deferUsage = false } = {}) {
     if(signal?.aborted)return Promise.reject(aborted());
     if (!['low','medium','high'].includes(usage)) return Promise.reject(Error('Invalid LYRA usage'));
+    if (![1,2].includes(searchDepth)) return Promise.reject(Error('Invalid LYRA search depth'));
     if(this.ready&&this.info.preference===device)
       return loadPackage({persist,signal,onProgress}).then(async data=>{
         signal?.throwIfAborted(); Object.assign(this.info,data.info);
         // Preparing a settings dialog must not change the running engine yet.
-        return deferUsage ? { ...this.info, ...usageProfile(this.info.engine, usage) } : this.setUsage(usage);
+        return deferUsage ? { ...this.info, ...usageProfile(this.info.engine, usage), searchDepth } : this.setUsage(usage, searchDepth);
       });
     this.dispose();
     const controller=this.loadController=new AbortController();
@@ -20,18 +21,18 @@ export class LyraBackend extends EventTarget {
     return (async()=>{
       const data=await loadPackage({persist,signal:controller.signal,onProgress});
       controller.signal.throwIfAborted();
-      return await this.start({device,usage,signal:controller.signal,onProgress,packageData:data});
+      return await this.start({device,usage,searchDepth,signal:controller.signal,onProgress,packageData:data});
     })().finally(()=>{signal?.removeEventListener('abort',cancel);if(this.loadController===controller)this.loadController=null;});
   }
-  start({ device, usage, signal, onProgress, packageData }) {
+  start({ device, usage, searchDepth = 1, signal, onProgress, packageData }) {
     if (signal?.aborted) return Promise.reject(aborted());
-    if (this.ready && this.info.preference === device && this.info.usage === usage) return Promise.resolve(this.info);
-    if (this.preparing?.device === device && this.preparing.usage === usage) return this.preparing.promise;
+    if (this.ready && this.info.preference === device && this.info.usage === usage && this.info.searchDepth === searchDepth) return Promise.resolve(this.info);
+    if (this.preparing?.device === device && this.preparing.usage === usage && this.preparing.searchDepth === searchDepth) return this.preparing.promise;
     const worker = this.worker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
     worker.onerror = event => { event.preventDefault(); if (this.worker === worker) this.dispose(Error(event.message || 'LYRA worker failed')); };
     const promise = new Promise((resolve, reject) => {
       const cancel = () => this.dispose(aborted());
-      this.preparing = { device, usage, resolve, reject, onProgress, cleanup: () => signal?.removeEventListener('abort', cancel) };
+      this.preparing = { device, usage, searchDepth, resolve, reject, onProgress, cleanup: () => signal?.removeEventListener('abort', cancel) };
       signal?.addEventListener('abort', cancel, { once: true });
       worker.onmessage = ({ data }) => {
         if (this.worker !== worker) return;
@@ -46,6 +47,9 @@ export class LyraBackend extends EventTarget {
           this.info = data; this.dispatchEvent(new Event('backendchange'));
         } else if (data.type === 'error') {
           this.dispose(Object.assign(Error(data.message), { code: data.code, stack: data.stack }));
+        } else if (data.type === 'cancelled' && this.active?.id === data.id) {
+          const job = this.active; this.active = null;
+          job.cleanup(); job.reject(aborted()); this.dispatch();
         } else if (data.type === 'result' && this.active?.id === data.id) {
           if (data.gpuCache) this.info.gpuCache = data.gpuCache;
           const job = this.active; this.active = null;
@@ -54,17 +58,17 @@ export class LyraBackend extends EventTarget {
         }
       };
       const bytes=packageData.bytes.slice(0);
-      worker.postMessage({ type: 'prepare', device, usage, packageBytes:bytes, packageManifest:packageData.manifest, packageInfo:packageData.info },[bytes]);
+      worker.postMessage({ type: 'prepare', device, usage, searchDepth, packageBytes:bytes, packageManifest:packageData.manifest, packageInfo:packageData.info },[bytes]);
     });
     this.preparing.promise = promise;
     return promise;
   }
-  setUsage(usage) {
-    if (!this.ready || !['low','medium','high'].includes(usage)) return Promise.reject(Error('Invalid LYRA usage change'));
+  setUsage(usage, searchDepth = this.info?.searchDepth ?? 1) {
+    if (!this.ready || !['low','medium','high'].includes(usage) || ![1,2].includes(searchDepth)) return Promise.reject(Error('Invalid LYRA settings'));
     const id = ++this.sequence, cacheInfo = Object.fromEntries(['cacheSaved','cacheFailed','fromCache'].map(key=>[key,this.info[key]]));
     return new Promise((resolve,reject)=>{
       this.configurations.set(id,{resolve,reject});
-      this.worker.postMessage({type:'configure',id,usage,cacheInfo});
+      this.worker.postMessage({type:'configure',id,usage,searchDepth,cacheInfo});
     });
   }
   run(snapshot, { signal } = {}) {
@@ -74,7 +78,11 @@ export class LyraBackend extends EventTarget {
     return new Promise((resolve, reject) => {
       if (this.queued) { this.queued.cleanup(); this.queued.reject(aborted()); }
       const job = { id: ++this.sequence, snapshot, signal, resolve, reject };
-      const cancel = () => { if (this.queued === job) this.queued = null; job.cleanup(); reject(aborted()); };
+      const cancel = () => {
+        if (this.queued === job) this.queued = null;
+        if (this.active === job) this.worker?.postMessage({ type: 'cancel', id: job.id });
+        job.cleanup(); reject(aborted());
+      };
       job.cleanup = () => signal?.removeEventListener('abort', cancel);
       signal?.addEventListener('abort', cancel, { once: true });
       this.queued = job; this.dispatch();

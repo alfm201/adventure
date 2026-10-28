@@ -20,6 +20,7 @@ export class Coordinator extends EventTarget {
       workers: null,
       lyraDevice: "auto",
       lyraUsage: "medium",
+      lyraDepth: 1,
     };
     this.gpu = null;
     this.requestId = 0;
@@ -143,7 +144,7 @@ export class Coordinator extends EventTarget {
     if (this.lyra?.ready && this.lyra.info.preference === options.device) {
       const info = await this.lyra.prepare({ ...options, deferUsage: true });
       if (options.signal?.aborted || epoch !== this.modelEpoch) throw new DOMException("Cancelled", "AbortError");
-      diagnostics.record('model.reuse', { id:LYRA_MODEL_ID, device:options.device, usage:options.usage ?? 'medium' });
+      diagnostics.record('model.reuse', { id:LYRA_MODEL_ID, device:options.device, usage:options.usage ?? 'medium', searchDepth:options.searchDepth ?? 1 });
       return info;
     }
     const backend = this.preparedLyra = new LyraBackend();
@@ -156,7 +157,7 @@ export class Coordinator extends EventTarget {
         this.supportChanged(); this.notice("GPU 계산을 중단하고 CPU로 전환했습니다.");
       }
     });
-    diagnostics.record("model.prepare", { id: LYRA_MODEL_ID, device: options.device, usage: options.usage ?? 'medium' });
+    diagnostics.record("model.prepare", { id: LYRA_MODEL_ID, device: options.device, usage: options.usage ?? 'medium', searchDepth:options.searchDepth ?? 1 });
     const info = await backend.prepare(options);
     if (options.signal?.aborted || epoch !== this.modelEpoch) throw new DOMException("Cancelled", "AbortError");
     return info;
@@ -257,7 +258,7 @@ export class Coordinator extends EventTarget {
       revision = this.session.revision,
       controller = (this.controller = new AbortController());
     this.calculationStartedAt = performance.now();
-    const p = this.settings.model === "lyra" ? { model: "lyra", engine: this.lyra?.info?.engine ?? "cpu", device: this.settings.lyraDevice, usage: this.settings.lyraUsage }
+    const p = this.settings.model === "lyra" ? { model: "lyra", engine: this.lyra?.info?.engine ?? "cpu", device: this.settings.lyraDevice, usage: this.settings.lyraUsage, searchDepth: this.settings.lyraDepth }
       : this.settings.model === "vela" ? { model: "vela", engine: "cpu" } : profile(this.settings, {
         noEarlyStop:
           new URLSearchParams(location.search).get("noEarlyStop") === "1",
@@ -292,7 +293,7 @@ export class Coordinator extends EventTarget {
         if (!current()) return;
         if (!this.lyra?.ready) {
           if (!this.lyra) throw Error("LYRA is not prepared");
-          await this.lyra.prepare({ device: this.settings.lyraDevice, usage: this.settings.lyraUsage, signal: controller.signal });
+          await this.lyra.prepare({ device: this.settings.lyraDevice, usage: this.settings.lyraUsage, searchDepth: this.settings.lyraDepth, signal: controller.signal });
           if (!current()) return;
         }
         const result = await evaluateLyra({ snapshot: state, backend: this.lyra, signal: controller.signal, requestId: id, revision });
@@ -381,7 +382,7 @@ export class Coordinator extends EventTarget {
         }
         this.cancelModelPreparation();
         if (!this.lyra?.ready) throw Error("LYRA is not prepared");
-        await this.lyra.setUsage(this.settings.lyraUsage);
+        await this.lyra.setUsage(this.settings.lyraUsage, this.settings.lyraDepth);
         if (!current()) return;
         this.vela?.dispose(); this.vela = null;
         this.cpu?.dispose(); this.cpu = null;

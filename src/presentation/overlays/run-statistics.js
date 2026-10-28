@@ -1,6 +1,7 @@
 import { canOpenDialog, dialog } from "./dialogs.js";
 import { translate, numberLocale } from "../../localization/index.js";
 import { createRunChart } from "../components/run-chart.js";
+import { bindMetricHints } from "../components/metric-hint.js";
 
 const t = (text, ...values) => values.reduce((s, value, i) => s.replaceAll(`{${i}}`, value), translate(text));
 const fmt = n => n.toLocaleString(numberLocale());
@@ -30,7 +31,7 @@ export function showRunStatistics(run, fresh = true) {
       const term = element('dt', '', t(label));
       if (hint) {
         const button = element('button', 'run-metric-hint', 'ⓘ'); button.type = 'button';
-        button.setAttribute('aria-label', t(label)); term.append(button); hints.push({button, text:t(hint)});
+        button.setAttribute('aria-label', t(label)); term.append(button); hints.push({button, text:hint});
       }
       amount.append(element("span", "", t(unit))); metric.append(term, amount); metrics.append(metric);
     }
@@ -47,23 +48,7 @@ export function showRunStatistics(run, fresh = true) {
   chart?.setBusy(true);
   const modal = dialog(t("이번 판 결과"), body, { className: "run-statistics", closeOnOutside: false });
   chart?.attach(modal);
-  const hint = element('div', 'run-tooltip run-metric-tooltip'); hint.role = 'tooltip'; hint.id = `run-metric-tip-${run.id}`; hint.hidden = true; modal.append(hint);
-  let activeHint;
-  const hideHint = () => { hint.hidden = true; activeHint?.removeAttribute('aria-describedby'); activeHint = null; };
-  const showHint = ({button, text}) => {
-    hideHint(); activeHint = button; hint.textContent = text; hint.hidden = false; button.setAttribute('aria-describedby', hint.id);
-    const r = button.getBoundingClientRect(), box = hint.getBoundingClientRect();
-    hint.style.left = `${Math.max(10, Math.min(innerWidth - box.width - 10, r.left + r.width / 2 - box.width / 2))}px`;
-    hint.style.top = `${r.top > box.height + 14 ? r.top - box.height - 8 : r.bottom + 8}px`;
-  };
-  for (const item of hints) {
-    item.button.onpointerenter = event => { if (event.pointerType !== 'touch') showHint(item); };
-    item.button.onpointerleave = event => { if (event.pointerType !== 'touch') hideHint(); };
-    item.button.onfocus = () => showHint(item); item.button.onblur = hideHint;
-    item.button.onclick = () => showHint(item);
-  }
-  const outsideHint = event => { if (!hints.some(item => item.button.contains(event.target))) hideHint(); };
-  document.addEventListener('pointerdown', outsideHint, true);
+  const { hide: hideHint } = bindMetricHints(modal, hints);
   modal.querySelector('.dialog-close').focus({preventScroll:true});
   const motion = matchMedia("(prefers-reduced-motion: reduce)");
   let frame = 0, closed = false;
@@ -100,7 +85,6 @@ export function showRunStatistics(run, fresh = true) {
     closed = true; finish(); chart?.dispose();
     removeEventListener("resize", settle); removeEventListener("scroll", settle, true);
     document.removeEventListener("visibilitychange", visibility); motion.removeEventListener("change", settle);
-    document.removeEventListener('pointerdown', outsideHint, true);
   }, { once: true });
   return modal;
 }
