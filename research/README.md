@@ -71,7 +71,7 @@ LYRA aimed to build an iterative self-improvement loop: collect games with a mod
 
 ### 5. LYRA v2: same policy, larger value network
 
-LYRA v2 uses the same 1-step policy with the 15.4M value network **M₄₀**. Instead of continuing from V₂₀, the larger network was trained from V₀ for 40 rounds with one fixed recipe. In a sealed evaluation on 10K new seed pairs it scored +1.00 points above π₂₀ (simultaneous CI [0.53, 1.46]), and +1.08 in a confirmation at deployment precision (FP32). It comes from a single training run, so the reading that scale raises the plateau remains a hypothesis. [LYRA v2 report (Korean)](lyra-v2/report-ko.md)
+LYRA v2 uses the same 1-step policy with the 15.4M value network **M₄₀**. Instead of continuing from V₂₀, the larger network was trained from V₀ for 40 rounds with one fixed recipe. In a sealed evaluation on 10K new seed pairs it scored +1.00 points above π₂₀ (simultaneous CI [0.53, 1.46]), and +1.08 in a confirmation at deployment precision (FP32). The scale gain over 5.5M replicated with a second training seed, but a 61M model did not improve further. [LYRA v2 report (Korean)](lyra-v2/report-ko.md)
 
 ### 6. Follow-up: better prediction is not always better control
 
