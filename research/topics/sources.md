@@ -64,6 +64,7 @@ TT의 제한된 생성 실험은 `TT_GLOBAL_PREFLIGHT_20260930.md`, 정확한 �
 | L7 | `ENDGAME_PROTOCOL.md`, `scripts/endgame_policy_check.py`, `results/endgame_policy_{pi20,M20}.json` | 종반 정확해 상태에서 π₂₀·M₂₀의 regret, 손패 수별 행동가치 상대 오차, 회수 가능 점수의 하한 |
 | L8 | `SCALE_VI_PLAN.md`의 FP32 확인 평가·예측기 절, `scripts/svi_eval.py`, `scripts/score_ref.py`, `scripts/score_predictor.py`, `results/score_m40/` | LYRA v2의 FP32 확인 평가, 예상 최종 점수 예측기의 라벨·초기 상태 보정·정확도 |
 | L9 | `SCALE_VI_PLAN.md`의 L군·S2·수평선 점검·SCV·완화 게임 사전 검사 절, `results/svi/`, `results/relaxed_pretest_*.json` | 규모의 한계, 행동 간 값 차이가 정체의 위치라는 근거 |
+| L10 | `SCALE_VI_PLAN.md`의 DLOOP·SRCH0–2·FIT·FOCUS 절, `scripts/s2f_m40_eval.py`, `scripts/srch2_eval.py`, `scripts/fit_test.py`, `scripts/focus_train.py`, `results/focus_dev.json` | M₄₀의 탐색 여지, 탐색 이득을 1-step 가치망으로 옮기는 시도와 그 한계 |
 
 LYRA의 학습 단계는 [포함된 재현 코드](../reproduction/README.ko.md#lyra-v1--v₂₀-신경망-가치-모델)와 대조했습니다. 후속 연구는 인용한 프로토콜에서 보고한 범위까지만 설명합니다. 고정 교사 학습의 정체, 정책 평가 파일럿의 판정 기준 불합격, 독립 가치 반복의 결과는 서로 다른 결과로 구분했습니다.
 
