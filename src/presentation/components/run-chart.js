@@ -36,7 +36,10 @@ export function createRunChart(run) {
   chart.append(defs); node.append(chart);
   const gapSteps = [...new Set(run.rows.filter(r => r.action.kind === "gap").map(r => r.step))].sort((a, b) => a - b);
   const gapLabels = gapSteps.length ? el("div", "run-gap-labels") : null;
-  if (gapLabels) { gapLabels.setAttribute("role", "note"); gapLabels.setAttribute("aria-label", t("기록 공백")); chart.before(gapLabels); }
+  if (gapLabels) {
+    gapLabels.setAttribute("role", "note"); gapLabels.setAttribute("aria-label", t("기록 공백"));
+    const plot = el("div", "run-chart-plot"); chart.replaceWith(plot); plot.append(gapLabels, chart);
+  }
   const values = [...points.map(p => p.value), run.finalScore], low = Math.min(...values), high = Math.max(...values);
   const span = Math.max(100, high - low), min = Math.floor((low - span * .16) / 25) * 25;
   const max = Math.ceil((high + span * .16) / 25) * 25;

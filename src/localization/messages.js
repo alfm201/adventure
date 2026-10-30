@@ -1,6 +1,7 @@
 // Korean source messages map to English, Japanese and Simplified Chinese.
 // Stage names use descriptive translations/transliterations, not verified regional game names.
 globalThis.adventureMessages = {
+  "화면 확인 중…": ["Checking screen…", "画面を確認中…", "正在确认画面…"],
   "빠름": ["Fast", "高速", "快速"],
   "탐색 강도": ["Search strength", "探索強度", "搜索强度"],
   "탐색 강도 안내": ["About search strength", "探索強度について", "搜索强度说明"],

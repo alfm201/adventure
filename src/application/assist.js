@@ -56,7 +56,7 @@ export class Assist extends EventTarget {
     this.history = null;
     this.historyReplayKey = null;
     this.reading = { ready: false, issue: "waiting", seen: 0 };
-    this.session.observe(null);
+    this.session.observe(null, { disconnected: true });
     this.unbindStream?.();
     this.unbindStream = null;
     stopTracks(this.stream);

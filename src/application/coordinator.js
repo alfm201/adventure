@@ -38,6 +38,7 @@ export class Coordinator extends EventTarget {
       if (["reset", "assist-sync", "mode"].includes(event.detail?.type)) this.forecast.clear();
       if (["reset", "mode"].includes(event.detail?.type)) this.completed = null;
       if (this.suspensions) return;
+      if (this.enabled && this.retainCalculation(event.detail)) return;
       if (this.enabled) this.recalculate({ reuse: ["assist-state", "assist-sync"].includes(event.detail?.type) });
       else this.cancel();
     });
@@ -154,7 +155,7 @@ export class Coordinator extends EventTarget {
       diagnostics.record("lyra.backend", backend.info);
       if (this.lyra === backend) {
         this.completed = null;
-        if (this.result.model === "lyra" && this.result.status === "running")
+        if (this.result.model === "lyra" && (this.result.status === "running" || this.result.computing))
           this.publish({ ...this.result, profile: { ...this.result.profile, engine: backend.info.engine } });
         this.supportChanged(); this.notice("GPU 계산을 중단하고 CPU로 전환했습니다.");
       }
@@ -247,6 +248,7 @@ export class Coordinator extends EventTarget {
   cancel() {
     if (this.result.status === "running") diagnostics.record("calculation.cancel", { requestId: this.requestId });
     this.requestId++;
+    this.calculation = null;
     this.controller?.abort();
     this.publish({ status: !this.session.canRecommend ? "paused" : this.enabled ? "idle" : "disabled", model: this.settings.model, actions: [] });
   }
@@ -254,6 +256,26 @@ export class Coordinator extends EventTarget {
     if (this.session.mode !== "assist" || result.status !== "complete") return;
     this.completed = { key: JSON.stringify([state, this.settings]), backend: this.calculationBackend,
       result: { ...result } };
+  }
+  publishPendingCalculation(task) {
+    this.publish({ status: "paused", model: this.settings.model, requestId: task.id, actions: [],
+      computing: task.latest?.status === "running", awaitingConfirmation: true,
+      profile: task.latest?.profile, modelName: task.latest?.modelName,
+      elapsedMs: task.latest?.elapsedMs, totalSamples: task.latest?.totalSamples });
+  }
+  retainCalculation(detail) {
+    const task = this.calculation;
+    if (!task || !["assist-state", "assist-sync"].includes(detail?.type) || detail.newGame || detail.disconnected ||
+        this.session.mode !== "assist" || task.mode !== "assist" || task.id !== this.requestId || task.controller.signal.aborted ||
+        task.key !== JSON.stringify([this.session.state, this.settings])) return false;
+    task.revision = this.session.revision;
+    if (!this.session.canRecommend) {
+      this.publishPendingCalculation(task);
+    } else if (task.latest) {
+      this.publish({ ...task.latest, revision: task.revision });
+      if (task.finished && this.calculation === task) this.calculation = null;
+    }
+    return true;
   }
   async recalculate({ reuse = false } = {}) {
     this.cancel();
@@ -277,18 +299,29 @@ export class Coordinator extends EventTarget {
       this.publish({ ...this.completed.result, requestId: id, revision, reused: true });
       return;
     }
-    this.publish({
+    const task = this.calculation = { id, revision, controller, mode: this.session.mode,
+      key: JSON.stringify([state, this.settings]), finished: false };
+    const current = () =>
+      id === this.requestId &&
+      task.revision === this.session.revision &&
+      !controller.signal.aborted;
+    const accept = result => {
+      if (!current()) return;
+      task.latest = { ...result, requestId: id, revision: task.revision };
+      this.remember(task.latest, state);
+      if (this.session.canRecommend) this.publish(task.latest);
+      else if (this.result.computing !== (result.status === "running")) this.publishPendingCalculation(task);
+      else Object.assign(this.result, { elapsedMs: result.elapsedMs, totalSamples: result.totalSamples });
+    };
+    task.latest = {
       status: "running",
       model: this.settings.model,
       actions: state.hand.map(() => null),
       profile: p,
       ...(p.model === "lyra" ? { modelName: this.lyra?.info?.manifest?.name ?? LYRA_MODEL_NAME } : p.model === "vela" ? { modelName: this.vela?.info?.manifest?.name ?? VELA_MODEL_NAME } : {}),
       requestId: id,
-    });
-    const current = () =>
-      id === this.requestId &&
-      revision === this.session.revision &&
-      !controller.signal.aborted;
+    };
+    this.publish(task.latest);
     try {
       const seed = this.settings.model === "x36" ? freshSeed() : null;
       diagnostics.record("calculation.start", { requestId: id, revision, profile: p, seed, snapshot: state });
@@ -301,7 +334,7 @@ export class Coordinator extends EventTarget {
           if (!current()) return;
         }
         const result = await evaluateLyra({ snapshot: state, backend: this.lyra, signal: controller.signal, requestId: id, revision });
-        if (current()) { this.remember(result, state); this.publish(result); }
+        accept(result);
         return;
       }
       if (this.settings.model === "vela") {
@@ -318,7 +351,7 @@ export class Coordinator extends EventTarget {
         }
         const result = await evaluateVela({ snapshot: state, backend: this.vela,
           signal: controller.signal, requestId: id, revision, strength: this.settings.velaStrength });
-        if (current()) { this.remember(result, state); this.publish(result); }
+        accept(result);
         return;
       }
       const { CpuBackend, evaluate } = await this.loadX36();
@@ -339,10 +372,10 @@ export class Coordinator extends EventTarget {
         requestId: id,
         revision,
         onProgress: (r) => {
-          if (current()) this.publish(r);
+          accept(r);
         },
       });
-      if (current()) { this.remember(result, state); this.publish(result); }
+      accept(result);
     } catch (error) {
       if (current() && error.name !== "AbortError") {
         controller.abort();
@@ -367,6 +400,9 @@ export class Coordinator extends EventTarget {
           profile: p,
         });
       }
+    } finally {
+      task.finished = true;
+      if (this.calculation === task && (this.session.canRecommend || !current())) this.calculation = null;
     }
   }
   async configure(settings) {

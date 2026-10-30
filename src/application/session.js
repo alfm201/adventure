@@ -47,18 +47,18 @@ export class Session extends EventTarget {
       terminal: this.board.terminal,
     };
   }
-  observe(state, { ready = false, synchronized = false, statistics, newGame = false } = {}) {
+  observe(state, { ready = false, synchronized = false, statistics, newGame = false, disconnected = false } = {}) {
     if (this.mode !== "assist") return false;
     const changed = ready && state && JSON.stringify(this.state) !== JSON.stringify(state);
     if (changed) restore(this.board, state);
-    if (!changed && this.assistReady === ready && !synchronized && statistics?.complete !== false) return false;
+    if (!changed && this.assistReady === ready && !synchronized && !newGame && !disconnected && statistics?.complete !== false) return false;
     this.assistReady = ready;
     this.edited = true;
     this.highScore = Math.max(this.highScore, this.board.score);
     this.revision++;
     diagnostics.record("assist.state", { ready, synchronized, state: this.state });
     this.dispatchEvent(new CustomEvent("change", { detail: {
-      type: synchronized ? "assist-sync" : "assist-state", ready, synchronized, statistics, newGame,
+      type: synchronized ? "assist-sync" : "assist-state", ready, synchronized, statistics, newGame, disconnected,
     } }));
     return true;
   }

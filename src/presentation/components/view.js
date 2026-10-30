@@ -53,9 +53,11 @@ export class GameView {
     }
   }
   render(session, result) {
+    const computation = result;
+    const computing = (result.status === 'running' && session.canRecommend) || (result.status === 'paused' && result.computing === true);
     this.inferenceIndicator.update({
-      running: session.canRecommend && result.status === 'running',
-      key: JSON.stringify([result.model || result.profile?.model, result.requestId, session.revision]),
+      running: computing,
+      key: JSON.stringify([result.model || result.profile?.model, result.requestId]),
       startedAt: result.startedAt,
     });
     // Keep prior values for display while assist is observing an action. The
@@ -68,7 +70,7 @@ export class GameView {
         result.revision === session.revision)
       this.assistDisplay = { stateKey, result };
     const holding = session.mode === "assist" && !session.canRecommend &&
-      result.status === "paused" && !!this.assistDisplay;
+      result.status === "paused" && !computing && !!this.assistDisplay;
     if (holding) result = this.assistDisplay.result;
     const s = session.state,
       t = tiles[s.position - 1],
@@ -97,9 +99,9 @@ export class GameView {
     text("stage-name", `${t.stage}.${stageNames[t.stage - 1]}`);
     text("stage-position", t.ordinal);
     text("dice-used", s.diceUsed);
-    const forecast = result.forecast || {};
+    const forecast = computing && !session.canRecommend ? { pending: true } : result.forecast || {};
     text("forecast-label", forecast.terminal ? "최종 점수" : "예상 최종 점수");
-    text("forecast-value", Number.isFinite(forecast.value) ? number(forecast.value, 0) + "점" : forecast.pending ? "계산 중…" : "—");
+    text("forecast-value", Number.isFinite(forecast.value) ? number(forecast.value, 0) + "점" : forecast.pending ? "계산 중…" : computation.awaitingConfirmation ? "화면 확인 중…" : "—");
     document.getElementById("forecast-value").title = holding ? "직전 확정 상태의 예상 점수입니다." : "";
     text("forecast-delta", forecast.delta ? `(${forecast.delta > 0 ? "+" : ""}${number(forecast.delta, 0)})` : "");
     document.querySelector("#forecast-delta").dataset.direction = forecast.delta > 0 ? "up" : "down";
@@ -171,7 +173,7 @@ export class GameView {
       const available = a === 0 || a <= s.hand.length,
         r = result.actions?.[a],
         score = vela ? r?.value : r?.mean;
-      let value = disabled || !session.canRecommend && !holding ? "—" : !available
+      let value = computing && available && !session.canRecommend ? "계산중..." : disabled || !session.canRecommend && !holding ? "—" : !available
         ? (vela ? "—" : "0.000점")
         : result.status === "error"
           ? "오류"
@@ -204,7 +206,7 @@ export class GameView {
             : near
               ? "근접"
               : statusLabels[r?.status] ||
-                (result.status === "running" ? "계산중" : "—");
+                (computing ? "계산중" : "—");
       const values = [
         a
           ? `${a}번 카드${s.hand[a - 1] ? " · " + cardLabels[s.hand[a - 1] - 1] : ""}`
@@ -225,16 +227,17 @@ export class GameView {
     });
     text("center-label", vela ? "평가값" : result.profile?.engine === "cpu" ? "중앙값" : "평균");
     clearTimeout(this.detailTimer);
-    if (result.status === "running" && Number.isFinite(result.startedAt)) {
-      const model = result.modelName ?? (lyra ? LYRA_MODEL_NAME : VELA_MODEL_NAME), engine = (result.profile?.engine ?? 'cpu').toUpperCase();
-      const description = !lyra ? model : result.profile?.device === 'auto'
+    const activity = computing || computation.awaitingConfirmation ? computation : result;
+    if (computing && Number.isFinite(activity.startedAt)) {
+      const model = activity.modelName ?? (lyra ? LYRA_MODEL_NAME : VELA_MODEL_NAME), engine = (activity.profile?.engine ?? 'cpu').toUpperCase();
+      const description = !lyra ? model : activity.profile?.device === 'auto'
         ? message('{0} · {1} · {2}', model, message('자동'), engine) : `${model} · ${engine}`;
       const detail = document.getElementById('evaluation-detail');
       const updateDetail = () => {
-        const elapsed = Math.max(0, performance.now() - result.startedAt);
+        const elapsed = Math.max(0, performance.now() - activity.startedAt);
         const seconds = (elapsed / 1000).toLocaleString(numberLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 });
         if (vela) setLocalizedText(detail, '{0} · {1}초 · 계산중', description, seconds);
-        else setLocalizedText(detail, '{0} · G3 · {1}초 · 실제 {2}회{3}', engine, seconds, number(result.totalSamples ?? 0, 0), ' ' + translate('· 계산중'));
+        else setLocalizedText(detail, '{0} · G3 · {1}초 · 실제 {2}회{3}', engine, seconds, number(activity.totalSamples ?? 0, 0), ' ' + translate('· 계산중'));
         // Refresh only this line; do not redraw the board or restart inference.
         this.detailTimer = setTimeout(updateDetail, 100);
       };
@@ -243,10 +246,10 @@ export class GameView {
     }
     text(
       "evaluation-detail",
-      result.status === "error"
-        ? result.message
-        : result.elapsedMs !== undefined
-          ? vela ? `${result.modelName}${lyra ? ` · ${result.profile?.device === 'auto' ? '자동 · ' : ''}${result.profile?.engine.toUpperCase()}` : ''} · ${(result.elapsedMs / 1000).toLocaleString(numberLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 3 })}초` : `${result.profile?.engine.toUpperCase()} · G3 · ${(result.elapsedMs / 1000).toLocaleString(numberLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 2 })}초 · 실제 ${number(result.totalSamples, 0)}회${result.status === "running" ? " · 계산중" : ""}`
+      activity.status === "error"
+        ? activity.message
+        : activity.elapsedMs !== undefined
+          ? vela ? `${activity.modelName}${lyra ? ` · ${activity.profile?.device === 'auto' ? '자동 · ' : ''}${activity.profile?.engine.toUpperCase()}` : ''} · ${(activity.elapsedMs / 1000).toLocaleString(numberLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 3 })}초` : `${activity.profile?.engine.toUpperCase()} · G3 · ${(activity.elapsedMs / 1000).toLocaleString(numberLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 2 })}초 · 실제 ${number(activity.totalSamples, 0)}회${activity.status === "running" ? " · 계산중" : ""}`
           : "",
     );
   }
