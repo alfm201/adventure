@@ -8,22 +8,24 @@ Assist mode offers **voice guidance** in Korean, English, Japanese and Chinese, 
 
 ## Choose a model
 
-| Model | How it evaluates actions | Average score |
-| --- | --- | ---: |
-| **LYRA · v2** | Neural network with 1-step search on CPU or GPU | About 1,880 |
-| **VELA · v4.3** | Evaluates future states on CPU, searching deeper in close decisions | About 1,878.6 |
-| **X36 · G3** | Compares actions through repeated simulations on CPU or GPU | About 1,860 |
+| Model | How it evaluates actions | Average score | Mean type |
+| --- | --- | ---: | --- |
+| **LYRA · v2** | Neural network with 1-step search on CPU or GPU | About 1,880.1 | Adjusted mean |
+| **VELA · v4.3** | Evaluates future states on CPU, searching deeper in close decisions | About 1,878.6 | Adjusted mean |
+| **X36 · G3** | Compares actions through repeated simulations on CPU or GPU | About 1,860.0 | Raw mean |
 
-**VELA search strength**
+**Results by search**
 
-| Search strength | Average score |
-| --- | ---: |
-| Fast | About 1,877.2 |
-| Normal | About 1,878.6 |
-| High | About 1,879.3 |
-| Max | About 1,879.8 |
+| Model | Search | Average score | Decision time |
+| --- | --- | ---: | --- |
+| **LYRA · v2** | Default search | About 1,880.1 | Mostly instant |
+| | Deep search | About 1,881.0 | Several seconds or more |
+| **VELA · v4.3** | Fast | About 1,877.2 | Instant |
+| | Normal | About 1,878.6 | Mostly instant |
+| | High | About 1,879.3 | Up to about 1 s in close calls |
+| | Max | About 1,879.8 | Up to several seconds in close calls |
 
-These scores are reference figures from different evaluations. VELA's default search strength is Normal, and the VELA score in the model table is for Normal. Higher strengths take longer on close decisions, and computation time also depends on your device and the game state. VELA v4.3 uses the same model file as VELA v4.2.
+These scores are reference figures from different evaluations. Adjusted means use a martingale control variate (Martingale CV) based on each model to reduce luck-driven error in the estimated average. All scores by search are adjusted means. The defaults are LYRA Default search and VELA Normal, and the model table shows the defaults. Deeper search takes longer per decision, and computation time also depends on your device and the game state. VELA v4.3 uses the same model file as VELA v4.2.
 
 VELA is selected by default. LYRA is a research model that can run on CPU or GPU. With device selection set to Automatic, it uses an available GPU first and falls back to CPU if initialization or inference fails.
 
