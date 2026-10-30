@@ -192,6 +192,22 @@ export function dialog(title, body, { className = "", parent = null, closeOnOuts
     (body.querySelector("button.primary:not(:disabled)") ?? body.querySelector("button:not(:disabled)") ?? node.querySelector(".dialog-close"))?.focus({ preventScroll: true });
   return node;
 }
+// Move an open dialog to its next screen with the same motion as closing one dialog and opening the next (90 ms out, 120 ms in).
+export function stepDialog(node, render) {
+  const target = node.querySelector('.help-bubble') || node;
+  if (document.hidden || matchMedia('(prefers-reduced-motion: reduce)').matches || !target.animate) { render(); return; }
+  node.inert = true;
+  const out = target.animate([{ opacity: 1, scale: '1' }, { opacity: 0, scale: '.975' }], { duration: 90, easing: 'ease-in', fill: 'forwards' });
+  let done = false;
+  const swap = () => {   // onfinish, or the timer when frames are not running (same fallback as closing)
+    if (done) return; done = true; clearTimeout(timer); node.inert = false;
+    if (!node.open || node.classList.contains('dialog-closing')) return;
+    render(); out.cancel();
+    target.animate([{ opacity: 0, scale: '.975' }, { opacity: 1, scale: '1' }], { duration: 120, easing: 'ease-out' });
+  };
+  const timer = setTimeout(swap, 130);
+  out.onfinish = swap;
+}
 export function askValue(title, {
   value = "", min, max, text = false, label: fieldLabel = "값",
   hint, placeholder = "",

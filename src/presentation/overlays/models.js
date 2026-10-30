@@ -1,4 +1,6 @@
-import { dialog, confirmAction, paintChoices, toast, canOpenDialog } from "./dialogs.js";
+import { VELA_SEARCH, velaSearch } from "../../policies/vela/search.js";
+import { bindMetricHints } from "../components/metric-hint.js";
+import { dialog, confirmAction, paintChoices, toast, canOpenDialog, stepDialog } from "./dialogs.js";
 import { showSettings } from "./settings.js";
 import { modelComparison } from "../../content/models.js";
 import { sameModel, LOCAL_MODEL as localModel } from "../../compute/vela/model.js";
@@ -9,11 +11,11 @@ import { showDiagnostics } from "./diagnostics.js";
 import { downloadProgress } from "./download-progress.js";
 
 import { megabytes, memoryText, preparationConsent, preparationProgress, preparationReady, preparationStage } from "./model-preparation.js";
-import { setLocalizedAttribute } from '../../localization/index.js';
+import { pageLanguage, setLocalizedAttribute } from '../../localization/index.js';
 const transferLabel = localModel ? "파일 읽기" : "다운로드";
 const comparison = model => {
   const { meanScore, relativeTime } = modelComparison[model];
-  return `<span class="model-choice-metrics"><span>평균 기록 <b>약 ${Math.round(meanScore).toLocaleString("ko-KR")}점</b></span><span>추론 시간 <b>${relativeTime}</b></span></span>`;
+  return `<span class="model-choice-metrics"><span>평균 기록 <b>약 ${(model === "vela" ? meanScore : Math.round(meanScore)).toLocaleString("ko-KR")}점</b></span><span>추론 시간 <b>${relativeTime}</b></span></span>`;
 };
 export function showModelSelection(coordinator, { initial = false, selectedModel, onFinish, parent = null } = {}) {
   if (!canOpenDialog(parent)) return;
@@ -22,7 +24,12 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
   let busy = false;
   const node = dialog("모델 선택", body, { className: "model-dialog", parent, closeOnOutside: () => !busy });
   let controller, epoch = 0, handedOff = false, selected = selectedModel ?? (coordinator.enabled ? coordinator.settings.model : "vela");
-  let ready = false;
+  const refreshStrengthLabels = () => body.querySelectorAll("[data-search-label]").forEach(label => {
+    const option = velaSearch(label.dataset.searchLabel); label.textContent = option.labels[pageLanguage()] ?? option.label;
+  });
+  addEventListener("adventurelanguagechange", refreshStrengthLabels);
+  node.addEventListener("close", () => removeEventListener("adventurelanguagechange", refreshStrengthLabels), { once: true });
+  let ready = false, strength = coordinator.settings.velaStrength ?? "normal", strengthHints;
   node.addEventListener('closing', () => { epoch++; controller?.abort(); });
   const heading = node.querySelector("h2");
   const settingsEntry = document.createElement('button');
@@ -32,12 +39,15 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
   settingsEntry.onclick = () => document.dispatchEvent(new CustomEvent('adventureopensettings', {detail:{parent:node}}));
   node.querySelector('.dialog-header').insertBefore(settingsEntry, node.querySelector('.dialog-close'));
   const focusPrimary = () => body.querySelector(".primary:not(:disabled)")?.focus({ preventScroll: true });
+  // Screen changes inside this dialog use the shared dialog switch motion (LYRA moves between separate dialogs).
+  // Leaving a screen ends its ready state at once, so closing during the motion never applies the abandoned model.
+  const step = next => () => { ready = false; stepDialog(node, next); };
   const leave = next => { handedOff = true; node.addEventListener("close", next, { once: true }); node.close(); };
   node.addEventListener("close", () => {
     resume();
     epoch++; controller?.abort(); coordinator.removeEventListener("capabilities", refreshSupport);
     if (handedOff) return;
-    if (ready) { coordinator.configure({ model: 'vela' }); onFinish?.(); return; }
+    if (ready) { coordinator.configure({ model: 'vela', velaStrength: strength }); onFinish?.(); return; }
     coordinator.cancelModelPreparation();
     if (initial && !coordinator.enabled) confirmSkip();
     else {
@@ -55,7 +65,7 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
       hint.textContent = compatibilityMessage(support.code).title;
       showSupport(detail, support.code, { retry: () => coordinator.checkVela(true), target: "VELA 사용 가능 여부", label: "이유·해결 방법" });
       if (selected === "vela") { selected = "lyra"; body.querySelector('[name=model][value=lyra]').checked = true; }
-    } else { hint.textContent = "CPU 전용 · 매우 낮은 연산 부하"; detail.replaceChildren(); }
+    } else { hint.textContent = "CPU 전용 · 탐색 강도 선택 가능"; detail.replaceChildren(); }
     body.querySelector(".primary").disabled = selected === "vela" && input.disabled;
     input.closest(".model-option").classList.toggle("has-support", !!detail.firstElementChild);
     paintChoices(body);
@@ -73,6 +83,7 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
     else showModelSelection(coordinator, { initial, selectedModel: selected, onFinish, parent });
   }
   function select() {
+    strengthHints?.dispose(); strengthHints = null;
     busy = false;
     ready = false;
     settingsEntry.hidden = false;
@@ -83,7 +94,7 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
         <div class="model-option lyra-option"><label class="model-choice"><input type="radio" name="model" value="lyra"><span class="model-choice-copy"><strong class="model-choice-heading"><span class="model-name">LYRA <small>v2</small></span><span class="model-research-badge">연구용</span></strong><span>신경망 가치 추정으로 행동 비교</span><span class="model-choice-metrics"><span>연구 평가 <b>약 ${Math.round(modelComparison.lyra.meanScore).toLocaleString('ko-KR')}점</b></span><span>추론 시간 <b>${modelComparison.lyra.relativeTime}</b></span></span><small>GPU 또는 CPU · 사용량 선택 가능</small></span><span class="model-check" aria-hidden="true"></span></label>
 
         </div>
-        <div class="model-option"><label class="model-choice"><input type="radio" name="model" value="vela"><span class="model-choice-copy"><strong>VELA <small>v4.2</small></strong><span>가치 모델과 탐색으로 행동 비교</span>${comparison("vela")}<small class="vela-availability">사용 가능 여부 확인 중</small></span><span class="model-check" aria-hidden="true"></span></label><div class="model-support vela-support"></div></div>
+        <div class="model-option"><label class="model-choice"><input type="radio" name="model" value="vela"><span class="model-choice-copy"><strong>VELA <small>v4.3</small></strong><span>가치 모델과 탐색으로 행동 비교</span>${comparison("vela")}<small class="vela-availability">사용 가능 여부 확인 중</small></span><span class="model-check" aria-hidden="true"></span></label><div class="model-support vela-support"></div></div>
         <label class="model-choice"><input type="radio" name="model" value="x36"><span class="model-choice-copy"><strong>X36 <small>G3</small></strong><span>반복 시뮬레이션으로 행동 비교</span>${comparison("x36")}<small>GPU 또는 CPU · 사용량 선택 가능</small></span><span class="model-check" aria-hidden="true"></span></label>
       </div>
       <p class="model-comparison-note">참고값 · 모델별 평가 표본이 다름 · 기기·상태별 차이</p>
@@ -93,13 +104,30 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
     body.querySelector(`[value="${selected}"]`).checked = true;
     body.querySelectorAll("[name=model]").forEach(input => input.onchange = () => { selected = input.value; refreshSupport(); });
     body.querySelector(".model-cancel").onclick = () => node.close();
-    body.querySelector(".primary").onclick = () => selected === "lyra" ? selectLyra() : selected === "vela" ? inspectVela() : loadX36();
+    body.querySelector(".primary").onclick = () => selected === "lyra" ? selectLyra() : selected === "vela" ? step(selectStrength)() : loadX36();
     coordinator.checkVela(); coordinator.checkLyraGpu(); refreshSupport(); focusPrimary();
   }
   function selectLyra() {
     leave(() => showSettings(coordinator, { model: 'lyra', initial, parent,
       onBack: () => showModelSelection(coordinator, { initial, selectedModel: selected, onFinish, parent }),
       onCancel: initial && !coordinator.enabled ? confirmSkip : undefined, onFinish }));
+  }
+  function selectStrength() {
+    busy = false; ready = false; settingsEntry.hidden = true;
+    strengthHints?.dispose(); strengthHints = null;
+    heading.textContent = "VELA 탐색 강도";
+    // Rows like the model choices: name, default badge and decision time on the left, score in an aligned column on the right.
+    body.innerHTML = `<p class="model-intro">강도가 높을수록 접전에서 더 깊이 계산합니다.</p>
+      <div class="vela-strength-options" role="radiogroup" aria-label="탐색 강도">${VELA_SEARCH.map(option => `<label class="model-choice vela-strength-choice"><input type="radio" name="strength" value="${option.key}"><span class="model-choice-copy"><strong><span data-search-label="${option.key}" translate="no">${option.label}</span>${option.key === "normal" ? "<small>기본</small>" : ""}${option.hint ? `<button type="button" class="run-metric-hint" data-strength-hint="${option.key}" aria-label="${option.label} 안내">ⓘ</button>` : ""}</strong><span class="vela-strength-time">${option.time}</span></span><span class="vela-strength-score">${option.score.toLocaleString("ko-KR", { minimumFractionDigits: 1 })}점</span><span class="model-check" aria-hidden="true"></span></label>`).join("")}</div>
+      <footer><button type="button" class="model-back">모델 선택</button><span></span><button type="button" class="primary">다음</button><button type="button" class="model-cancel">취소</button></footer>`;
+    body.querySelector(`[name=strength][value=${strength}]`).checked = true;
+    body.querySelectorAll('[name=strength]').forEach(input => input.onchange = () => { strength = velaSearch(input.value).key; paintChoices(body); });
+    refreshStrengthLabels();
+    strengthHints = bindMetricHints(node, VELA_SEARCH.filter(option => option.hint).map(option => ({ button: body.querySelector(`[data-strength-hint=${option.key}]`), text: option.hint })));
+    body.querySelector('.model-back').onclick = step(select);
+    body.querySelector('.model-cancel').onclick = () => node.close();
+    body.querySelector('.primary').onclick = step(inspectVela);
+    paintChoices(body); focusPrimary();
   }
   async function inspectVela() {
     const current = progressScreen("VELA 준비"), signal = controller.signal;
@@ -121,9 +149,9 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
     busy = false;
     heading.textContent = "VELA 준비";
     body.innerHTML = preparationConsent({ bytes: manifest.bytes, intro: "이 PC의 모델 파일을 불러옵니다.", memory: memoryText(manifest), local: true, storage: false });
-    body.querySelector(".model-back").onclick = select;
+    body.querySelector(".model-back").onclick = step(selectStrength);
     const primary = body.querySelector(".primary"); primary.textContent = "모델 불러오기";
-    primary.onclick = () => loadVela(false, manifest);
+    primary.onclick = step(() => loadVela(false, manifest));
     focusPrimary();
   }
   function consent(manifest, issue) {
@@ -135,7 +163,7 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
       intro: resident ? "모델은 준비되어 있습니다. 다음 접속을 위한 저장 여부를 선택하세요." : localModel ? "이 PC의 모델 파일을 불러와 준비합니다." : "전체 모델을 한 번 내려받아 준비합니다.",
       memory: memoryText(manifest), saveHint: resident ? localModel ? "저장 시 파일을 다시 읽습니다" : "저장 시 다시 다운로드" : "" });
     if (!supported) showSupport(body.querySelector(".cache-support"), issue || "storage-unsupported", { retry: issue ? () => consent(manifest) : null, target: "모델 저장", retryLabel: "설정 변경" });
-    body.querySelector(".model-back").onclick = select;
+    body.querySelector(".model-back").onclick = step(selectStrength);
     const primary = body.querySelector(".primary"); primary.textContent = "모델 불러오기";
     primary.onclick = async () => {
       const persist = body.querySelector("[name=cache]:checked").value === "yes";
@@ -152,11 +180,12 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
       }
       if (!coordinator.setVelaCacheAllowed(persist) && persist) { consent(manifest, "storage-denied"); return; }
       if (persist) navigator.storage.persist?.().catch(() => {});
-      loadVela(persist, manifest);
+      step(() => loadVela(persist, manifest))();
     };
     paintChoices(body); focusPrimary();
   }
   function progressScreen(title, manifest) {
+    strengthHints?.dispose(); strengthHints = null;
     busy = true;
     ready = false;
     // Preparation can hand off to another dialog asynchronously. Settings are
@@ -164,7 +193,7 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
     settingsEntry.hidden = true;
     heading.textContent = title;
     body.innerHTML = preparationProgress({ transferLabel, memory: manifest ? memoryText(manifest) : "" });
-    body.querySelector(".model-back").onclick = select; body.querySelector(".model-cancel").onclick = () => node.close();
+    body.querySelector(".model-back").onclick = step(select); body.querySelector(".model-cancel").onclick = () => node.close();
     controller?.abort(); controller = new AbortController(); return ++epoch;
   }
   async function loadVela(persist, manifest, cachedOnly = false) {
@@ -173,7 +202,7 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
     signal.addEventListener("abort", () => transfer?.dispose(), { once: true });
     let downloaded = false;
     try {
-      const info = await coordinator.prepareVela({ persist, manifest, cachedOnly, signal, onProgress: data => {
+      const info = await coordinator.prepareVela({ persist, manifest, cachedOnly, strength, signal, onProgress: data => {
         if (current !== epoch || !node.open) return;
         transfer?.update(data);
         const cached = data.phase === "cache";
@@ -199,7 +228,7 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
       busy = false;
       body.innerHTML = preparationReady({ ...info, local: localModel, initial });
       if (info.cacheFailed) { showSupport(body.querySelector(".cache-support"), info.cacheIssue || "storage-failed", { target: "모델 저장" }); toast("모델을 저장하지 못했습니다. 이번에는 사용할 수 있습니다."); }
-      body.querySelector(".model-back").onclick = select;
+      body.querySelector(".model-back").onclick = step(select);
       body.querySelector(".primary").onclick = () => node.close();
       focusPrimary();
     } catch (error) { if (!signal.aborted && current === epoch && node.open) failure(error, inspectVela); }
@@ -226,7 +255,7 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
     body.innerHTML = '<p class="model-intro">다시 시도하거나 다른 모델을 선택할 수 있습니다.</p><div class="model-support failure-support"></div><footer><button class="model-back">모델 선택</button><button class="diagnostics-button">진단 정보</button><span></span><button class="primary">다시 시도</button></footer>';
     body.querySelector(".diagnostics-button").onclick = showDiagnostics;
     showSupport(body.querySelector(".failure-support"), error.code || "network", { target: "모델 준비" });
-    body.querySelector(".model-back").onclick = select; body.querySelector(".primary").onclick = retry; focusPrimary();
+    body.querySelector(".model-back").onclick = step(select); body.querySelector(".primary").onclick = retry; focusPrimary();
   }
   select(); return node;
 }

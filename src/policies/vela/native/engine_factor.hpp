@@ -1,5 +1,6 @@
 #pragma once
 #include "compact_factor.hpp"
+#include "cancellation.hpp"
 struct Compact100: Compact {
   std::vector<double> hdIID;
   using Compact::Compact;
@@ -51,14 +52,15 @@ template<bool Flat> struct FastPlanner {
  inline double after1(int h,int r,int b,int code,const DeckCtx&z)const{
   int p=code&4095;if(!r&&!b)return p;const auto&hm=T.hands[h];
   if(!(code&4096)||hm.n==5)return M.val(r,b,p,h,hm.n)+potential(z.sum,z.n,r,b);
-  long double sum=0;for(int j=0;j<z.k;j++){int hn=hm.add[z.c[j]];double leaf=M.val(r,b,p,hn,hm.n+1)+potential(z.after[j],z.nextn,r,b);sum+=(long double)z.count[j]*leaf;}return (double)(sum/z.n);
+  double sum=0;for(int j=0;j<z.k;j++){int hn=hm.add[z.c[j]];double leaf=M.val(r,b,p,hn,hm.n+1)+potential(z.after[j],z.nextn,r,b);sum+=(double)z.count[j]*leaf;}return (double)(sum/z.n);
  }
  double q1(const State&s,int a,int h,const DeckCtx&z)const{
   int id=a?s.h[a-1]:0;int hand=id?T.hands[h].remove[M.codec.idmap[id]]:h;int r=100-s.t;
   if(id&&CTYPE[id]!=2)return after1(hand,r,s.b,CTYPE[id]==3?NEXT[s.p]:LAND[s.p+CVAL[id]+3],z);
-  long double sum=0;for(int sm=2;sm<=12;sm++){int ways=6-abs(7-sm),dbl=!s.b&&(sm%2==0),code=id?LAND[s.p+CVAL[id]*sm+3]:ROLL[s.p*11+sm-2];if(ways-dbl)sum+=(ways-dbl)*after1(hand,r-!s.b,0,code,z);if(dbl)sum+=after1(hand,r-1,1,code,z);}return (double)(sum/36.0L);
+  double sum=0;for(int sm=2;sm<=12;sm++){int ways=6-abs(7-sm),dbl=!s.b&&(sm%2==0),code=id?LAND[s.p+CVAL[id]*sm+3]:ROLL[s.p*11+sm-2];if(ways-dbl)sum+=(ways-dbl)*after1(hand,r-!s.b,0,code,z);if(dbl)sum+=after1(hand,r-1,1,code,z);}return (double)(sum/36.0);
  }
  double V(const State&s,int dep,int hand=-1){
+  pollSearch();
   if(s.terminal())return s.p;if(dep==0)return M.leaf(s);int h=hand>=0?hand:M.codec.hand(s);const DeckCtx&dctx=context(s.deck);
   uint64_t key=uint64_t(s.p)|(uint64_t(100-s.t)<<12)|(uint64_t(s.b)<<19)|(uint64_t(h)<<20)|(uint64_t(dctx.code)<<37);double best;
   if(get(key,dep,best)){stat.hits++;return best;}stat.misses++;best=-1e300;uint32_t seen=0;
@@ -69,7 +71,7 @@ template<bool Flat> struct FastPlanner {
  double landed(State z,int code,int dep,int hand){
   z.p=code&4095;if(z.terminal())return z.p;if(!(code&4096)||z.n==5)return V(z,dep,hand);
   int count[23]={},rep[23]={};uint32_t bits=z.deck;while(bits){int bit=__builtin_ctz(bits);bits&=bits-1;int c=M.codec.idmap[bit+1];count[c]++;rep[c]=bit;}
-  int nn=__builtin_popcount(z.deck);long double sum=0;for(int c=1;c<=22;c++)if(count[c]){State y=z;int bit=rep[c];y.h[y.n++]=bit+1;y.deck&=~(1u<<bit);if(!y.deck)y.deck=0x3fffffff;sum+=(long double)count[c]*V(y,dep,T.hands[hand].add[c]);}return (double)(sum/nn);
+  int nn=__builtin_popcount(z.deck);double sum=0;for(int c=1;c<=22;c++)if(count[c]){State y=z;int bit=rep[c];y.h[y.n++]=bit+1;y.deck&=~(1u<<bit);if(!y.deck)y.deck=0x3fffffff;sum+=(double)count[c]*V(y,dep,T.hands[hand].add[c]);}return (double)(sum/nn);
  }
  double Q(const State&s,int a,int dep,int hand=-1){
   if(hand<0)hand=M.codec.hand(s);
@@ -77,7 +79,7 @@ template<bool Flat> struct FastPlanner {
   State z=s;int id=0;if(a){id=z.h[a-1];for(int j=a;j<z.n;j++)z.h[j-1]=z.h[j];--z.n;}
   int nextHand=id?T.hands[hand].remove[M.codec.idmap[id]]:hand;
   if(id&&CTYPE[id]!=2)return landed(z,CTYPE[id]==3?NEXT[s.p]:LAND[s.p+CVAL[id]+3],dep-1,nextHand);
-  long double sum=0;for(int sm=2;sm<=12;sm++){int ways=6-abs(7-sm),dbl=!s.b&&(sm%2==0),code=id?LAND[s.p+CVAL[id]*sm+3]:ROLL[s.p*11+sm-2];if(ways-dbl){State y=z;y.t=s.t+!s.b;y.b=0;sum+=(ways-dbl)*landed(y,code,dep-1,nextHand);}if(dbl){State y=z;y.t=s.t+1;y.b=1;sum+=landed(y,code,dep-1,nextHand);}}return (double)(sum/36.0L);
+  double sum=0;for(int sm=2;sm<=12;sm++){int ways=6-abs(7-sm),dbl=!s.b&&(sm%2==0),code=id?LAND[s.p+CVAL[id]*sm+3]:ROLL[s.p*11+sm-2];if(ways-dbl){State y=z;y.t=s.t+!s.b;y.b=0;sum+=(ways-dbl)*landed(y,code,dep-1,nextHand);}if(dbl){State y=z;y.t=s.t+1;y.b=1;sum+=landed(y,code,dep-1,nextHand);}}return (double)(sum/36.0);
  }
  int act(const State&s){
   stat.calls++;if(!s.n)return 0;clear();int hand=M.codec.hand(s);struct A{int a;double q;};std::vector<A>v;v.reserve(6);double best=-1e300,second=-1e300;int ans=0;uint32_t seen=0;
@@ -96,11 +98,11 @@ template<bool Flat> struct OptPlanner {
  uint64_t budget=0,used=0;void setBudget(uint64_t n){budget=n;used=0;}
  void spend(){if(budget&&used++>=budget)throw SearchLimit{};}
  bool rawMode=false;bool reuse,deckcache;std::string policy; Counters stat; struct DeckSlot {uint32_t key=0;DeckCtx value;}; std::vector<DeckSlot> decks; DeckCtx scratch;
- std::unordered_map<uint64_t,double,KeyHash> maps[4];
+ std::unordered_map<uint64_t,double,KeyHash> maps[6];
  struct Entry {uint64_t key=0;double value=0;uint32_t gen=0;};
- std::vector<Entry> tt[4]; uint32_t epoch=1;
- OptPlanner(Compact100&m,Meta&t,std::string p,bool r,bool dc=false):M(m),T(t),hd(m,t),reuse(r),deckcache(dc),policy(std::move(p)){if(dc)decks.resize(4096);if constexpr(Flat){tt[1].resize(1<<16);tt[2].resize(1<<14);tt[3].resize(1<<12);}else{maps[1].reserve(8192);maps[2].reserve(1024);}}
- void clear(){if(OPT&1)return;if constexpr(Flat){if(++epoch==0){for(int d=1;d<=3;d++)for(auto&e:tt[d])e.gen=0;epoch=1;}}else{maps[1].clear();maps[2].clear();}}
+ std::vector<Entry> tt[6]; uint32_t epoch=1;
+ OptPlanner(Compact100&m,Meta&t,std::string p,bool r,bool dc=false):M(m),T(t),hd(m,t),reuse(r),deckcache(dc),policy(std::move(p)){if(dc)decks.resize(4096);if constexpr(Flat){tt[1].resize(1<<16);tt[2].resize(1<<14);tt[3].resize(1<<12);tt[4].resize(1<<12);tt[5].resize(1<<12);}else{maps[1].reserve(8192);maps[2].reserve(1024);}}
+ void clear(){if(OPT&1)return;if constexpr(Flat){if(++epoch==0){for(int d=1;d<=5;d++)for(auto&e:tt[d])e.gen=0;epoch=1;}}else{maps[1].clear();maps[2].clear();}}
  bool get(uint64_t key,int d,double&v){if constexpr(Flat){auto&e=tt[d][KeyHash{}(key)&(tt[d].size()-1)];if(e.gen!=epoch||e.key!=key)return false;v=e.value;return true;}else{auto it=maps[d].find(key);if(it==maps[d].end())return false;v=it->second;return true;}}
  void put(uint64_t key,int d,double v){if constexpr(Flat){auto&e=tt[d][KeyHash{}(key)&(tt[d].size()-1)];e={key,v,epoch};}else maps[d].emplace(key,v);}
  double deckSum(uint32_t bits)const{double sum=0;while(bits){int id=__builtin_ctz(bits)+1;bits&=bits-1;sum+=DECK_COEFF[M.codec.idmap[id]];}return sum;}
@@ -116,15 +118,16 @@ template<bool Flat> struct OptPlanner {
   int p=code&4095;if(!r&&!b)return p;const auto&hm=T.hands[h];
   if(!(code&4096)||hm.n==5)return M.val(r,b,p,h,hm.n)+potential(z.sum,z.n,r,b)+(gamma?gamma*hd.value(r,b,p,h,z):0);
   uint64_t key=uint64_t(p)|(uint64_t(r)<<12)|(uint64_t(b)<<19)|(uint64_t(h)<<20)|(uint64_t(z.code)<<37); if((OPT&4)&&!rawMode){if(drawcache.empty())drawcache.resize(32768);auto&e=drawcache[KeyHash{}(key)&32767];if(e.key==key)return e.value;}
-  if((OPT&4096)&&!rawMode){long double pot=0;for(int j=0;j<z.k;j++)pot+=(long double)z.count[j]*potential(z.after[j],z.nextn,r,b);double result=M.expectedDraw(r,b,p,h,hm,z)+double(pot/z.n)+(gamma?gamma*hd.value(r,b,p,h,z,true):0);if((OPT&4)&&!rawMode)drawcache[KeyHash{}(key)&32767]={key,result};return result;}
-  long double sum=0;for(int j=0;j<z.k;j++){int hn=hm.add[z.c[j]];double leaf=M.val(r,b,p,hn,hm.n+1)+potential(z.after[j],z.nextn,r,b);if(gamma){const auto next=HDTail::nextDeck(z,z.c[j],M);leaf+=gamma*hd.value(r,b,p,hn,next);}sum+=(long double)z.count[j]*leaf;}double result=(double)(sum/z.n);if((OPT&4)&&!rawMode)drawcache[KeyHash{}(key)&32767]={key,result};return result;
+  if((OPT&4096)&&!rawMode){double pot=0;for(int j=0;j<z.k;j++)pot+=(double)z.count[j]*potential(z.after[j],z.nextn,r,b);double result=M.expectedDraw(r,b,p,h,hm,z)+double(pot/z.n)+(gamma?gamma*hd.value(r,b,p,h,z,true):0);if((OPT&4)&&!rawMode)drawcache[KeyHash{}(key)&32767]={key,result};return result;}
+  double sum=0;for(int j=0;j<z.k;j++){int hn=hm.add[z.c[j]];double leaf=M.val(r,b,p,hn,hm.n+1)+potential(z.after[j],z.nextn,r,b);if(gamma){const auto next=HDTail::nextDeck(z,z.c[j],M);leaf+=gamma*hd.value(r,b,p,hn,next);}sum+=(double)z.count[j]*leaf;}double result=(double)(sum/z.n);if((OPT&4)&&!rawMode)drawcache[KeyHash{}(key)&32767]={key,result};return result;
  }
  double q1(const State&s,int a,int h,const DeckCtx&z)const{
   int id=a?s.h[a-1]:0;int hand=id?T.hands[h].remove[M.codec.idmap[id]]:h;int r=100-s.t;
   if(id&&CTYPE[id]!=2)return after1(hand,r,s.b,CTYPE[id]==3?NEXT[s.p]:LAND[s.p+CVAL[id]+3],z);
-  long double sum=0;for(int sm=2;sm<=12;sm++){int ways=6-abs(7-sm),dbl=!s.b&&(sm%2==0),code=id?LAND[s.p+CVAL[id]*sm+3]:ROLL[s.p*11+sm-2];if(ways-dbl)sum+=(ways-dbl)*after1(hand,r-!s.b,0,code,z);if(dbl)sum+=after1(hand,r-1,1,code,z);}return (double)(sum/36.0L);
+  double sum=0;for(int sm=2;sm<=12;sm++){int ways=6-abs(7-sm),dbl=!s.b&&(sm%2==0),code=id?LAND[s.p+CVAL[id]*sm+3]:ROLL[s.p*11+sm-2];if(ways-dbl)sum+=(ways-dbl)*after1(hand,r-!s.b,0,code,z);if(dbl)sum+=after1(hand,r-1,1,code,z);}return (double)(sum/36.0);
  }
  double V(const State&s,int dep,int hand=-1){
+  pollSearch();
   if(s.terminal())return s.p;if(dep==0){const auto dc=context(s.deck);return M.leaf(s)+(gamma?gamma*hd.value(100-s.t,s.b,s.p,M.codec.hand(s),dc):0);}int h=hand>=0?hand:M.codec.hand(s);const DeckCtx&dctx=context(s.deck);
   uint64_t key=uint64_t(s.p)|(uint64_t(100-s.t)<<12)|(uint64_t(s.b)<<19)|(uint64_t(h)<<20)|(uint64_t(dctx.code)<<37);double best;
   if(get(key,dep,best)){stat.hits++;return best;}stat.misses++;spend();best=-1e300;uint32_t seen=0;
@@ -135,7 +138,7 @@ template<bool Flat> struct OptPlanner {
  double landed(State z,int code,int dep,int hand){
   z.p=code&4095;if(z.terminal())return z.p;if(!(code&4096)||z.n==5)return V(z,dep,hand);
   int count[23]={},rep[23]={};uint32_t bits=z.deck;while(bits){int bit=__builtin_ctz(bits);bits&=bits-1;int c=M.codec.idmap[bit+1];count[c]++;rep[c]=bit;}
-  int nn=__builtin_popcount(z.deck);long double sum=0;for(int c=1;c<=22;c++)if(count[c]){State y=z;int bit=rep[c];y.h[y.n++]=bit+1;y.deck&=~(1u<<bit);if(!y.deck)y.deck=0x3fffffff;sum+=(long double)count[c]*V(y,dep,T.hands[hand].add[c]);}return (double)(sum/nn);
+  int nn=__builtin_popcount(z.deck);double sum=0;for(int c=1;c<=22;c++)if(count[c]){State y=z;int bit=rep[c];y.h[y.n++]=bit+1;y.deck&=~(1u<<bit);if(!y.deck)y.deck=0x3fffffff;sum+=(double)count[c]*V(y,dep,T.hands[hand].add[c]);}return (double)(sum/nn);
  }
  double Q(const State&s,int a,int dep,int hand=-1){
   if(hand<0)hand=M.codec.hand(s);
@@ -143,7 +146,7 @@ template<bool Flat> struct OptPlanner {
   State z=s;int id=0;if(a){id=z.h[a-1];for(int j=a;j<z.n;j++)z.h[j-1]=z.h[j];--z.n;}
   int nextHand=id?T.hands[hand].remove[M.codec.idmap[id]]:hand;
   if(id&&CTYPE[id]!=2)return landed(z,CTYPE[id]==3?NEXT[s.p]:LAND[s.p+CVAL[id]+3],dep-1,nextHand);
-  long double sum=0;for(int sm=2;sm<=12;sm++){int ways=6-abs(7-sm),dbl=!s.b&&(sm%2==0),code=id?LAND[s.p+CVAL[id]*sm+3]:ROLL[s.p*11+sm-2];if(ways-dbl){State y=z;y.t=s.t+!s.b;y.b=0;sum+=(ways-dbl)*landed(y,code,dep-1,nextHand);}if(dbl){State y=z;y.t=s.t+1;y.b=1;sum+=landed(y,code,dep-1,nextHand);}}return (double)(sum/36.0L);
+  double sum=0;for(int sm=2;sm<=12;sm++){int ways=6-abs(7-sm),dbl=!s.b&&(sm%2==0),code=id?LAND[s.p+CVAL[id]*sm+3]:ROLL[s.p*11+sm-2];if(ways-dbl){State y=z;y.t=s.t+!s.b;y.b=0;sum+=(ways-dbl)*landed(y,code,dep-1,nextHand);}if(dbl){State y=z;y.t=s.t+1;y.b=1;sum+=landed(y,code,dep-1,nextHand);}}return (double)(sum/36.0);
  }
  int act(const State&s){
   stat.calls++;if(!s.n)return 0;clear();int hand=M.codec.hand(s);struct A{int a;double q;};std::vector<A>v;v.reserve(6);double best=-1e300,second=-1e300;int ans=0;uint32_t seen=0;

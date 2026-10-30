@@ -151,3 +151,16 @@
 .lyra-memory-warning p { margin:0 0 12px; font-size:13px; line-height:1.65; color:#52666a; }
 .lyra-memory-warning footer .primary { background:#a13e3e !important; border-color:#a13e3e; }
 .lyra-memory-warning footer .primary:hover { background:#893333 !important; }
+
+/* VELA search strength: model-choice rows, four levels in order; scores share one right-aligned column */
+.vela-strength-options{display:grid;gap:8px}
+.vela-strength-choice{padding:11px 14px;gap:14px}
+.vela-strength-choice .model-choice-copy{gap:3px}
+.vela-strength-choice .model-choice-copy>strong{font-size:15px;line-height:20px}
+.vela-strength-choice .model-choice-copy>strong small{margin-top:0;line-height:1.3;padding:1px 5px;font-size:10px}
+.vela-strength-choice .run-metric-hint{width:20px;height:20px;margin:-2px 0 -2px 1px}
+.vela-strength-time{font-size:11px;color:#647579}
+.vela-strength-score{font-size:15px;font-weight:600;color:#315653;font-variant-numeric:tabular-nums;white-space:nowrap}
+.vela-strength-choice.is-selected .vela-strength-score{color:#276f70}
+.vela-strength-choice .model-check{width:16px;height:16px}
+.vela-strength-choice.is-selected .model-check{border-width:4px}

@@ -15,4 +15,4 @@ export function isHttpsOrigin(value) {
   } catch { return false; }
 }
 
-export const modelPath = ({ id }) => `/models/${id}/model.bin.gz`;
+export const modelPath = ({ id, file }) => new URL(file, `https://models.invalid/models/${id}/`).pathname;

@@ -1,6 +1,6 @@
-import { MODEL_ID } from "../compute/vela/model.js";
+import { MODEL_FILE_DIR } from "../compute/vela/model.js";
 const descriptions = {
-  "local-model-missing": ["모델 파일 없음", `사용할 버전의 model.bin.gz를 압축을 풀지 않고 public/models/${MODEL_ID}/ 폴더에 넣어 주세요.`],
+  "local-model-missing": ["모델 파일 없음", `사용할 버전의 model.bin.gz를 압축을 풀지 않고 public/models/${MODEL_FILE_DIR}/ 폴더에 넣어 주세요.`],
   wasm: ["모델 실행 기능 미지원", "이 브라우저에서는 모델 실행 기능을 사용할 수 없습니다. 브라우저를 업데이트하거나 X36을 선택해 주세요."],
   worker: ["계산 기능 사용 불가", "별도 계산 기능을 시작하지 못했습니다. 브라우저를 업데이트하거나 확장 프로그램과 사이트 제한 설정을 확인해 주세요. 이전 버전도 이용할 수 있습니다."],
   streams: ["파일 처리 기능 미지원", "대용량 모델 파일을 처리하는 기능이 없습니다. 브라우저를 업데이트하거나 X36을 선택해 주세요."],

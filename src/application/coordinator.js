@@ -1,7 +1,8 @@
+import { velaSearch } from "../policies/vela/search.js";
 import { profile, workerLimit } from "../evaluation/profile.js";
 import { freshSeed } from "../environment/random.js";
 import { cacheAllowed, rememberCacheChoice, clearModelCache, inspectModels, hasCachedModel, hasModelCache } from "../compute/vela/storage.js";
-import { sameModel, LOCAL_MODEL } from "../compute/vela/model.js";
+import { sameModel, LOCAL_MODEL, MODEL_NAME as VELA_MODEL_NAME } from "../compute/vela/model.js";
 import { velaRequirements, probeVela } from "../compute/vela/support.js";
 import { compatibilityMessage } from "../content/compatibility.js";
 import { diagnostics } from "../platform/report.js";
@@ -21,6 +22,7 @@ export class Coordinator extends EventTarget {
       lyraDevice: "auto",
       lyraUsage: "medium",
       lyraDepth: 1,
+      velaStrength: "normal",
     };
     this.gpu = null;
     this.requestId = 0;
@@ -202,6 +204,8 @@ export class Coordinator extends EventTarget {
     current();
     const resident = this.vela?.ready && sameModel(this.vela.info.manifest, options.manifest) ? this.vela : null;
     if (resident) {
+      await resident.prepare({ ...options, persist: false });
+      current();
       const saved = options.persist && resident.info.cacheSaved && await hasCachedModel(options.manifest);
       current();
       if (!options.persist || saved) {
@@ -259,7 +263,7 @@ export class Coordinator extends EventTarget {
       controller = (this.controller = new AbortController());
     this.calculationStartedAt = performance.now();
     const p = this.settings.model === "lyra" ? { model: "lyra", engine: this.lyra?.info?.engine ?? "cpu", device: this.settings.lyraDevice, usage: this.settings.lyraUsage, searchDepth: this.settings.lyraDepth }
-      : this.settings.model === "vela" ? { model: "vela", engine: "cpu" } : profile(this.settings, {
+      : this.settings.model === "vela" ? { model: "vela", engine: "cpu", searchStrength: this.settings.velaStrength, nodeBudget: velaSearch(this.settings.velaStrength).nodeBudget } : profile(this.settings, {
         noEarlyStop:
           new URLSearchParams(location.search).get("noEarlyStop") === "1",
       }),
@@ -278,7 +282,7 @@ export class Coordinator extends EventTarget {
       model: this.settings.model,
       actions: state.hand.map(() => null),
       profile: p,
-      ...(p.model === "lyra" ? { modelName: this.lyra?.info?.manifest?.name ?? LYRA_MODEL_NAME } : {}),
+      ...(p.model === "lyra" ? { modelName: this.lyra?.info?.manifest?.name ?? LYRA_MODEL_NAME } : p.model === "vela" ? { modelName: this.vela?.info?.manifest?.name ?? VELA_MODEL_NAME } : {}),
       requestId: id,
     });
     const current = () =>
@@ -309,11 +313,11 @@ export class Coordinator extends EventTarget {
           this.vela ??= new VelaBackend();
           if (!this.vela.preparing) this.notice("이전 모델을 다시 준비하고 있습니다.");
           const saved = this.restoreVela.cacheSaved && cacheAllowed();
-          await this.vela.prepare({ manifest: this.restoreVela.manifest, persist: saved, cachedOnly: saved });
+          await this.vela.prepare({ manifest: this.restoreVela.manifest, persist: saved, cachedOnly: saved, strength: this.settings.velaStrength });
           if (!current()) return;
         }
         const result = await evaluateVela({ snapshot: state, backend: this.vela,
-          signal: controller.signal, requestId: id, revision });
+          signal: controller.signal, requestId: id, revision, strength: this.settings.velaStrength });
         if (current()) { this.remember(result, state); this.publish(result); }
         return;
       }
@@ -366,6 +370,7 @@ export class Coordinator extends EventTarget {
     }
   }
   async configure(settings) {
+    if (settings.velaStrength !== undefined) velaSearch(settings.velaStrength);
     const resume = this.suspend();
     try {
       this.forecast.clear();

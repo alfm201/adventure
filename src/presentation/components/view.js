@@ -1,3 +1,4 @@
+import { MODEL_NAME as VELA_MODEL_NAME } from "../../compute/vela/model.js";
 import { tiles } from "../../rules/index.js";
 import { stageNames } from "../../content/board-layout.js";
 import { cardLabels, cardIcons } from "../../content/cards.js";
@@ -224,15 +225,16 @@ export class GameView {
     });
     text("center-label", vela ? "평가값" : result.profile?.engine === "cpu" ? "중앙값" : "평균");
     clearTimeout(this.detailTimer);
-    if (lyra && result.status === "running" && Number.isFinite(result.startedAt)) {
-      const model = result.modelName ?? LYRA_MODEL_NAME, engine = (result.profile?.engine ?? 'cpu').toUpperCase();
-      const description = result.profile?.device === 'auto'
+    if (result.status === "running" && Number.isFinite(result.startedAt)) {
+      const model = result.modelName ?? (lyra ? LYRA_MODEL_NAME : VELA_MODEL_NAME), engine = (result.profile?.engine ?? 'cpu').toUpperCase();
+      const description = !lyra ? model : result.profile?.device === 'auto'
         ? message('{0} · {1} · {2}', model, message('자동'), engine) : `${model} · ${engine}`;
       const detail = document.getElementById('evaluation-detail');
       const updateDetail = () => {
         const elapsed = Math.max(0, performance.now() - result.startedAt);
         const seconds = (elapsed / 1000).toLocaleString(numberLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-        setLocalizedText(detail, '{0} · {1}초 · 계산중', description, seconds);
+        if (vela) setLocalizedText(detail, '{0} · {1}초 · 계산중', description, seconds);
+        else setLocalizedText(detail, '{0} · G3 · {1}초 · 실제 {2}회{3}', engine, seconds, number(result.totalSamples ?? 0, 0), ' ' + translate('· 계산중'));
         // Refresh only this line; do not redraw the board or restart inference.
         this.detailTimer = setTimeout(updateDetail, 100);
       };
@@ -244,7 +246,7 @@ export class GameView {
       result.status === "error"
         ? result.message
         : result.elapsedMs !== undefined
-          ? vela ? `${result.modelName}${lyra ? ` · ${result.profile?.device === 'auto' ? '자동 · ' : ''}${result.profile?.engine.toUpperCase()}` : ''} · ${number(result.elapsedMs / 1000, 3)}초` : `${result.profile?.engine.toUpperCase()} · G3 · ${number(result.elapsedMs / 1000, 2)}초 · 실제 ${number(result.totalSamples, 0)}회${result.status === "running" ? " · 계산중" : ""}`
+          ? vela ? `${result.modelName}${lyra ? ` · ${result.profile?.device === 'auto' ? '자동 · ' : ''}${result.profile?.engine.toUpperCase()}` : ''} · ${(result.elapsedMs / 1000).toLocaleString(numberLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 3 })}초` : `${result.profile?.engine.toUpperCase()} · G3 · ${(result.elapsedMs / 1000).toLocaleString(numberLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 2 })}초 · 실제 ${number(result.totalSamples, 0)}회${result.status === "running" ? " · 계산중" : ""}`
           : "",
     );
   }

@@ -76,7 +76,7 @@ struct Compact {
   if(!r&&!b)return p;auto&z=getRow(r,b,p);double value=B[r*2*(N+1)+b*(N+1)+p];for(int j=0;j<15&&sub[h][j]>=0;j++)value+=z.v[sub[h][j]];
   long double addsum=0;for(int j=0;j<dc.k;j++){int c=dc.c[j];double v=z.v[c-1];for(int i=0;i<hm.n;i++)v+=z.v[pairIndex[sub[h][i]+1][c]];addsum+=(long double)dc.count[j]*v;}value+=double(addsum/dc.n);
   static thread_local std::vector<FactorEntry> fc(1024);static thread_local const Compact*owner=nullptr;if(owner!=this){for(auto&e:fc)e.key=~0ULL;owner=this;}
-  uint64_t key=uint64_t(h)|(uint64_t(dc.code)<<17);auto&e=fc[KeyHash{}(key)&1023];if(e.key!=key){e.key=key;for(int k=0;k<K;k++){long double v=0;for(int j=0;j<dc.k;j++)v+=(long double)dc.count[j]*phiValue(hm.add[dc.c[j]],k);e.phi[k]=double(v/dc.n);}for(int k=0;k<L;k++){long double v=0;for(int j=0;j<dc.k;j++)v+=(long double)dc.count[j]*localPhi(hm.add[dc.c[j]],k);e.local[k]=double(v/dc.n);}}
+  uint64_t key=uint64_t(h)|(uint64_t(dc.code)<<17);auto&e=fc[KeyHash{}(key)&1023];if(e.key!=key){e.key=key;for(int k=0;k<K;k++){double v=0;for(int j=0;j<dc.k;j++)v+=double(dc.count[j])*phiValue(hm.add[dc.c[j]],k);e.phi[k]=double(v/dc.n);}for(int k=0;k<L;k++){long double v=0;for(int j=0;j<dc.k;j++)v+=(long double)dc.count[j]*localPhi(hm.add[dc.c[j]],k);e.local[k]=double(v/dc.n);}}
   for(int k=0;k<K;k++)value+=e.phi[k]*z.v[275+k];if(r>=Llo&&r<=Lhi)for(int k=0;k<L;k++)value+=e.local[k]*z.v[LocalOffset+k];return value;
  }
 

@@ -1,4 +1,4 @@
-import { MODEL_URL, LOCAL_MODEL } from "./model.js";
+import { MODEL_URL, MODEL_FILE, LOCAL_MODEL } from "./model.js";
 import { writeBytes, storageIssue } from "./files.js";
 import { deadline } from "../../platform/requests.js";
 
@@ -8,7 +8,7 @@ export async function responseFor(url, buffered = false) {
   try {
     const response = await fetch(url, { cache: "no-store", credentials: "omit", redirect: "error", referrerPolicy: "no-referrer", signal: request.signal });
     if (response.status !== 200) throw Object.assign(Error("파일을 불러오지 못했습니다."), {
-      code: LOCAL_MODEL && response.status === 404 && new URL(url).pathname === new URL("model.bin.gz", MODEL_URL).pathname ? "local-model-missing" : "network",
+      code: LOCAL_MODEL && response.status === 404 && new URL(url).pathname === new URL(MODEL_FILE, MODEL_URL).pathname ? "local-model-missing" : "network",
     });
     return buffered ? await response.arrayBuffer() : response;
   } finally { request.dispose(); }

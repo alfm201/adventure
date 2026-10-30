@@ -33,11 +33,14 @@ export function bindMetricHints(modal, items) {
   addEventListener('resize', hide); addEventListener('scroll', scroll, true);
   addEventListener('adventurelanguagechange', hide);
   modal.addEventListener('closing', hide);
-  modal.addEventListener('close', () => {
+  // dispose: release the listeners and the tooltip when the dialog swaps to another screen without closing
+  const dispose = () => {
     hide(); document.removeEventListener('pointerdown', outside, true);
     modal.removeEventListener('cancel', cancel);
     removeEventListener('resize', hide); removeEventListener('scroll', scroll, true);
     removeEventListener('adventurelanguagechange', hide);
-  }, { once: true });
-  return { hide };
+    modal.removeEventListener('closing', hide); modal.removeEventListener('close', dispose); tip.remove();
+  };
+  modal.addEventListener('close', dispose, { once: true });
+  return { hide, dispose };
 }

@@ -32,7 +32,7 @@ export function showSettings(coordinator, { model = "x36", initial = false, sele
   <p class="lyra-gpu-availability" aria-live="polite"></p>
   <fieldset class="lyra-usage-panel"><legend>사용량</legend><div class="compute-options">${usageOptions.map(([key, title, detail]) => choice("usage", key, title, detail, key === "medium")).join("")}</div></fieldset>
   <p class="model-note">낮음은 처리 부하를 줄이고, 높음은 빠른 계산을 우선합니다. 사용량을 바꿔도 같은 탐색 결과를 제공합니다.</p>
-  <fieldset class="lyra-depth-panel"><legend>탐색 깊이<button type="button" class="run-metric-hint" aria-label="탐색 깊이 안내">ⓘ</button></legend><div class="compute-options">${choice("depth", "1", "기본", "빠른 응답", true)}${choice("depth", "2", "깊게", "더 먼 상황까지 비교")}</div></fieldset>
+  <fieldset class="lyra-depth-panel"><legend>탐색 강도<button type="button" class="run-metric-hint" aria-label="탐색 강도 안내">ⓘ</button></legend><div class="compute-options">${choice("depth", "1", "기본", "빠른 응답", true)}${choice("depth", "2", "깊게", "더 먼 상황까지 비교")}</div></fieldset>
   <p class="model-note lyra-depth-warning" hidden>계산 시간과 메모리 사용량이 크게 늘어날 수 있습니다.</p>
   ` : `
   <fieldset class="compute-engine-options" aria-label="계산 엔진">${choice("engine", "gpu", "GPU", "G3 · 더 많은 표본")}${choice("engine", "cpu", "CPU", "G3 · 적은 연산량")}</fieldset>

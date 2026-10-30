@@ -1,6 +1,21 @@
 // Korean source messages map to English, Japanese and Simplified Chinese.
 // Stage names use descriptive translations/transliterations, not verified regional game names.
 globalThis.adventureMessages = {
+  "빠름": ["Fast", "高速", "快速"],
+  "탐색 강도": ["Search strength", "探索強度", "搜索强度"],
+  "탐색 강도 안내": ["About search strength", "探索強度について", "搜索强度说明"],
+  "VELA 탐색 강도": ["VELA search strength", "VELAの探索強度", "VELA 搜索强度"],
+  "강도가 높을수록 접전에서 더 깊이 계산합니다.": ["Higher strengths search deeper when the top choices are close.", "強度が高いほど、接戦でより深く計算します。", "强度越高，局面接近时计算得越深。"],
+  "즉시": ["Instant", "即時", "即时"],
+  "대부분 즉시": ["Mostly instant", "ほぼ即時", "大多即时"],
+  "접전 시 최대 약 1초": ["Up to about 1 s in close calls", "接戦時は最大約1秒", "局面接近时最多约 1 秒"],
+  "접전 시 최대 수 초": ["Up to several seconds in close calls", "接戦時は最大数秒", "局面接近时最多数秒"],
+  "CPU 전용 · 탐색 강도 선택 가능": ["CPU only · Adjustable search", "CPU専用・探索強度を選択可能", "仅限CPU · 可选择搜索强度"],
+  "기존 VELA v4.2와 같은 추천입니다.": ["Uses the same recommendations as VELA v4.2.", "VELA v4.2と同じ行動をおすすめします。", "与 VELA v4.2 的推荐相同。"],
+  "일부 판단이 수 초 이상 걸릴 수 있습니다. 높음 대비 점수 차이는 작습니다.": ["Some decisions may take several seconds or longer. The score gain over High is small.", "判断に数秒以上かかる場合があります。「高」とのスコア差はわずかです。", "部分决策可能需要数秒或更长时间，与高档的分数差距较小。"],
+  "빠름 안내": ["About Fast", "「高速」について", "快速档说明"],
+  "최고 안내": ["About Max", "「最高」について", "最高档说明"],
+  "최고": ["Max", "最高", "最高"],
   "탐색 깊이": ["Search depth", "探索の深さ", "搜索深度"],
   "탐색 깊이 안내": ["About search depth", "探索の深さについて", "搜索深度说明"],
   "깊게": ["Deep", "深く", "深入"],
