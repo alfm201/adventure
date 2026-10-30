@@ -10,17 +10,26 @@ Assist mode offers **voice guidance** in Korean, English, Japanese and Chinese, 
 
 | Model | How it evaluates actions | Average score |
 | --- | --- | ---: |
-| **LYRA · v2 (research)** | Neural network with 1-step search on CPU or GPU | About 1,880 in research testing |
-| **VELA · v4.2** | Evaluates future states on CPU | About 1,877 |
+| **LYRA · v2** | Neural network with 1-step search on CPU or GPU | About 1,880 |
+| **VELA · v4.3** | Evaluates future states on CPU, searching deeper in close decisions | About 1,878.6 |
 | **X36 · G3** | Compares actions through repeated simulations on CPU or GPU | About 1,860 |
 
-These scores are reference figures from different evaluations. Computation time depends on your device and the game state.
+**VELA search strength**
+
+| Search strength | Average score |
+| --- | ---: |
+| Fast | About 1,877.2 |
+| Normal | About 1,878.6 |
+| High | About 1,879.3 |
+| Max | About 1,879.8 |
+
+These scores are reference figures from different evaluations. VELA's default search strength is Normal, and the VELA score in the model table is for Normal. Higher strengths take longer on close decisions, and computation time also depends on your device and the game state. VELA v4.3 uses the same model file as VELA v4.2.
 
 VELA is selected by default. LYRA is a research model that can run on CPU or GPU. With device selection set to Automatic, it uses an available GPU first and falls back to CPU if initialization or inference fails.
 
 VELA loads a model package of about **68 MB** on first use; LYRA loads about **68 MB**. On the hosted site, you can allow the app to save the model in your browser for future visits. VELA removes incompatible older models after checking current metadata; LYRA clears its previous package after the new one has been verified and saved. When running locally, it reads the project's model files without saving an extra browser copy. LYRA uses the same package for both CPU and GPU.
 
-Action values help you compare the available choices. The expected final score estimates your result if you keep following the selected model's recommendations. VELA v4.2 and LYRA v2 each use a score predictor trained for their own policy. Once the game ends, the actual score is displayed. You can also cancel model selection and use the app without recommendations.
+Action values help you compare the available choices. The expected final score estimates your result if you keep following the selected model's recommendations. VELA v4.3 uses a score predictor trained for each search strength, and LYRA v2 uses one trained for its own policy. Once the game ends, the actual score is displayed. You can also cancel model selection and use the app without recommendations.
 
 ## Run on your PC
 
@@ -28,7 +37,7 @@ With **Node.js 22 or later**, no package installation or build is required.
 
 1. Download and extract the project.
 2. Download your chosen model from **GitHub Releases** and place it at the following path **without extracting it**. Skip this step if you only use X36 · G3.
-   - **[VELA v4.2](https://github.com/alfm201/adventure/releases/tag/vela-v4.2):** `model.bin.gz` → `public/models/vela-v4.2/model.bin.gz`
+   - **VELA v4.3** (same model file as VELA v4.2): [`model.bin.gz`](https://github.com/alfm201/adventure/releases/tag/vela-v4.2) → `public/models/vela-v4.2/model.bin.gz`
    - **[LYRA v2](https://github.com/alfm201/adventure/releases/tag/lyra-v2):** `lyra-v2.bin.gz` → `public/models/lyra-v2/lyra-v2.bin.gz`
 3. Open a terminal in the project folder and run:
 
@@ -48,7 +57,7 @@ Model files remain available on [GitHub Releases](https://github.com/alfm201/adv
 
 | Model | Cloudflare download path |
 | --- | --- |
-| VELA v4.2 | [/models/vela-v4.2/model.bin.gz](https://adventure.alfm201.workers.dev/models/vela-v4.2/model.bin.gz) |
+| VELA v4.3 · same file as v4.2 | [/models/vela-v4.2/model.bin.gz](https://adventure.alfm201.workers.dev/models/vela-v4.2/model.bin.gz) |
 | LYRA v2 | [/models/lyra-v2/lyra-v2.bin.gz](https://adventure.alfm201.workers.dev/models/lyra-v2/lyra-v2.bin.gz) |
 
 The LYRA package includes third-party runtime notices in `LICENSES.txt`. Keep this file when redistributing the package.

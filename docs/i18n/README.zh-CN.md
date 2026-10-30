@@ -10,17 +10,26 @@
 
 | 模型 | 评估方式 | 平均得分 |
 | --- | --- | ---: |
-| **LYRA · v2（研究版）** | 在 CPU 或 GPU 上结合神经网络与单步搜索评估行动 | 研究评测中约 1,880 分 |
-| **VELA · v4.2** | 在 CPU 上推演后续局面，评估行动 | 约 1,877 分 |
+| **LYRA · v2** | 在 CPU 或 GPU 上结合神经网络与单步搜索评估行动 | 约 1,880 分 |
+| **VELA · v4.3** | 在 CPU 上推演后续局面评估行动，局面接近时搜索更深 | 约 1,878.6 分 |
 | **X36 · G3** | 在 CPU 或 GPU 上反复模拟，比较不同选择 | 约 1,860 分 |
 
-以上平均得分来自不同评测，仅供参考。计算耗时取决于设备性能和当前游戏局面。
+**VELA 搜索强度**
+
+| 搜索强度 | 平均得分 |
+| --- | ---: |
+| 快速 | 约 1,877.2 分 |
+| 标准 | 约 1,878.6 分 |
+| 高 | 约 1,879.3 分 |
+| 最高 | 约 1,879.8 分 |
+
+以上平均得分来自不同评测，仅供参考。VELA 默认搜索强度为标准，模型表中的 VELA 得分按标准计算。搜索强度越高，局面接近时的判断耗时越长；计算耗时也取决于设备性能和当前游戏局面。VELA v4.3 与 VELA v4.2 使用同一个模型文件。
 
 默认选择 VELA。LYRA 为研究版模型，运行设备可设为自动、CPU 或 GPU。选择自动时，会优先使用可用的 GPU；若初始化或推理失败，则切换到 CPU。
 
 首次使用时，VELA 需要加载约 **68 MB** 的模型包，LYRA 约为 **68 MB**。访问在线网站时，如果同意将模型保存在浏览器中，下次访问即可复用。VELA 确认最新模型信息后会清理不兼容的旧模型；LYRA 则在验证并保存新模型包后清理旧包。在本机运行时，直接使用项目中的模型文件，不会再向浏览器存储一份副本。LYRA 在 CPU 与 GPU 之间切换时使用同一个模型包。
 
-各行动的评估值用于比较不同选择的优劣。预计最终得分表示持续按照所选模型的建议行动时，可能获得的最终分数。VELA v4.2 和 LYRA v2 分别使用针对各自策略训练的专用得分预测器。游戏结束后，显示的是实际得分。也可以取消模型选择，在不显示行动建议的情况下使用应用。
+各行动的评估值用于比较不同选择的优劣。预计最终得分表示持续按照所选模型的建议行动时，可能获得的最终分数。VELA v4.3 针对每种搜索强度、LYRA v2 针对自身策略，分别使用专门训练的得分预测器。游戏结束后，显示的是实际得分。也可以取消模型选择，在不显示行动建议的情况下使用应用。
 
 ## 在本机运行
 
@@ -28,7 +37,7 @@
 
 1. 下载并解压项目。
 2. 从下方的 **GitHub Releases** 下载所需模型，**不要解压模型文件**，直接放到对应路径。如果只使用 X36 · G3，可以跳过此步骤。
-   - **[VELA v4.2](https://github.com/alfm201/adventure/releases/tag/vela-v4.2)：** `model.bin.gz` → `public/models/vela-v4.2/model.bin.gz`
+   - **VELA v4.3** (模型文件与 VELA v4.2 相同)：[`model.bin.gz`](https://github.com/alfm201/adventure/releases/tag/vela-v4.2) → `public/models/vela-v4.2/model.bin.gz`
    - **[LYRA v2](https://github.com/alfm201/adventure/releases/tag/lyra-v2)：** `lyra-v2.bin.gz` → `public/models/lyra-v2/lyra-v2.bin.gz`
 3. 在项目文件夹中打开终端，运行以下命令：
 
@@ -48,7 +57,7 @@
 
 | 模型 | Cloudflare 下载路径 |
 | --- | --- |
-| VELA v4.2 | [/models/vela-v4.2/model.bin.gz](https://adventure.alfm201.workers.dev/models/vela-v4.2/model.bin.gz) |
+| VELA v4.3 · 与 v4.2 相同的文件 | [/models/vela-v4.2/model.bin.gz](https://adventure.alfm201.workers.dev/models/vela-v4.2/model.bin.gz) |
 | LYRA v2 | [/models/lyra-v2/lyra-v2.bin.gz](https://adventure.alfm201.workers.dev/models/lyra-v2/lyra-v2.bin.gz) |
 
 LYRA 模型包内的 `LICENSES.txt` 包含第三方运行时的许可证声明。再分发模型包时，请保留此文件。

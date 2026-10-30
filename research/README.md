@@ -29,7 +29,8 @@ flowchart TD
         V1["v1 → v2 · hand projection and remaining deck<br/>≈1857 → 1864"]
         V2["v3 → v4 · five-card hands and execution structure<br/>≈1874 → 1875"]
         V3["v4.1 → v4.2 · compression and longer horizon<br/>≈1877 → 1878 · report evaluations"]
-        V1 --> V2 --> V3
+        V4["v4.3 · decision-time search strength<br/>≈1878 → 1879"]
+        V1 --> V2 --> V3 --> V4
     end
     subgraph L["LYRA family · neural values and expectimax"]
         L0["Hinge teacher → Actor → initial value network V₀"]
@@ -79,6 +80,10 @@ After π₂₀, lower training loss or value error often failed to improve game 
 
 Additional search delivers gains, but transferring them into an inexpensive 1-step value network remains difficult. Follow-up studies test whether representation, training distribution and model scale change the plateau under iterative updates. The 15.4M model iterated from V₀ with one fixed recipe became LYRA v2. See [the learning discussion](topics/learning-and-plateaus.md#후속-연구-질문) for the designs and evidence limits.
 
+### 7. VELA v4.3: same value table, deeper decisions
+
+v4.3 keeps the v4.2 value model and splits decision-time computation into search-strength levels. It refines the 2-step result one step deeper and, when the top actions are close, expands branches up to 6 steps. On 20K pairs from two seed sets the Normal, High and Max levels scored +1.41, +2.10 and +2.65 over v4.2, and each step up was also confirmed. More than half of the gain comes from the smallest budget. The [report](vela-v4.3/report-ko.md) describes the search and the variants that were not adopted.
+
 ## Representative research evaluations
 
 These evaluations used fixed policies. Seed sets, sample sizes and statistical adjustments differ, so individual report means can differ from the service references (X36 ≈1860, VELA ≈1877, LYRA v1 ≈1879, LYRA v2 ≈1880). Read each improvement claim within its stated comparison.
@@ -93,6 +98,7 @@ These evaluations used fixed policies. Seed sets, sample sizes and statistical a
 | VELA v4 | 1874.83320 | Independent 50K; a higher point estimate does not establish superiority to v3 | [Report](vela-v4/report-ko.md) |
 | VELA v4.1 / COMPACT48 | 1876.5108 | Independent 90K pairs; FULL48 delta -1.5740; original noninferiority gate not met | [Report](vela-v4.1/report-ko.md) |
 | VELA v4.2 / Hinge | 1878.13502 | Frozen 100K; FULL100 delta +0.09784, CI [-1.04640, 1.24208]; superiority not established | [Report](vela-v4.2/report-ko.md#3-평가-결과) |
+| VELA v4.3 / search strength | 1878.59 / 1879.28 / 1879.83 | Normal / High / Max. Control-variate-adjusted means on 20K pairs from two seed sets; +1.41 / +2.10 / +2.65 vs v4.2 | [Report](vela-v4.3/report-ko.md) |
 | LYRA v1 / π₂₀ | ≈1879 | Control-variate-adjusted reference; v4.2 deltas +1.30 / +1.49 in separate sets of 10K episode pairs | [Report](lyra-v1/report-ko.md) |
 | LYRA v2 / M₄₀ | ≈1880 | Control-variate-adjusted reference; sealed 10K new-seed pairs: +1.00 vs π₂₀, simultaneous CI [0.53, 1.46]; FP32 confirmation on 10K pairs: +1.08 | [Report](lyra-v2/report-ko.md) |
 
@@ -110,6 +116,6 @@ VELA and LYRA take their names from the story of Jason and the Argonauts' quest 
 
 ## Continue reading
 
-- **Reproduce:** [guide](reproduction/README.md). Model reports (Korean): [VELA v4.2](vela-v4.2/report-ko.md), [LYRA v1](lyra-v1/report-ko.md), [LYRA v2](lyra-v2/report-ko.md).
+- **Reproduce:** [guide](reproduction/README.md). Model reports (Korean): [VELA v4.2](vela-v4.2/report-ko.md), [VELA v4.3](vela-v4.3/report-ko.md), [LYRA v1](lyra-v1/report-ko.md), [LYRA v2](lyra-v2/report-ko.md).
 - **Research detail:** [values and search](topics/value-and-planning.md), [learning and plateaus](topics/learning-and-plateaus.md).
 - **Shared foundations:** [environment, state space and oracle experiments — Korean](topics/environment.md), [state definitions, policies and evaluation criteria](topics/evaluation.md), [sources and evidence limits](topics/sources.md).

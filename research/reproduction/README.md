@@ -88,6 +88,14 @@ The default output directory is `research/lyra-v1/output/`; change it with `--ou
 
 Converting the fixed checkpoint reproduces the current browser model's ONNX and feature SHA-256, array definitions and game rules. A full retraining run of the included pipeline has not been verified. GPU, CUDA, PyTorch and floating-point differences can change retraining results, so byte-identical retraining or identical scores are not guaranteed. Converting new weights does not replace the application or deployed model.
 
+## VELA v4.3 — VELA v4.2 Hinge with decision-time search
+
+The decision-time search in the [VELA v4.3 report](../vela-v4.3/report-ko.md) creates no new model. The value model is the VELA v4.2 `hinge_k256_e1.bin` (released as `model.bin.gz`) from the section below.
+
+- **Search:** `src/policies/vela/native/dabe.hpp`. The node budget of each search strength (Fast 0, Normal 2,400, High 47,400, Max 383,400) is in `src/policies/vela/search.js`.
+- **Build:** `python scripts/vela/build.py` builds `vela.mjs` and `vela.wasm`. Requirements and build flags are in the [runtime source notes](../../src/policies/vela/native/README.md).
+- **Score predictors:** The per-strength final-score predictors are separately trained models; their training data is not in this package.
+
 ## VELA v4.2 — COMPACT100 Hinge
 
 Rebuilds the frozen Hinge model from the [VELA v4.2 report](../vela-v4.2/report-ko.md). The original FULL100 table is not needed at runtime. The application's Hinge final-score predictor is a separately trained model; its training data is not in this package.

@@ -88,6 +88,14 @@ python research/lyra-v1/export.py --checkpoint research/lyra-v1/training/runs/v2
 
 고정 체크포인트의 변환 결과는 현재 브라우저용 모델과 ONNX·특징 데이터 SHA-256 및 배열 정의·게임 규칙이 일치하는 것을 확인했습니다. 포함된 학습 파이프라인의 전체 재학습 검증은 수행하지 않았습니다. GPU·CUDA·PyTorch·부동소수점 연산 차이로 재학습 결과가 달라질 수 있으므로, 학습부터의 바이트 동일 재현이나 동일 점수를 보증하지 않습니다. 새 가중치 변환은 앱이나 배포 모델을 자동 교체하지 않습니다.
 
+## VELA v4.3 — VELA v4.2 Hinge와 판단 시점 탐색
+
+[VELA v4.3 보고서](../vela-v4.3/report-ko.md)의 판단 시점 탐색은 새 모델을 만들지 않습니다. 가치 모델은 아래 VELA v4.2 절의 `hinge_k256_e1.bin`(배포 파일 `model.bin.gz`)을 그대로 씁니다.
+
+- **탐색:** `src/policies/vela/native/dabe.hpp`에 있습니다. 탐색 강도별 노드 예산(빠름 0, 보통 2,400, 높음 47,400, 최고 383,400)은 `src/policies/vela/search.js`에 있습니다.
+- **빌드:** `python scripts/vela/build.py`로 `vela.mjs`와 `vela.wasm`을 만듭니다. 준비 사항과 빌드 옵션은 [실행 소스 안내](../../src/policies/vela/native/README.md)를 따릅니다.
+- **점수 예측기:** 탐색 강도별 최종 점수 예측기는 별도로 학습한 모델이며, 예측기 학습 자료는 이 패키지에 포함하지 않습니다.
+
 ## VELA v4.2 — COMPACT100 Hinge
 
 [VELA v4.2 보고서](../vela-v4.2/report-ko.md)의 동결 Hinge 모델을 다시 만드는 절차입니다. FULL100 원본은 앱 실행에 필요하지 않습니다. 앱의 Hinge 최종 점수 예측기는 별도로 학습한 모델이며, 예측기 학습 자료는 이 패키지에 포함하지 않습니다.
