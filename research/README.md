@@ -2,7 +2,7 @@
 
 English | [한국어](README.ko.md)
 
-Adventure action recommendations evolved from X36 terminal rollouts to VELA value tables and LYRA neural values. This overview explains the reasons for each change, the reported performance, and the remaining research questions.
+Adventure action recommendations started with X36 terminal rollouts. VELA (precomputed value tables) and LYRA (learned value networks) are now two approaches developed side by side; LYRA uses VELA v4.2 as its starting teacher and evaluation baseline. This overview explains the background of each family, the reported performance, and the remaining research questions.
 
 | Read about | Guide |
 |---|---|
@@ -10,13 +10,14 @@ Adventure action recommendations evolved from X36 terminal rollouts to VELA valu
 | Finite-resource MDP, state space and oracle experiments | [Environment and computational cost — Korean](topics/environment.md) |
 | Exact solutions under the real rules (Q\*, V\*, a\*) and search cost | [Exact solutions — Korean](topics/exact-solutions.md) |
 | X36, value tables and planning | [Value representation and planning — Korean](topics/value-and-planning.md) |
-| Earlier neural branches and LYRA's plateau | [Learning and plateaus — Korean](topics/learning-and-plateaus.md) |
+| Earlier neural branches and LYRA v1/v2 training | [Learning-based research — Korean](topics/learning.md) |
+| Limits of X36, VELA and LYRA, and open questions | [Limits and open problems — Korean](topics/limits.md) |
 | Scores, evidence and terminology | [Evaluation and shared criteria — Korean](topics/evaluation.md) |
 | Reports and shared-hub evidence | [Sources and scope — Korean](topics/sources.md) |
 
 ## At a glance
 
-Solid arrows show development within a family and the labeled teacher relationship; dotted arrows mark changes of approach and related work. Scores are rounded from evaluations with different conditions. Checkpoint inheritance and performance gains require the evidence in each report.
+Solid arrows show development within a family and the labeled teacher relationship; dotted arrows mark the change of approach from X36 to VELA and related work. Scores are rounded from evaluations with different conditions. Checkpoint inheritance and performance gains require the evidence in each report.
 
 ```mermaid
 flowchart TD
@@ -40,7 +41,7 @@ flowchart TD
         L0 --> L1
         L0 --> L3 --> L2
     end
-    X1 -. "Change of evaluation approach" .-> V1
+    X1 -. "Change of decision approach" .-> V1
     X0 -.-> N["Earlier learned-policy branches<br/>Distillation, corrections and return-based learning"]
     V3 -->|"VELA v4.2 as teacher"| L0
     V2 -.-> E["Separate branch · exact solutions and action certification"]
@@ -66,23 +67,26 @@ VELA moved to precomputed values and probability-weighted action outcomes. v2 st
 
 Representing larger hands and longer horizons requires larger tables. v4 combined retained H24 values with a time correction; v4.1 compressed FULL48 with a shared structure; v4.2 compressed horizon-100 values using Hinge training. These changes addressed model size and decision latency while preserving useful values. Score improvements over the original policy and suitability for service use were evaluated separately.
 
-### 4. LYRA v1: learn a value representation
+### 4. VELA v4.3: same value table, deeper decisions
+
+v4.3 keeps the v4.2 value model and splits decision-time computation into search-strength levels. It refines the 2-step result one step deeper and, when the top actions are close, expands branches up to 6 steps. On 20K pairs from two seed sets the Normal, High and Max levels scored +1.41, +2.10 and +2.65 over v4.2, and each step up was also confirmed. More than half of the gain comes from the smallest budget. The [report](vela-v4.3/report-ko.md) describes the search and the variants that were not adopted.
+
+### 5. LYRA v1: learn a value representation
 
 LYRA aimed to build an iterative self-improvement loop: collect games with a model, train its successor, and repeat. It began with VELA v4.2 imitation followed by PPO, which did not deliver the desired improvement. The research then moved to value iteration using neural child-state values and exact expectations over actual-deck transitions. **LYRA v1 is the V₂₀ value network with the π₂₀ 1-step policy.** The older QStar `v20` is a separate research version.
 
-### 5. LYRA v2: same policy, larger value network
+### 6. LYRA v2: same policy, larger value network
 
-LYRA v2 uses the same 1-step policy with the 15.4M value network **M₄₀**. Instead of continuing from V₂₀, the larger network was trained from V₀ for 40 rounds with one fixed recipe. In a sealed evaluation on 10K new seed pairs it scored +1.00 points above π₂₀ (simultaneous CI [0.53, 1.46]), and +1.08 in a confirmation at deployment precision (FP32). The scale gain over 5.5M replicated with a second training seed, but a 61M model did not improve further. [LYRA v2 report (Korean)](lyra-v2/report-ko.md)
+LYRA v2 uses the same 1-step policy with the 15.4M value network **M₄₀**. Instead of continuing from V₂₀, the larger network was trained from V₀ for 40 rounds with one fixed recipe. In a sealed evaluation on 10K new seed pairs it scored +1.00 points above π₂₀ (simultaneous CI [0.53, 1.46]), and +1.08 in a confirmation at deployment precision (FP32). The scale gain over 5.5M replicated with a second training seed, but a 61M model did not improve further. [LYRA v2 report (Korean)](lyra-v2/report-ko.md) · [learning path (Korean)](topics/learning.md)
 
-### 6. Follow-up: better prediction is not always better control
+### 7. LYRA's open problem: the gap between training and policy improvement
 
-After π₂₀, lower training loss or value error often failed to improve game score. Early analyses suggested that approximation error introduced during distillation was offsetting the gains from iterative updates. Later post-hoc analyses of changed actions found gains from correcting poor choices alongside losses from damaging previously good choices.
+Training after LYRA v2 has not raised the game score further. The following were observed; which factor drives them has not yet been isolated.
+- Error against the teacher falls sharply on trained states but barely on new states, and retraining also changes choices that were already right.
+- Lowering teacher-referenced error or level bias did not raise the score.
+- Decision-time search still adds about +1.1 points on top of M₄₀, but the training recipes tested so far did not turn this into a lasting score gain.
 
-Additional search delivers gains, but transferring them into an inexpensive 1-step value network remains difficult. Follow-up studies test whether representation, training distribution and model scale change the plateau under iterative updates. The 15.4M model iterated from V₀ with one fixed recipe became LYRA v2. See [the learning discussion](topics/learning-and-plateaus.md#후속-연구-질문) for the designs and evidence limits.
-
-### 7. VELA v4.3: same value table, deeper decisions
-
-v4.3 keeps the v4.2 value model and splits decision-time computation into search-strength levels. It refines the 2-step result one step deeper and, when the top actions are close, expands branches up to 6 steps. On 20K pairs from two seed sets the Normal, High and Max levels scored +1.41, +2.10 and +2.65 over v4.2, and each step up was also confirmed. More than half of the gain comes from the smallest budget. The [report](vela-v4.3/report-ko.md) describes the search and the variants that were not adopted.
+See [limits and open problems (Korean)](topics/limits.md#lyra-학습-오차-감소가-지속적인-정책-개선으로-이어지지-않았다) for the evidence; the same page covers the limits of X36 and VELA.
 
 ## Representative research evaluations
 
@@ -117,5 +121,5 @@ VELA and LYRA take their names from the story of Jason and the Argonauts' quest 
 ## Continue reading
 
 - **Reproduce:** [guide](reproduction/README.md). Model reports (Korean): [VELA v4.2](vela-v4.2/report-ko.md), [VELA v4.3](vela-v4.3/report-ko.md), [LYRA v1](lyra-v1/report-ko.md), [LYRA v2](lyra-v2/report-ko.md).
-- **Research detail:** [values and search](topics/value-and-planning.md), [learning and plateaus](topics/learning-and-plateaus.md).
+- **Research detail:** [values and search](topics/value-and-planning.md), [learning-based research](topics/learning.md), [limits and open problems](topics/limits.md).
 - **Shared foundations:** [environment, state space and oracle experiments — Korean](topics/environment.md), [state definitions, policies and evaluation criteria](topics/evaluation.md), [sources and evidence limits](topics/sources.md).
