@@ -48,6 +48,7 @@
 |---|---|---|
 | V1 | 저장소의 VELA 버전별 보고서·README | 모델별 전환과 대표 평가 |
 | V2 | `MODELS_BENCHMARKS.md`, 덱 DP·FULL 압축·TT·정확 계산 연구 요약 | 압축과 추가 탐색의 성과, 실제 덱 표현과 정확성의 한계 |
+| V3 | 허브의 VELA 탐색 확장 요약 (2026-11-02, 미배포) | v4.2 가치표 위 예산 확장의 20K쌍 확인, 가속 엔진의 메모리 제약 |
 | C1 | `CONTRACTS.md`, `SOURCES.md`와 허브 안내 | 상태·난수·평가 조건과 출처 정정 |
 
 TT의 제한된 생성 실험은 `TT_GLOBAL_PREFLIGHT_20260930.md`, 정확한 행동 보증의 결과는 `EXACT_RESEARCH_SUMMARY_20261003.md`를 확인했습니다. 주요 결론은 [가치·탐색](value-and-planning.md), 공통 기준은 [평가 기준](evaluation.md)에 정리했습니다.
