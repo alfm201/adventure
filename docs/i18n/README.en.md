@@ -80,6 +80,8 @@ Start with the [reproduction guide](../../research/reproduction/README.md) for m
 
 For VELA v4.2 FULL100 generation, Hinge training and a summary of the results, see the [VELA v4.2 section](../../research/reproduction/README.md#vela-v42--compact100-hinge) and its linked report. WASM build instructions are in the [build guide](../../src/policies/vela/native/README.md). The original FULL100 table is not required to run the app. The model-specific and WASM build guides are in Korean.
 
+[AI play strategy analysis (PDF)](../reports/Adventure_AI_Play_Strategy_Analysis_en.pdf): A report that answers "Why did the AI recommend this move?" with a post-hoc analysis of real game records, and measures how far those recommendations can be trusted.
+
 ## License
 
 Code and documentation in this repository are licensed under [0BSD](../../LICENSE), except for identified third-party components and portions carrying separate license or copyright notices, which retain their applicable terms. The author's AI models and original images `81.png` and `82.png` may also be used, modified and redistributed commercially without attribution or additional permission. Gemini-generated voice recordings have a separate permission grant limited to rights held by the author.

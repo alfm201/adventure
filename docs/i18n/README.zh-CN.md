@@ -80,6 +80,8 @@ LYRA 模型包内的 `LICENSES.txt` 包含第三方运行时的许可证声明�
 
 VELA v4.2 的 FULL100 生成、Hinge 训练代码及最终结果摘要，见[复现指南的 VELA v4.2 一节](../../research/reproduction/README.md#vela-v42--compact100-hinge)；WASM 构建方法见[构建指南](../../src/policies/vela/native/README.md)。运行应用不需要 FULL100 原始表。各模型的详细指南与 WASM 构建指南均为韩语。
 
+[AI 游戏策略分析报告（PDF，英文）](../reports/Adventure_AI_Play_Strategy_Analysis_en.pdf)：通过对实际对局记录的事后分析，回答“AI 为什么推荐这一步”，并用数据检验这些推荐的可信程度。
+
 ## 许可证
 
 本仓库的代码和文档采用 [0BSD](../../LICENSE) 许可证。已明确列出的第三方组件，以及附有其他许可证或版权声明的部分，仍遵循各自的条款。作者的 AI 模型和原创图片 `81.png`、`82.png` 也允许商业使用、修改和再分发，无需署名或另行取得许可。对于 Gemini 合成的语音，作者仅在其拥有的权利范围内另行授予使用许可。
