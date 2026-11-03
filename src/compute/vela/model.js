@@ -5,6 +5,8 @@ export const MODEL_NAME = "VELA v4.3";
 export const MODEL_URL = new URL(`../../../public/models/${MODEL_ID}/`, import.meta.url);
 // v4.3 changes only the search; it reads the unchanged VELA v4.2 model file from its existing local and hosted path.
 export const MODEL_FILE_DIR = "vela-v4.2";
+export const RELEASE_URL = 'https://github.com/alfm201/adventure/releases/tag/vela-v4.2';
+export const MODEL_FILENAME = 'model.bin.gz';
 export const MODEL_FILE = `../${MODEL_FILE_DIR}/model.bin.gz`;
 export const LOCAL_MODEL = isLocalModelSource(MODEL_URL);
 const hash = /^[a-f0-9]{64}$/;

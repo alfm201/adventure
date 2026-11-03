@@ -7,7 +7,7 @@ export class VelaBackend {
     this.worker = null; this.ready = false; this.sequence = 0;
     this.active = null; this.queued = null; this.preparing = null; this.predictorLoads = new Map();
   }
-  prepare({ persist = false, manifest, cachedOnly = false, stageOnly = false, strength = "normal", signal, onProgress = () => {} } = {}) {
+  prepare({ persist = false, manifest, file, cachedOnly = false, stageOnly = false, strength = "normal", signal, onProgress = () => {} } = {}) {
     if (signal?.aborted) return Promise.reject(aborted());
     if (this.ready && (!manifest || sameModel(this.info.manifest, manifest))) return this.preparePredictor(strength).then(() => this.info);
     if (this.ready) this.dispose();
@@ -45,7 +45,7 @@ export class VelaBackend {
           this.dispatch();
         }
       };
-      this.worker.postMessage({ type: "prepare", persist, manifest, cachedOnly, stageOnly, strength });
+      this.worker.postMessage({ type: "prepare", persist, manifest, file, cachedOnly, stageOnly, strength });
     });
     if (this.preparing) this.preparing.promise = promise;
     return promise;

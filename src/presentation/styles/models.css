@@ -12,6 +12,33 @@
 .model-dialog .dialog-header h2 { font-size: 20px; color: var(--dialog-heading); }
 .model-intro { margin: 0 0 16px; color: #52666a; font-size: 13px; line-height: 1.55; }
 .model-options { display: grid; gap: 10px; }
+.model-source-options { display:grid; gap:12px; }
+.model-dialog .model-source-choice { display:flex; align-items:center; gap:14px; width:100%; padding:19px 16px; text-align:left; background:#fff; border:1px solid #cdddda; border-radius:9px; color:#25494d; box-shadow:none; }
+.model-source-choice > svg, .model-file-browse > svg { width:25px; height:25px; flex:none; fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
+.model-source-choice > span:not(.model-source-arrow) { display:grid; gap:7px; min-width:0; }
+.model-source-choice strong { font-size:15px; line-height:1.5; }
+.model-source-choice small { font-size:12px; color:#617673; line-height:1.6; }
+.model-source-arrow { margin-left:auto; color:#79938d; font-size:23px; }
+.model-dialog .model-source-choice:hover { border-color:#75a59a; background:#f1f8f4; }
+.model-source-choice:focus-visible, .model-file-browse:focus-visible, .model-release-link:focus-visible { outline:2px solid #297d78; outline-offset:3px; }
+.model-file-guide { display:grid; gap:17px; list-style:none; padding:0; margin:0; }
+.model-file-guide > li { display:grid; grid-template-columns:22px minmax(0,1fr); gap:10px; }
+.model-file-step { width:22px; height:22px; border-radius:7px; background:#e4efea; color:#315653; font-size:12px; font-weight:600; line-height:22px; text-align:center; }
+.model-file-guide h3 { margin:0 0 8px; color:#315653; font-size:13px; font-weight:600; line-height:22px; }
+.model-release-link { display:inline-flex; align-items:center; gap:8px; color:#286c68; font-size:13px; font-weight:600; text-underline-offset:3px; }
+.model-file-guide p { margin:7px 0 0; color:#52666a; font-size:12px; line-height:1.6; }
+.model-file-guide .model-file-instruction { margin-top:0; }
+.model-file-guide .model-file-caution { color:#795c35; font-weight:600; }
+.model-file-expected { display:block; margin-top:5px; color:#25494d; font-size:13px; overflow-wrap:anywhere; }
+.model-file-drop { border:1px dashed #98b7af; border-radius:9px; background:#fff; }
+.model-dialog .model-file-browse { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:9px; width:100%; padding:23px 12px; border:0; border-radius:9px; background:transparent; color:#315653; box-shadow:none; }
+.model-file-browse strong { font-size:14px; }
+.model-file-browse span { font-size:12px; line-height:1.6; color:#617673; }
+.model-file-drop.is-dragging, .model-file-drop:focus-within { border-color:#297d78; background:#eff9f3; }
+.model-file-drop.is-valid { border-style:solid; border-color:#75a59a; }
+.model-file-guide .model-file-status { min-height:18px; margin:10px 0 0; font-size:12px; line-height:1.6; color:#286c68; }
+.model-file-guide .model-file-status.is-error { color:#a03f37; }
+.model-file-guide .model-file-name { margin:4px 0 0; color:#52666a; font-size:11px; overflow-wrap:anywhere; line-height:1.6; }
 .model-options .model-choice-copy { min-width: 0; }
 .model-options .model-choice-copy > strong { flex-wrap: wrap; row-gap: 6px; }
 .lyra-option > .model-choice:not(.is-selected) { border-color: #d9bd86; }

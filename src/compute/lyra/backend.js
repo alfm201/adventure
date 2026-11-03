@@ -4,12 +4,12 @@ import { usageProfile } from './model.js';
 const aborted = () => new DOMException('Calculation cancelled', 'AbortError');
 export class LyraBackend extends EventTarget {
   constructor() { super(); this.sequence = 0; this.ready = false; this.configurations = new Map(); }
-  prepare({ device = 'auto', usage = 'medium', searchDepth = 1, signal, onProgress = () => {}, persist, deferUsage = false } = {}) {
+  prepare({ device = 'auto', usage = 'medium', searchDepth = 1, signal, onProgress = () => {}, persist, file, deferUsage = false } = {}) {
     if(signal?.aborted)return Promise.reject(aborted());
     if (!['low','medium','high'].includes(usage)) return Promise.reject(Error('Invalid LYRA usage'));
     if (![1,2].includes(searchDepth)) return Promise.reject(Error('Invalid LYRA search depth'));
     if(this.ready&&this.info.preference===device)
-      return loadPackage({persist,signal,onProgress}).then(async data=>{
+      return loadPackage({persist,file,signal,onProgress}).then(async data=>{
         signal?.throwIfAborted(); Object.assign(this.info,data.info);
         // Preparing a settings dialog must not change the running engine yet.
         return deferUsage ? { ...this.info, ...usageProfile(this.info.engine, usage), searchDepth } : this.setUsage(usage, searchDepth);
@@ -19,7 +19,7 @@ export class LyraBackend extends EventTarget {
     const cancel=()=>controller.abort(signal.reason);
     signal?.addEventListener('abort',cancel,{once:true});
     return (async()=>{
-      const data=await loadPackage({persist,signal:controller.signal,onProgress});
+      const data=await loadPackage({persist,file,signal:controller.signal,onProgress});
       controller.signal.throwIfAborted();
       return await this.start({device,usage,searchDepth,signal:controller.signal,onProgress,packageData:data});
     })().finally(()=>{signal?.removeEventListener('abort',cancel);if(this.loadController===controller)this.loadController=null;});

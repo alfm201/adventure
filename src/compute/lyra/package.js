@@ -1,4 +1,5 @@
 import { ASSET_URL, PACKAGE_URL, PACKAGE_SHA256, PACKAGE_BYTES, DECODED_BYTES, MODEL_ID, MANIFEST, LOCAL_MODEL, LOCAL_PACKAGE_URL } from './model.js';
+import { readModelFile } from '../model-file.js';
 const consentKey='adventure-lyra-cache-consent-v2';
 export const PACKAGE_CACHE_NAME=`adventure-lyra-package-v1:${new URL('../',ASSET_URL).pathname}`;
 const cacheName=PACKAGE_CACHE_NAME;
@@ -21,7 +22,7 @@ export async function hasSavedPackage(){
 // Deleting disk storage does not interrupt the model already in use this visit.
 export async function clearPackageCache(){rememberCacheChoice(false);if(globalThis.caches)await caches.delete(cacheName);}
 async function checked(bytes,manifest){return bytes.byteLength===manifest.bytes && await hashBytes(bytes)===manifest.sha256;}
-export async function loadPackage({persist=cacheAllowed(),signal,onProgress=()=>{}}={}){
+export async function loadPackage({persist=cacheAllowed(),file,signal,onProgress=()=>{}}={}){
   signal?.throwIfAborted();
   onProgress({phase:'inspect'});
   const response=await fetch(new URL('download.json',ASSET_URL),{signal,cache:'no-cache'});
@@ -29,12 +30,12 @@ export async function loadPackage({persist=cacheAllowed(),signal,onProgress=()=>
   const manifest=await response.json();
   if(manifest.id!==MODEL_ID||manifest.format!=='lyra-pack-gzip-v1'||manifest.sha256!==PACKAGE_SHA256||manifest.bytes!==PACKAGE_BYTES||manifest.assetsSha256!==MANIFEST.metadataSha256||manifest.decodedBytes!==DECODED_BYTES)
     throw Error('Invalid LYRA package manifest');
-  let bytes=resident,cache,fromCache=false,cacheFailed=false,cacheSaved=false;
+  let bytes=file?null:resident,cache,fromCache=false,cacheFailed=false,cacheSaved=false;
   if(persist){
     try{
       if(!globalThis.caches)throw Error('Storage unavailable');
       cache=await caches.open(cacheName);
-      const saved=await cache.match(cacheKey);
+      const saved=file?null:await cache.match(cacheKey);
       if(saved){
         const data=await saved.arrayBuffer();signal?.throwIfAborted();
         if(await checked(data,manifest)){bytes??=data;fromCache=true;cacheSaved=true;}
@@ -42,7 +43,10 @@ export async function loadPackage({persist=cacheAllowed(),signal,onProgress=()=>
       }
     }catch{signal?.throwIfAborted();cacheFailed=true;}
   }
-  if(!bytes){
+  if(file){
+    onProgress({phase:'file'});
+    bytes=await readModelFile(file,manifest,signal);
+  }else if(!bytes){
     const controller=new AbortController(),cancel=()=>controller.abort(signal.reason);
     signal?.addEventListener('abort',cancel,{once:true});
     let timer;const reset=()=>{clearTimeout(timer);timer=setTimeout(()=>controller.abort(new DOMException('Download timed out','TimeoutError')),30000);};

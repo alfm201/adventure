@@ -7,17 +7,17 @@ export const memoryText = manifest => manifest.recommendedMemoryBytes
   : '메모리 사용량은 기기와 게임 상태에 따라 달라집니다.';
 const preparationNavigation = () => '<footer><button type="button" class="model-back">이전</button><span></span><button type="button" class="primary">다음</button></footer>';
 
-export function preparationConsent({ bytes, intro, memory = '', local = false, resident = false, supported = true, allowed = false, storage = true, storageHint = false, saveHint = '' }) {
+export function preparationConsent({ bytes, intro, memory = '', local = false, resident = false, supported = true, allowed = false, storage = true, storageHint = false, saveHint = '', fromFile = false }) {
   return `<p class="model-intro">${intro}</p>
-    <div class="model-size"><strong>${megabytes(bytes)} <span>${resident || local ? '모델 파일' : '다운로드'}</span></strong>${saveHint ? `<span>${saveHint}</span>` : ''}</div>
+    <div class="model-size"><strong>${megabytes(bytes)} <span>${resident || local || fromFile ? '모델 파일' : '다운로드'}</span></strong>${saveHint ? `<span>${saveHint}</span>` : ''}</div>
     ${memory ? `<p class="model-memory">${memory}</p>` : ''}
-    ${storage ? `<p class="model-question">${local ? '모델을 브라우저에도 저장할까요?' : '다음에도 다운로드 없이 사용할까요?'}</p>
+    ${storage ? `<p class="model-question">${local || fromFile ? '모델을 브라우저에도 저장할까요?' : '다음에도 다운로드 없이 사용할까요?'}</p>
     <div class="cache-options" role="radiogroup" aria-label="모델 저장 동의">
       <label><input type="radio" name="cache" value="yes" ${supported ? '' : 'disabled'} ${supported && allowed ? 'checked' : ''}><span><strong>이 브라우저에 저장</strong><small>저장 공간과 사용 가능 여부를 확인합니다.</small></span></label>
-      <label><input type="radio" name="cache" value="no" ${supported && allowed ? '' : 'checked'}><span><strong>이번에만 사용</strong><small>${local ? '다음 접속 때 이 PC의 파일을 다시 읽습니다.' : '다음 접속 때 다시 다운로드합니다.'}</small></span></label>
+      <label><input type="radio" name="cache" value="no" ${supported && allowed ? '' : 'checked'}><span><strong>이번에만 사용</strong><small>${fromFile ? '다음 접속 때 파일을 다시 선택합니다.' : local ? '다음 접속 때 이 PC의 파일을 다시 읽습니다.' : '다음 접속 때 다시 다운로드합니다.'}</small></span></label>
     </div><div class="model-support cache-support"></div>
     ${storageHint ? '<p class="model-note">저장된 모델은 설정의 저장 공간에서 삭제할 수 있습니다.</p>' : ''}
-    <p class="model-note">${local ? '브라우저 저장 공간을 별도로 사용합니다.' : '브라우저 데이터 정리나 저장 공간 부족 시 다시 다운로드할 수 있습니다.'}</p>` : ''}
+    <p class="model-note">${local || fromFile ? '브라우저 저장 공간을 별도로 사용합니다.' : '브라우저 데이터 정리나 저장 공간 부족 시 다시 다운로드할 수 있습니다.'}</p>` : ''}
     ${preparationNavigation()}`;
 }
 
@@ -50,6 +50,6 @@ export function preparationStage(body, stage, step, total) {
   if (stage) body.querySelector('.model-transfer-detail').hidden = true;
 }
 
-export function preparationReady({ cacheSaved, cacheFailed, local = false, initial = false }) {
-  return `<div class="model-ready"><span class="model-ready-mark" aria-hidden="true">✓</span><strong>이제 다음 선택을 비교할 수 있습니다.</strong><p>${cacheSaved ? '이 브라우저에 저장된 모델을 다음에도 사용합니다.' : '이번 접속 동안 모델을 사용할 수 있습니다.'}</p></div>${cacheFailed ? `<p class="model-cache-warning">모델을 저장하지 못했습니다. ${local ? '다음 접속 때 이 PC의 파일을 다시 읽습니다.' : '다음 접속 때 다시 다운로드할 수 있습니다.'}</p><div class="model-support cache-support"></div>` : ''}<footer><button type="button" class="model-back">이전</button><span></span><button type="button" class="primary">${initial ? '시작' : '적용'}</button></footer>`;
+export function preparationReady({ cacheSaved, cacheFailed, local = false, initial = false, fromFile = false }) {
+  return `<div class="model-ready"><span class="model-ready-mark" aria-hidden="true">✓</span><strong>이제 다음 선택을 비교할 수 있습니다.</strong><p>${cacheSaved ? '이 브라우저에 저장된 모델을 다음에도 사용합니다.' : '이번 접속 동안 모델을 사용할 수 있습니다.'}</p></div>${cacheFailed ? `<p class="model-cache-warning">모델을 저장하지 못했습니다. ${fromFile ? '다음 접속 때 파일을 다시 선택합니다.' : local ? '다음 접속 때 이 PC의 파일을 다시 읽습니다.' : '다음 접속 때 다시 다운로드할 수 있습니다.'}</p><div class="model-support cache-support"></div>` : ''}<footer><button type="button" class="model-back">이전</button><span></span><button type="button" class="primary">${initial ? '시작' : '적용'}</button></footer>`;
 }

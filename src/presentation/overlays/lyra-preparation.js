@@ -1,11 +1,12 @@
 import { dialog, paintChoices, toast, canOpenDialog } from './dialogs.js';
 import { preparationConsent, preparationProgress, preparationReady, preparationStage, megabytes, memorySize } from './model-preparation.js';
+import { preparationSource, preparationFile } from './model-source.js';
 import { downloadProgress } from './download-progress.js';
 import { showSupport } from '../components/support.js';
 import { showDiagnostics } from './diagnostics.js';
 import { cacheAllowed, rememberCacheChoice, hasSavedPackage } from '../../compute/lyra/package.js';
 import { diagnostics } from '../../platform/report.js';
-import { LOCAL_MODEL, PACKAGE_BYTES } from '../../compute/lyra/model.js';
+import { LOCAL_MODEL, PACKAGE_BYTES, PACKAGE_SHA256, MODEL_NAME, MODEL_FILENAME, RELEASE_URL } from '../../compute/lyra/model.js';
 import { lyraMemory } from '../../content/models.js';
 
 export function showLyraPreparation(coordinator, { device, usage, searchDepth = 1, initial, persist = cacheAllowed(), onBack, onCancel, onFinish, parent = null }) {
@@ -21,9 +22,9 @@ export function showLyraPreparation(coordinator, { device, usage, searchDepth = 
     return `RAM 여유 약 ${memorySize(budget.ram)} 이상 권장 · 기기별 차이` + (gpu ? `<br>VRAM 여유 약 ${memorySize(budget.gpu)} 이상 권장 · 기기별 차이` : '')
       + (searchDepth === 2 ? '<br>깊은 탐색에서는 더 많은 메모리가 필요할 수 있습니다.' : '');
   };
-  let controller, transfer, epoch = 0, handedOff = false, ready = false;
+  let sourceUI, modelFile, controller, transfer, epoch = 0, handedOff = false, ready = false;
   const focusPrimary = () => body.querySelector('.primary:not(:disabled)')?.focus({ preventScroll: true });
-  const stop = () => { epoch++; controller?.abort(); transfer?.dispose(); };
+  const stop = () => { sourceUI?.dispose(); sourceUI = null; epoch++; controller?.abort(); transfer?.dispose(); };
   node.addEventListener('closing', stop);
   const back = () => { handedOff = true; node.addEventListener('close', () => onBack(persist), { once: true }); node.close(); };
   node.addEventListener('close', () => {
@@ -40,16 +41,16 @@ export function showLyraPreparation(coordinator, { device, usage, searchDepth = 
     stop(); coordinator.cancelModelPreparation();
     heading.textContent = 'LYRA 준비';
     const resident = coordinator.lyra?.ready;
-    body.innerHTML = preparationConsent({ bytes, resident, local: LOCAL_MODEL, storage: !LOCAL_MODEL, supported: !!globalThis.caches, allowed: persist, storageHint: !LOCAL_MODEL,
-      intro: resident ? '모델은 준비되어 있습니다. 다음 접속을 위한 저장 여부를 선택하세요.' : LOCAL_MODEL ? '이 PC의 모델 파일을 불러와 준비합니다.' : '전체 모델을 한 번 내려받아 준비합니다.',
+    body.innerHTML = preparationConsent({ bytes, resident, local: LOCAL_MODEL, fromFile: !!modelFile, storage: !LOCAL_MODEL, supported: !!globalThis.caches, allowed: persist, storageHint: !LOCAL_MODEL,
+      intro: modelFile ? '선택한 모델 파일을 불러와 준비합니다.' : resident ? '모델은 준비되어 있습니다. 다음 접속을 위한 저장 여부를 선택하세요.' : LOCAL_MODEL ? '이 PC의 모델 파일을 불러와 준비합니다.' : '전체 모델을 한 번 내려받아 준비합니다.',
       memory: memory() });
     const packageNote = document.createElement('p'); packageNote.className = 'model-note';
-    packageNote.textContent = LOCAL_MODEL ? '모델과 CPU/GPU 엔진을 한 번에 불러옵니다.' : '모델과 CPU/GPU 엔진을 한 번에 내려받습니다.';
+    packageNote.textContent = LOCAL_MODEL || modelFile ? '모델과 CPU/GPU 엔진을 한 번에 불러옵니다.' : '모델과 CPU/GPU 엔진을 한 번에 내려받습니다.';
     body.querySelector('.model-size').after(packageNote);
-    if (!globalThis.caches) showSupport(body.querySelector('.cache-support'), 'storage-unsupported', { target: '모델 저장' });
+    if (!LOCAL_MODEL && !globalThis.caches) showSupport(body.querySelector('.cache-support'), 'storage-unsupported', { target: '모델 저장' });
     persist = !LOCAL_MODEL && body.querySelector('[name=cache]:checked')?.value === 'yes';
     body.onchange = change;
-    body.querySelector('.model-back').onclick = back;
+    body.querySelector('.model-back').onclick = LOCAL_MODEL || resident ? back : () => modelFile ? filePreparation() : source();
     const primary = body.querySelector('.primary'); primary.textContent = '모델 불러오기'; primary.onclick = load;
     paintChoices(body); focusPrimary();
   }
@@ -61,22 +62,22 @@ export function showLyraPreparation(coordinator, { device, usage, searchDepth = 
     const current = epoch, signal = controller.signal;
     rememberCacheChoice(persist);
     heading.textContent = 'LYRA 준비';
-    body.innerHTML = preparationProgress({ transferLabel: LOCAL_MODEL ? '파일 읽기' : '다운로드', memory: memory() });
+    body.innerHTML = preparationProgress({ transferLabel: LOCAL_MODEL || modelFile ? '파일 읽기' : '다운로드', memory: memory() });
     preparationStage(body, '모델 파일 확인 중', 1, 3);
     body.querySelector('.model-back').onclick = consent;
     body.querySelector('.model-cancel').onclick = () => node.close();
     transfer = downloadProgress(body.querySelector('.model-transfer-detail'));
     try {
-      const info = await coordinator.prepareLyra({ device, usage, searchDepth, persist, signal, onProgress: data => {
+      const info = await coordinator.prepareLyra({ device, usage, searchDepth, persist, file: modelFile, signal, onProgress: data => {
         if (signal.aborted || !node.open || current !== epoch) return;
         transfer.update(data);
         const downloading = data.phase === 'download';
-        body.querySelector('.model-loading-title').textContent = downloading && !LOCAL_MODEL ? 'LYRA를 내려받는 중' : 'LYRA를 불러오는 중';
+        body.querySelector('.model-loading-title').textContent = downloading && !LOCAL_MODEL && !modelFile ? 'LYRA를 내려받는 중' : 'LYRA를 불러오는 중';
         body.querySelector('.model-loading-detail').textContent = '준비가 끝나면 바로 사용할 수 있습니다.';
         const measured = downloading && Number.isFinite(data.fraction);
         preparationStage(body, measured ? null : data.phase === 'initialize' ? '실행 환경 준비 중' : data.phase === 'warmup' ? '동작 확인 중' : data.phase === 'load' ? '모델 파일 준비 중' : '모델 파일 확인 중', data.phase === 'initialize' ? 2 : data.phase === 'warmup' ? 3 : 1, 3);
         if (measured) {
-          body.querySelector('.model-meter span').textContent = LOCAL_MODEL ? '파일 읽기' : '다운로드';
+          body.querySelector('.model-meter span').textContent = LOCAL_MODEL || modelFile ? '파일 읽기' : '다운로드';
           body.querySelector('.model-download').value = data.fraction ?? 0;
           body.querySelector('.model-transfer').textContent = `${megabytes(data.received ?? bytes)} / ${megabytes(bytes)}`;
         }
@@ -85,7 +86,7 @@ export function showLyraPreparation(coordinator, { device, usage, searchDepth = 
       transfer.dispose(); heading.textContent = 'LYRA 준비 완료';
       ready = true;
       busy = false;
-      body.innerHTML = preparationReady({ ...info, local: LOCAL_MODEL, initial });
+      body.innerHTML = preparationReady({ ...info, local: LOCAL_MODEL, fromFile: !!modelFile, initial });
       if (info.cacheFailed) {
         showSupport(body.querySelector('.cache-support'), 'storage-failed', { target: '모델 저장' });
         toast('모델을 저장하지 못했습니다. 이번에는 사용할 수 있습니다.');
@@ -105,18 +106,29 @@ export function showLyraPreparation(coordinator, { device, usage, searchDepth = 
       focusPrimary();
     }
   }
+  function source() {
+    stop(); busy = false; ready = false; modelFile = null; heading.textContent = 'LYRA 준비';
+    preparationSource(body, { onOnline: consent, onFile: filePreparation, onBack: back, onCancel: () => node.close() });
+  }
+  function filePreparation() {
+    stop(); busy = false; ready = false; modelFile = null;
+    sourceUI = preparationFile(body, { name: MODEL_NAME, filename: MODEL_FILENAME, releaseUrl: RELEASE_URL,
+      manifest: { bytes, sha256: PACKAGE_SHA256 }, onSelect: file => { modelFile = file; consent(); },
+      onBack: source, onCancel: () => node.close() });
+  }
   async function enter() {
-    if (!persist) { consent(); return; }
+    if (LOCAL_MODEL || coordinator.lyra?.ready) { consent(); return; }
+    if (!persist) { source(); return; }
     busy = true;
     const current = epoch;
     body.innerHTML = preparationProgress({ transferLabel: '파일 읽기', memory: memory() });
     preparationStage(body, '모델 파일 확인 중', 1, 3);
-    body.querySelector('.model-back').onclick = consent;
+    body.querySelector('.model-back').onclick = source;
     body.querySelector('.model-cancel').onclick = () => node.close();
     const saved = await hasSavedPackage();
     if (!node.open || current !== epoch) return;
     if (saved) load();
-    else consent();
+    else source();
   }
   enter(); return node;
 }

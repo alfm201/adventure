@@ -50,7 +50,7 @@ function progressReporter(manifest, phase) {
     }
   };
 }
-async function stage(manifest) {
+async function stage(manifest, file) {
   let cached = await cachedBundle(manifest).catch(() => null);
   if (cached) return { manifest, staged: true, fromCache: true };
   try {
@@ -68,8 +68,8 @@ async function stage(manifest) {
     const { files } = await runtimeFiles(manifest);
     await saveRuntime(directory, files);
     writer = await fileWriter(directory, "model.gz");
-    const response = await responseFor(modelFileUrl(manifest));
-    const result = await consumeModel(response.body, manifest, {
+    const stream = file ? file.stream() : (await responseFor(modelFileUrl(manifest))).body;
+    const result = await consumeModel(stream, manifest, {
       writer, progress: progressReporter(manifest, "download"),
       cacheError(error) { throw Object.assign(error, { code: storageIssue(error) }); },
     });
@@ -94,10 +94,10 @@ async function probe(manifest, persist) {
   const file = globalThis.FileSystemFileHandle?.prototype;
   return { available: true, cacheIssue, storage: !!navigator.storage?.getDirectory && !!(file?.createSyncAccessHandle || file?.createWritable) };
 }
-async function prepare({ persist, manifest, cachedOnly = false, strength }) {
+async function prepare({ persist, manifest, file, cachedOnly = false, strength }) {
   const predictorReady = preparePredictor(manifest, strength);
   post("progress", { phase: "engine", fraction: 0 });
-  let cached = persist ? await cachedBundle(manifest).catch(() => null) : null;
+  let cached = persist && !file ? await cachedBundle(manifest).catch(() => null) : null;
   if (cachedOnly && !cached) throw Object.assign(Error("저장된 모델을 읽지 못했습니다."), { code: "cache-missing" });
   let ptr, files, cacheIssue = null;
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -121,7 +121,7 @@ async function prepare({ persist, manifest, cachedOnly = false, strength }) {
             } catch (error) { cacheIssue = storageIssue(error); }
           } else cacheIssue = storage.code;
       }
-      const stream = cached ? cached.file.stream() : (await responseFor(modelFileUrl(manifest))).body;
+      const stream = file ? file.stream() : cached ? cached.file.stream() : (await responseFor(modelFileUrl(manifest))).body;
       if (!stream) throw Object.assign(Error("다운로드를 시작하지 못했습니다."), { code: "network" });
       const result = await consumeModel(stream, manifest, {
         writer, write: (bytes, offset) => module.HEAPU8.set(bytes, ptr + offset),
@@ -176,7 +176,7 @@ self.onmessage = async ({ data }) => {
       if (manifest.id !== MODEL_ID) throw Object.assign(Error("현재 버전의 모델이 필요합니다."), { code: "model" });
       if (data.type === "probe") { post("support", await probe(manifest, data.persist)); return; }
       if (data.type === "storage") { post("support", await checkStorage(manifest.bytes)); return; }
-      if (data.stageOnly) { post("ready", await stage(manifest)); return; }
+      if (data.stageOnly) { post("ready", await stage(manifest, data.file)); return; }
       if (!ready) await prepare({ ...data, manifest });
       return;
     }

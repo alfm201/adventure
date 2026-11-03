@@ -3,11 +3,12 @@ import { bindMetricHints } from "../components/metric-hint.js";
 import { dialog, confirmAction, paintChoices, toast, canOpenDialog, stepDialog } from "./dialogs.js";
 import { showSettings } from "./settings.js";
 import { modelComparison } from "../../content/models.js";
-import { sameModel, LOCAL_MODEL as localModel } from "../../compute/vela/model.js";
+import { sameModel, LOCAL_MODEL as localModel, RELEASE_URL, MODEL_FILENAME } from "../../compute/vela/model.js";
 import { compatibilityMessage } from "../../content/compatibility.js";
 import { showSupport } from "../components/support.js";
 import { diagnostics } from "../../platform/report.js";
 import { showDiagnostics } from "./diagnostics.js";
+import { preparationSource, preparationFile } from './model-source.js';
 import { downloadProgress } from "./download-progress.js";
 
 import { megabytes, memoryText, preparationConsent, preparationProgress, preparationReady, preparationStage } from "./model-preparation.js";
@@ -23,14 +24,14 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
   const body = document.createElement("div");
   let busy = false;
   const node = dialog("모델 선택", body, { className: "model-dialog", parent, closeOnOutside: () => !busy });
-  let controller, epoch = 0, handedOff = false, selected = selectedModel ?? (coordinator.enabled ? coordinator.settings.model : "vela");
+  let sourceUI, modelFile, controller, epoch = 0, handedOff = false, selected = selectedModel ?? (coordinator.enabled ? coordinator.settings.model : "vela");
   const refreshStrengthLabels = () => body.querySelectorAll("[data-search-label]").forEach(label => {
     const option = velaSearch(label.dataset.searchLabel); label.textContent = option.labels[pageLanguage()] ?? option.label;
   });
   addEventListener("adventurelanguagechange", refreshStrengthLabels);
   node.addEventListener("close", () => removeEventListener("adventurelanguagechange", refreshStrengthLabels), { once: true });
   let ready = false, strength = coordinator.settings.velaStrength ?? "normal", strengthHints;
-  node.addEventListener('closing', () => { epoch++; controller?.abort(); });
+  node.addEventListener('closing', () => { sourceUI?.dispose(); epoch++; controller?.abort(); });
   const heading = node.querySelector("h2");
   const settingsEntry = document.createElement('button');
   settingsEntry.type = 'button'; settingsEntry.className = 'model-settings-entry';
@@ -41,7 +42,7 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
   const focusPrimary = () => body.querySelector(".primary:not(:disabled)")?.focus({ preventScroll: true });
   // Screen changes inside this dialog use the shared dialog switch motion (LYRA moves between separate dialogs).
   // Leaving a screen ends its ready state at once, so closing during the motion never applies the abandoned model.
-  const step = next => () => { ready = false; stepDialog(node, next); };
+  const step = next => () => { sourceUI?.dispose(); sourceUI = null; ready = false; stepDialog(node, next); };
   const leave = next => { handedOff = true; node.addEventListener("close", next, { once: true }); node.close(); };
   node.addEventListener("close", () => {
     resume();
@@ -134,16 +135,30 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
     body.querySelectorAll(".model-meter, progress").forEach(element => element.hidden = true);
     body.querySelector(".model-loading-title").textContent = "사용할 모델을 확인하고 있습니다.";
     try {
-      const { latest } = await coordinator.inspectVela(signal);
+      const { latest, cached } = await coordinator.inspectVela(signal);
       if (signal.aborted || current !== epoch || !node.open) return;
+      modelFile = null;
       if (localModel) localPreparation(latest);
-      else if (coordinator.velaCacheAllowed) loadVela(true, latest);
-      else consent(latest);
+      else if (cached) loadVela(true, latest);
+      else if (coordinator.vela?.ready && sameModel(coordinator.vela.info.manifest, latest)) consent(latest);
+      else source(latest);
     } catch (error) {
       if (!signal.aborted && current === epoch && node.open) {
         failure(error, inspectVela);
       }
     }
+  }
+  function source(manifest) {
+    busy = false; ready = false; modelFile = null; heading.textContent = "VELA 준비";
+    preparationSource(body, { onOnline: step(() => consent(manifest)), onFile: step(() => filePreparation(manifest)),
+      onBack: step(selectStrength), onCancel: () => node.close() });
+  }
+  function filePreparation(manifest) {
+    busy = false; ready = false; modelFile = null;
+    sourceUI = preparationFile(body, { name: manifest.name, filename: MODEL_FILENAME, releaseUrl: RELEASE_URL, manifest,
+      note: "VELA v4.3과 v4.2는 같은 모델 파일을 사용합니다.",
+      onSelect: file => { modelFile = file; step(() => consent(manifest))(); },
+      onBack: step(() => source(manifest)), onCancel: () => node.close() });
   }
   function localPreparation(manifest) {
     busy = false;
@@ -159,11 +174,11 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
     heading.textContent = "VELA 준비";
     const resident = coordinator.vela?.ready && sameModel(coordinator.vela.info.manifest, manifest);
     const supported = coordinator.velaSupport.storage !== false && !!navigator.storage?.getDirectory && !issue;
-    body.innerHTML = preparationConsent({ bytes: manifest.bytes, resident, supported, local: localModel,
-      intro: resident ? "모델은 준비되어 있습니다. 다음 접속을 위한 저장 여부를 선택하세요." : localModel ? "이 PC의 모델 파일을 불러와 준비합니다." : "전체 모델을 한 번 내려받아 준비합니다.",
+    body.innerHTML = preparationConsent({ bytes: manifest.bytes, resident, supported, local: localModel, fromFile: !!modelFile, storageHint: !localModel,
+      intro: modelFile ? "선택한 모델 파일을 불러와 준비합니다." : resident ? "모델은 준비되어 있습니다. 다음 접속을 위한 저장 여부를 선택하세요." : localModel ? "이 PC의 모델 파일을 불러와 준비합니다." : "전체 모델을 한 번 내려받아 준비합니다.",
       memory: memoryText(manifest), saveHint: resident ? localModel ? "저장 시 파일을 다시 읽습니다" : "저장 시 다시 다운로드" : "" });
     if (!supported) showSupport(body.querySelector(".cache-support"), issue || "storage-unsupported", { retry: issue ? () => consent(manifest) : null, target: "모델 저장", retryLabel: "설정 변경" });
-    body.querySelector(".model-back").onclick = step(selectStrength);
+    body.querySelector(".model-back").onclick = step(() => modelFile ? filePreparation(manifest) : source(manifest));
     const primary = body.querySelector(".primary"); primary.textContent = "모델 불러오기";
     primary.onclick = async () => {
       const persist = body.querySelector("[name=cache]:checked").value === "yes";
@@ -185,6 +200,7 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
     paintChoices(body); focusPrimary();
   }
   function progressScreen(title, manifest) {
+    sourceUI?.dispose(); sourceUI = null;
     strengthHints?.dispose(); strengthHints = null;
     busy = true;
     ready = false;
@@ -192,25 +208,25 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
     // entered from model selection, where that parent stays stable.
     settingsEntry.hidden = true;
     heading.textContent = title;
-    body.innerHTML = preparationProgress({ transferLabel, memory: manifest ? memoryText(manifest) : "" });
+    body.innerHTML = preparationProgress({ transferLabel: modelFile ? "파일 읽기" : transferLabel, memory: manifest ? memoryText(manifest) : "" });
     body.querySelector(".model-back").onclick = step(select); body.querySelector(".model-cancel").onclick = () => node.close();
     controller?.abort(); controller = new AbortController(); return ++epoch;
   }
   async function loadVela(persist, manifest, cachedOnly = false) {
     const current = progressScreen("VELA 준비", manifest), signal = controller.signal;
-    const transfer = localModel ? null : downloadProgress(body.querySelector(".model-transfer-detail"));
+    const transfer = localModel || modelFile ? null : downloadProgress(body.querySelector(".model-transfer-detail"));
     signal.addEventListener("abort", () => transfer?.dispose(), { once: true });
     let downloaded = false;
     try {
-      const info = await coordinator.prepareVela({ persist, manifest, cachedOnly, strength, signal, onProgress: data => {
+      const info = await coordinator.prepareVela({ persist, manifest, file: modelFile, cachedOnly, strength, signal, onProgress: data => {
         if (current !== epoch || !node.open) return;
         transfer?.update(data);
         const cached = data.phase === "cache";
-        body.querySelector(".model-loading-title").textContent = cached ? "모델을 메모리에 준비하는 중" : data.phase === "download" ? localModel ? "VELA를 불러오는 중" : "VELA를 내려받는 중" : data.phase === "retry" ? localModel ? "모델 파일을 다시 읽는 중" : "모델을 다시 내려받는 중" : "VELA를 준비하는 중";
+        body.querySelector(".model-loading-title").textContent = cached ? "모델을 메모리에 준비하는 중" : data.phase === "download" ? localModel || modelFile ? "VELA를 불러오는 중" : "VELA를 내려받는 중" : data.phase === "retry" ? localModel ? "모델 파일을 다시 읽는 중" : "모델을 다시 내려받는 중" : "VELA를 준비하는 중";
         body.querySelector(".model-loading-detail").textContent = data.phase === "retry" ? localModel ? "브라우저 저장본 대신 이 PC의 모델 파일을 읽습니다." : "저장된 파일을 확인하지 못해 새로 받습니다." : "준비가 끝나면 바로 사용할 수 있습니다.";
         if (data.phase === "download" || (!downloaded && cached)) {
-          body.querySelector(".model-meter span").textContent = cached ? "저장된 파일" : transferLabel;
-          setLocalizedAttribute(body.querySelector(".model-download"), "aria-label", cached ? "저장된 모델 읽기" : localModel ? "모델 파일 읽기" : "모델 다운로드");
+          body.querySelector(".model-meter span").textContent = cached ? "저장된 파일" : modelFile ? "파일 읽기" : transferLabel;
+          setLocalizedAttribute(body.querySelector(".model-download"), "aria-label", cached ? "저장된 모델 읽기" : localModel || modelFile ? "모델 파일 읽기" : "모델 다운로드");
           body.querySelector(".model-transfer").textContent = data.total ? `${megabytes(data.received)} / ${megabytes(data.total)}` : "준비 중";
           body.querySelector(".model-download").value = data.fraction || 0;
           if (data.phase === "download") downloaded = true;
@@ -226,7 +242,7 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
       heading.textContent = `${info.manifest.name} 준비 완료`;
       ready = true;
       busy = false;
-      body.innerHTML = preparationReady({ ...info, local: localModel, initial });
+      body.innerHTML = preparationReady({ ...info, local: localModel, fromFile: !!modelFile, initial });
       if (info.cacheFailed) { showSupport(body.querySelector(".cache-support"), info.cacheIssue || "storage-failed", { target: "모델 저장" }); toast("모델을 저장하지 못했습니다. 이번에는 사용할 수 있습니다."); }
       body.querySelector(".model-back").onclick = step(select);
       body.querySelector(".primary").onclick = () => node.close();
