@@ -150,7 +150,7 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
   }
   function source(manifest) {
     busy = false; ready = false; modelFile = null; heading.textContent = "VELA 준비";
-    preparationSource(body, { onOnline: step(() => consent(manifest)), onFile: step(() => filePreparation(manifest)),
+    sourceUI = preparationSource(body, { onOnline: step(() => consent(manifest)), onFile: step(() => filePreparation(manifest)),
       onBack: step(selectStrength), onCancel: () => node.close() });
   }
   function filePreparation(manifest) {

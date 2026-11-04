@@ -108,7 +108,7 @@ export function showLyraPreparation(coordinator, { device, usage, searchDepth = 
   }
   function source() {
     stop(); busy = false; ready = false; modelFile = null; heading.textContent = 'LYRA 준비';
-    preparationSource(body, { onOnline: consent, onFile: filePreparation, onBack: back, onCancel: () => node.close() });
+    sourceUI = preparationSource(body, { onOnline: consent, onFile: filePreparation, onBack: back, onCancel: () => node.close() });
   }
   function filePreparation() {
     stop(); busy = false; ready = false; modelFile = null;

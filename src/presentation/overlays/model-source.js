@@ -1,5 +1,6 @@
 import { setLocalizedText, setLocalizedAttribute } from '../../localization/index.js';
 import { readModelFile } from '../../compute/model-file.js';
+import { bindMetricHints } from '../components/metric-hint.js';
 
 const icons = {
   online: '<path d="M7 16H5a4 4 0 0 1-.6-8A7 7 0 0 1 18 6a5 5 0 0 1 1 10h-2M12 11v10m-4-4 4 4 4-4"/>',
@@ -11,14 +12,16 @@ const navigation = () => '<footer><button type="button" class="model-back">이�
 export function preparationSource(body, { onOnline, onFile, onBack, onCancel }) {
   body.innerHTML = `<p class="model-intro">모델을 가져올 방법을 선택하세요.</p>
     <div class="model-source-options">
-      <button type="button" class="model-source-choice" data-source="online">${icon('online')}<span><strong>온라인 다운로드</strong><small>Cloudflare에서 모델을 내려받습니다.</small></span><span class="model-source-arrow" aria-hidden="true">›</span></button>
-      <button type="button" class="model-source-choice" data-source="file">${icon('file')}<span><strong>로컬 파일에서 불러오기</strong><small>GitHub Releases에서 받은 모델 파일을 선택합니다.</small></span><span class="model-source-arrow" aria-hidden="true">›</span></button>
+      <button type="button" class="model-source-choice" data-source="online">${icon('online')}<span><strong>온라인 다운로드 <span class="model-source-recommended">추천</span></strong><small>Cloudflare에서 모델을 내려받습니다.</small></span><span class="model-source-arrow" aria-hidden="true">›</span></button>
+      <div class="model-source-file"><button type="button" class="model-source-select" data-source="file" aria-label="로컬 파일에서 불러오기"></button>${icon('file')}<span class="model-source-copy"><strong>로컬 파일에서 불러오기 <button type="button" class="run-metric-hint" data-source-hint aria-label="로컬 파일 불러오기 안내">ⓘ</button></strong><small>GitHub Releases에서 받은 모델 파일을 선택합니다.</small></span><span class="model-source-arrow" aria-hidden="true">›</span></div>
     </div>${navigation()}`;
   body.querySelector('[data-source=online]').onclick = onOnline;
   body.querySelector('[data-source=file]').onclick = onFile;
   body.querySelector('.model-back').onclick = onBack;
   body.querySelector('.model-cancel').onclick = onCancel;
   body.querySelector('[data-source=online]').focus({ preventScroll: true });
+  return bindMetricHints(body.closest('dialog'), [{ button: body.querySelector('[data-source-hint]'),
+    text: '온라인 다운로드가 원활하지 않을 때 사용할 수 있는 대체 방법입니다.' }]);
 }
 
 export function preparationFile(body, { name, filename, releaseUrl, manifest, note, onSelect, onBack, onCancel }) {

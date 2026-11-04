@@ -1,6 +1,8 @@
 // Korean source messages map to English, Japanese and Simplified Chinese.
 // Stage names use descriptive translations/transliterations, not verified regional game names.
 globalThis.adventureMessages = {
+  "로컬 파일 불러오기 안내": ["About loading a local file","ローカルファイルの読み込みについて","本地文件加载说明"],
+  "온라인 다운로드가 원활하지 않을 때 사용할 수 있는 대체 방법입니다.": ["An alternative when online downloads are unreliable.","オンラインでのダウンロードが不安定な場合に使える代替手段です。","在线下载不稳定时可使用的替代方式。"],
   "다운로드 페이지 열기": ["Open the download page","ダウンロードページを開く","打开下载页面"],
   "모델 파일 다운로드": ["Download the model file","モデルファイルをダウンロード","下载模型文件"],
   "다운로드한 파일 불러오기": ["Load the downloaded file","ダウンロードしたファイルを読み込む","加载下载的文件"],
