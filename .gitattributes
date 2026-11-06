@@ -5,3 +5,6 @@ public/models/lyra-v1/assets.json -text
 public/models/lyra-v2/assets.json -text
 public/models/lyra-v2/predictor.json -text
 public/models/lyra-v2/LICENSES.txt -text
+
+# PDF reports are binary; never convert line endings.
+*.pdf binary
