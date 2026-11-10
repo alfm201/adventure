@@ -1,4 +1,5 @@
 import { setLocalizedText } from '../../localization/index.js';
+import { showSupport } from '../components/support.js';
 // Shared presentation for model preparation; storage and engines stay model-specific.
 export const megabytes = bytes => `${Math.round(bytes / 1e6).toLocaleString()} MB`;
 export const memorySize = bytes => bytes >= 1e9 ? `${(bytes / 1e9).toLocaleString()} GB` : megabytes(bytes);
@@ -52,4 +53,26 @@ export function preparationStage(body, stage, step, total) {
 
 export function preparationReady({ cacheSaved, cacheFailed, local = false, initial = false, fromFile = false }) {
   return `<div class="model-ready"><span class="model-ready-mark" aria-hidden="true">✓</span><strong>이제 다음 선택을 비교할 수 있습니다.</strong><p>${cacheSaved ? '이 브라우저에 저장된 모델을 다음에도 사용합니다.' : '이번 접속 동안 모델을 사용할 수 있습니다.'}</p></div>${cacheFailed ? `<p class="model-cache-warning">모델을 저장하지 못했습니다. ${fromFile ? '다음 접속 때 파일을 다시 선택합니다.' : local ? '다음 접속 때 이 PC의 파일을 다시 읽습니다.' : '다음 접속 때 다시 다운로드할 수 있습니다.'}</p><div class="model-support cache-support"></div>` : ''}<footer><button type="button" class="model-back">이전</button><span></span><button type="button" class="primary">${initial ? '시작' : '적용'}</button></footer>`;
+}
+
+export function preparationFailure(body, { code, modelName, intro, backLabel = '이전', onBack, onDiagnostics, onRetry, onFile }) {
+  body.closest('dialog').querySelector('h2').textContent = onFile ? '온라인 다운로드 실패' : '모델을 준비하지 못했습니다';
+  const back = `<button type="button" class="model-back">${backLabel}</button>`;
+  const diagnostics = '<button type="button" class="diagnostics-button">진단 정보</button>';
+  body.innerHTML = `<p class="model-intro"></p><div class="model-support failure-support"></div>${onFile ? `
+    <div class="model-recovery-options">
+      <button type="button" class="model-recovery-choice model-recovery-retry"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 5v5h-5M20 10a8 8 0 1 0 0 5"/></svg><span><strong>온라인 다운로드 다시 시도</strong><small>선택한 설정으로 모델 파일을 다시 받습니다.</small></span><span class="model-source-arrow" aria-hidden="true">›</span></button>
+      <button type="button" class="model-recovery-choice model-recovery-file"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h5l3 3h6a2 2 0 0 1 2 2v2M3 7h17a1 1 0 0 1 1 1l-3 12H3a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1Z"/></svg><span><strong>로컬 파일에서 불러오기</strong><small>GitHub Releases에서 받은 모델 파일을 사용합니다.</small></span><span class="model-source-arrow" aria-hidden="true">›</span></button>
+    </div><footer class="model-recovery-tools">${back}${diagnostics}</footer>` :
+    `<footer>${back}${diagnostics}<span></span><button type="button" class="primary">다시 시도</button></footer>`}`;
+  const summary = body.querySelector('.model-intro');
+  if (onFile) setLocalizedText(summary, '{0} 모델 파일을 받지 못했습니다.', modelName);
+  else summary.textContent = intro;
+  showSupport(body.querySelector('.failure-support'), String(code).replace(/^download-/, ''), { target: '모델 준비' });
+  body.querySelector('.model-back').onclick = onBack;
+  body.querySelector('.diagnostics-button').onclick = onDiagnostics;
+  if (onFile) body.querySelector('.model-recovery-file').onclick = onFile;
+  const retry = body.querySelector('.model-recovery-retry, .primary');
+  retry.onclick = onRetry;
+  retry.focus({ preventScroll: true });
 }

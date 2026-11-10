@@ -10,6 +10,8 @@ const descriptions = {
   memory: ["메모리 부족", "다른 앱이나 탭을 닫고 다시 시도하거나 X36을 선택해 주세요."],
   integrity: ["파일 확인 실패", "모델 파일이 완전하지 않거나 필요한 버전과 다릅니다. 올바른 파일을 준비한 뒤 다시 시도해 주세요."],
   model: ["모델 실행 실패", "모델을 준비하지 못했습니다. 다시 시도하거나 X36을 선택해 주세요."],
+  "lyra-gpu-runtime": ["GPU 실행 환경 확인", "브라우저의 그래픽 가속 설정과 그래픽 드라이버를 확인해 주세요."],
+  "model-file-read": ["파일 확인 실패", "파일을 읽지 못했습니다. 파일을 다시 선택해 주세요."],
   "cache-missing": ["저장된 모델 읽기 실패", "브라우저에서 저장된 모델을 읽지 못했습니다. 모델을 다시 불러오거나 다른 모델을 선택해 주세요."],
   "storage-unsupported": ["모델 저장 미지원", "이 브라우저는 필요한 저장 기능을 지원하지 않습니다. 브라우저를 업데이트하거나 이번 접속 동안만 모델을 사용할 수 있습니다."],
   "storage-full": ["저장 공간 부족", "새 모델을 저장할 공간이 부족합니다. 기기의 저장 공간을 확보하거나 이번에만 사용을 선택해 주세요. 업데이트 중에는 기존 파일도 함께 보관합니다."],
@@ -21,7 +23,8 @@ const descriptions = {
   "gpu-test": ["GPU 계산 검사 실패", "이 기기에서 GPU 계산 결과를 확인하지 못했습니다. 브라우저와 그래픽 드라이버를 업데이트하거나 CPU를 선택해 주세요."],
   "gpu-lost": ["GPU 연결 종료", "GPU 연결이 종료되어 CPU로 계산합니다. 다른 작업을 줄이거나 계산 설정에서 GPU를 다시 확인해 주세요."],
 };
+const aliases = { 'lyra-runtime': 'model', 'model-file-size': 'integrity', 'model-file-integrity': 'integrity' };
 export function compatibilityMessage(code) {
-  const [title, detail] = descriptions[code] || descriptions.network;
+  const [title, detail] = descriptions[aliases[code] ?? code] || descriptions.network;
   return { title, detail };
 }

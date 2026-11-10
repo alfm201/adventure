@@ -99,6 +99,25 @@
 .model-meter { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; margin: 14px 0 7px; }
 .model-meter strong { font-weight: 400; color: #617673; font-variant-numeric: tabular-nums; }
 .model-transfer-detail { margin: 6px 0 0; color: #617673; font-size: 11px; line-height: 1.5; text-align: right; font-variant-numeric: tabular-nums; }
+.model-download-alternative { display:grid; grid-template-columns:16px minmax(0,1fr); gap:9px; align-items:start; margin-top:14px; padding:12px 13px; border:1px solid #d4e5db; border-radius:8px; background:#f0f7f2; }
+.model-download-alternative svg, .model-recovery-choice svg { width:16px; height:16px; color:#497875; fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
+.model-download-alternative svg { margin-top:2px; }
+.model-download-alternative strong { font-size:13px; line-height:20px; color:#315653; }
+.model-download-alternative p { margin:4px 0 6px; font-size:12px; line-height:1.6; }
+.model-dialog .model-download-link { display:inline-flex; align-items:center; gap:6px; padding:3px 0; border:0; background:transparent; color:#286c68; font-size:12px; font-weight:600; text-align:left; }
+.model-download-link span:first-child { text-decoration:underline; text-underline-offset:3px; }
+.model-recovery-options { margin-top:12px; border-block:1px solid #d9e6de; }
+.model-dialog .model-recovery-choice { display:grid; grid-template-columns:18px minmax(0,1fr) 12px; align-items:center; gap:12px; width:100%; padding:13px 8px; border:0; border-radius:0; background:transparent; text-align:left; color:var(--dialog-text); }
+.model-recovery-choice + .model-recovery-choice { border-top:1px solid #e3ece6; }
+.model-dialog .model-recovery-choice:hover { background:#f1f8f4; }
+.model-dialog .model-download-link:focus-visible, .model-dialog .model-recovery-choice:focus-visible { outline:2px solid var(--dialog-focus); outline-offset:2px; }
+.model-recovery-choice svg { width:18px; height:18px; }
+.model-recovery-choice strong { display:block; font-size:13px; line-height:1.5; }
+.model-recovery-choice small { display:block; margin-top:4px; font-size:11px; line-height:1.5; color:#617673; }
+.model-recovery-choice .model-source-arrow { font-size:20px; }
+.model-dialog footer.model-recovery-tools { margin-top:13px; justify-content:space-between; }
+.model-dialog .model-recovery-tools .diagnostics-button { padding:5px 10px; font-size:11px; }
+.failure-support .support-message { word-break:keep-all; overflow-wrap:anywhere; }
 .model-dialog progress { width: 100%; height: 8px; display: block; border: 0; border-radius: 4px; overflow: hidden; accent-color: #358a7a; }
 .model-dialog progress::-webkit-progress-bar { background: #e2ede7; border-radius: 4px; }
 .model-dialog progress::-webkit-progress-value { background: #358a7a; border-radius: 4px; }

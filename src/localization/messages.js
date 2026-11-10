@@ -1,6 +1,15 @@
 // Korean source messages map to English, Japanese and Simplified Chinese.
 // Stage names use descriptive translations/transliterations, not verified regional game names.
 globalThis.adventureMessages = {
+  "다운로드가 오래 걸리나요?": ["Taking a while to download?","ダウンロードに時間がかかっていますか？","下载需要较长时间吗？"],
+  "GitHub Releases에서 받은 모델 파일도 사용할 수 있습니다.": ["You can also use a model file from GitHub Releases.","GitHub Releasesから取得したモデルファイルも使えます。","也可以使用从 GitHub Releases 下载的模型文件。"],
+  "온라인 다운로드 실패": ["Online download failed","オンラインダウンロードに失敗しました","在线下载失败"],
+  "{0} 모델 파일을 받지 못했습니다.": ["Could not download the {0} model file.","{0}のモデルファイルをダウンロードできませんでした。","未能下载 {0} 模型文件。"],
+  "온라인 다운로드 다시 시도": ["Retry online download","オンラインダウンロードを再試行","重试在线下载"],
+  "선택한 설정으로 모델 파일을 다시 받습니다.": ["Download the model again with your selected settings.","選択した設定でモデルファイルを再ダウンロードします。","使用所选设置重新下载模型文件。"],
+  "GitHub Releases에서 받은 모델 파일을 사용합니다.": ["Use a model file downloaded from GitHub Releases.","GitHub Releasesでダウンロードしたモデルファイルを使います。","使用从 GitHub Releases 下载的模型文件。"],
+  "GPU 실행 환경 확인": ["Check GPU setup","GPUの実行環境を確認","检查 GPU 环境"],
+  "브라우저의 그래픽 가속 설정과 그래픽 드라이버를 확인해 주세요.": ["Check your browser’s graphics acceleration setting and graphics driver.","ブラウザーのグラフィックスアクセラレーション設定とグラフィックスドライバーを確認してください。","请检查浏览器的图形加速设置和显卡驱动。"],
   "로컬 파일 불러오기 안내": ["About loading a local file","ローカルファイルの読み込みについて","本地文件加载说明"],
   "온라인 다운로드가 원활하지 않을 때 사용할 수 있는 대체 방법입니다.": ["An alternative when online downloads are unreliable.","オンラインでのダウンロードが不安定な場合に使える代替手段です。","在线下载不稳定时可使用的替代方式。"],
   "다운로드 페이지 열기": ["Open the download page","ダウンロードページを開く","打开下载页面"],

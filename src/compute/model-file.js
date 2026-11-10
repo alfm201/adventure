@@ -1,5 +1,10 @@
 export const fileError = code => Object.assign(new Error(code), { code });
 
+export function modelDownloadError(error, online = true) {
+  const code = error.code === 'integrity' ? 'integrity' : 'network';
+  return Object.assign(new Error(error.message, { cause: error }), { name: error.name, code: online ? `download-${code}` : code });
+}
+
 export async function readModelFile(file, manifest, signal) {
   signal?.throwIfAborted();
   if (!file || file.size !== manifest.bytes) throw fileError('model-file-size');

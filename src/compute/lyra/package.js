@@ -1,5 +1,5 @@
 import { ASSET_URL, PACKAGE_URL, PACKAGE_SHA256, PACKAGE_BYTES, DECODED_BYTES, MODEL_ID, MANIFEST, LOCAL_MODEL, LOCAL_PACKAGE_URL } from './model.js';
-import { readModelFile } from '../model-file.js';
+import { modelDownloadError, readModelFile } from '../model-file.js';
 const consentKey='adventure-lyra-cache-consent-v2';
 export const PACKAGE_CACHE_NAME=`adventure-lyra-package-v1:${new URL('../',ASSET_URL).pathname}`;
 const cacheName=PACKAGE_CACHE_NAME;
@@ -25,11 +25,17 @@ async function checked(bytes,manifest){return bytes.byteLength===manifest.bytes 
 export async function loadPackage({persist=cacheAllowed(),file,signal,onProgress=()=>{}}={}){
   signal?.throwIfAborted();
   onProgress({phase:'inspect'});
-  const response=await fetch(new URL('download.json',ASSET_URL),{signal,cache:'no-cache'});
-  if(!response.ok)throw Error('LYRA download metadata unavailable');
-  const manifest=await response.json();
-  if(manifest.id!==MODEL_ID||manifest.format!=='lyra-pack-gzip-v1'||manifest.sha256!==PACKAGE_SHA256||manifest.bytes!==PACKAGE_BYTES||manifest.assetsSha256!==MANIFEST.metadataSha256||manifest.decodedBytes!==DECODED_BYTES)
-    throw Error('Invalid LYRA package manifest');
+  let manifest;
+  try {
+    const response=await fetch(new URL('download.json',ASSET_URL),{signal,cache:'no-cache'});
+    if(!response.ok)throw Error('LYRA download metadata unavailable');
+    manifest=await response.json();
+  } catch (error) {
+    signal?.throwIfAborted();
+    throw Object.assign(new Error(error.message, { cause: error }), { code: error instanceof SyntaxError ? 'integrity' : 'network' });
+  }
+  if(manifest?.id!==MODEL_ID||manifest.format!=='lyra-pack-gzip-v1'||manifest.sha256!==PACKAGE_SHA256||manifest.bytes!==PACKAGE_BYTES||manifest.assetsSha256!==MANIFEST.metadataSha256||manifest.decodedBytes!==DECODED_BYTES)
+    throw Object.assign(Error('Invalid LYRA package manifest'), { code: 'integrity' });
   let bytes=file?null:resident,cache,fromCache=false,cacheFailed=false,cacheSaved=false;
   if(persist){
     try{
@@ -56,11 +62,14 @@ export async function loadPackage({persist=cacheAllowed(),file,signal,onProgress
       const res=await fetch(url,{signal:controller.signal,cache:'no-store',credentials:'omit'});
       if(!res.ok||!res.body)throw Error(`LYRA download failed (${res.status})`);
       const reader=res.body.getReader(),data=new Uint8Array(manifest.bytes);let offset=0;
-      try{for(;;){const {done,value}=await reader.read();if(done)break;reset();if(offset+value.length>data.length)throw Error('Oversized LYRA download');data.set(value,offset);offset+=value.length;onProgress({phase:'download',received:offset,total:manifest.bytes,fraction:offset/manifest.bytes});}}
+      try{for(;;){const {done,value}=await reader.read();if(done)break;reset();if(offset+value.length>data.length)throw Object.assign(Error('Oversized LYRA download'),{code:'integrity'});data.set(value,offset);offset+=value.length;onProgress({phase:'download',received:offset,total:manifest.bytes,fraction:offset/manifest.bytes});}}
       finally{await reader.cancel().catch(()=>{});}
       bytes=data.buffer;
       onProgress({phase:'verify'});
-      if(!await checked(bytes,manifest))throw Error('LYRA package integrity check failed');
+      if(!await checked(bytes,manifest))throw Object.assign(Error('LYRA package integrity check failed'),{code:'integrity'});
+    }catch(error){
+      signal?.throwIfAborted();
+      throw modelDownloadError(error, !LOCAL_MODEL);
     }finally{clearTimeout(timer);signal?.removeEventListener('abort',cancel);}
   }else onProgress({phase:fromCache?'cache':'memory',fraction:1});
   signal?.throwIfAborted();resident=bytes;

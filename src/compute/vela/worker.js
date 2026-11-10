@@ -5,6 +5,7 @@ import { fileWriter, checkStorage, storageIssue } from "./files.js";
 import { consumeModel, gunzipStream } from "./streams.js";
 import { responseFor, runtimeFiles, createRuntime, saveRuntime } from "./runtime.js";
 import { fetchJson } from "../../platform/requests.js";
+import { modelDownloadError } from "../model-file.js";
 
 let module, ready = false, loadedInfo, activeTask;
 const predictors = new Map();
@@ -50,6 +51,19 @@ function progressReporter(manifest, phase) {
     }
   };
 }
+async function receiveModel(manifest, { file, cached, ...options }) {
+  const online = !LOCAL_MODEL && !file && !cached;
+  const progress = progressReporter(manifest, cached ? "cache" : "download");
+  if (online) progress({ received: 0, verified: 0 }, true);
+  try {
+    const stream = file ? file.stream() : cached ? cached.file.stream() : (await responseFor(modelFileUrl(manifest))).body;
+    if (!stream) throw Object.assign(Error("다운로드를 시작하지 못했습니다."), { code: "network" });
+    return await consumeModel(stream, manifest, { ...options, progress });
+  } catch (error) {
+    if (online && !String(error.code).startsWith("storage-")) throw modelDownloadError(error);
+    throw error;
+  }
+}
 async function stage(manifest, file) {
   let cached = await cachedBundle(manifest).catch(() => null);
   if (cached) return { manifest, staged: true, fromCache: true };
@@ -68,10 +82,9 @@ async function stage(manifest, file) {
     const { files } = await runtimeFiles(manifest);
     await saveRuntime(directory, files);
     writer = await fileWriter(directory, "model.gz");
-    const stream = file ? file.stream() : (await responseFor(modelFileUrl(manifest))).body;
-    const result = await consumeModel(stream, manifest, {
-      writer, progress: progressReporter(manifest, "download"),
-      cacheError(error) { throw Object.assign(error, { code: storageIssue(error) }); },
+    const result = await receiveModel(manifest, {
+      file, writer,
+      cacheError(error) { throw Object.assign(new Error(error.message, { cause: error }), { code: storageIssue(error) }); },
     });
     writer = null;
     if (!result.cacheWritten) throw Object.assign(Error("Storage failed"), { code: "storage-failed" });
@@ -121,11 +134,8 @@ async function prepare({ persist, manifest, file, cachedOnly = false, strength }
             } catch (error) { cacheIssue = storageIssue(error); }
           } else cacheIssue = storage.code;
       }
-      const stream = file ? file.stream() : cached ? cached.file.stream() : (await responseFor(modelFileUrl(manifest))).body;
-      if (!stream) throw Object.assign(Error("다운로드를 시작하지 못했습니다."), { code: "network" });
-      const result = await consumeModel(stream, manifest, {
-        writer, write: (bytes, offset) => module.HEAPU8.set(bytes, ptr + offset),
-        progress: progressReporter(manifest, fromCache ? "cache" : "download"),
+      const result = await receiveModel(manifest, {
+        file, cached, writer, write: (bytes, offset) => module.HEAPU8.set(bytes, ptr + offset),
         cacheError(error) { cacheIssue = storageIssue(error); },
       });
       writer = null;

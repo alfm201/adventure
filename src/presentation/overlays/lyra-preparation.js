@@ -1,5 +1,5 @@
 import { dialog, paintChoices, toast, canOpenDialog } from './dialogs.js';
-import { preparationConsent, preparationProgress, preparationReady, preparationStage, megabytes, memorySize } from './model-preparation.js';
+import { preparationConsent, preparationFailure, preparationProgress, preparationReady, preparationStage, megabytes, memorySize } from './model-preparation.js';
 import { preparationSource, preparationFile } from './model-source.js';
 import { downloadProgress } from './download-progress.js';
 import { showSupport } from '../components/support.js';
@@ -66,7 +66,8 @@ export function showLyraPreparation(coordinator, { device, usage, searchDepth = 
     preparationStage(body, '모델 파일 확인 중', 1, 3);
     body.querySelector('.model-back').onclick = consent;
     body.querySelector('.model-cancel').onclick = () => node.close();
-    transfer = downloadProgress(body.querySelector('.model-transfer-detail'));
+    const onFile = LOCAL_MODEL || modelFile ? undefined : filePreparation;
+    transfer = downloadProgress(body.querySelector('.model-transfer-detail'), onFile);
     try {
       const info = await coordinator.prepareLyra({ device, usage, searchDepth, persist, file: modelFile, signal, onProgress: data => {
         if (signal.aborted || !node.open || current !== epoch) return;
@@ -98,12 +99,13 @@ export function showLyraPreparation(coordinator, { device, usage, searchDepth = 
       if (signal.aborted || !node.open || current !== epoch) return;
       transfer.dispose(); diagnostics.capture(error, 'lyra.prepare');
       busy = false;
-      heading.textContent = '모델을 준비하지 못했습니다';
-      body.innerHTML = `<p class="model-intro">${device === 'gpu' && error.code === 'lyra-runtime' ? 'GPU를 준비하지 못했습니다. 자동 또는 CPU를 선택해 주세요.' : '모델을 준비하지 못했습니다. 다시 시도해 주세요.'}</p><footer><button type="button" class="model-back">이전</button><button type="button" class="diagnostics-button">진단 정보</button><span></span><button type="button" class="primary">다시 시도</button></footer>`;
-      body.querySelector('.model-back').onclick = back;
-      body.querySelector('.diagnostics-button').onclick = showDiagnostics;
-      body.querySelector('.primary').onclick = load;
-      focusPrimary();
+      const gpuFailed = device === 'gpu' && error.code === 'lyra-runtime';
+      preparationFailure(body, {
+        code: gpuFailed ? 'lyra-gpu-runtime' : error.code || 'model', modelName: MODEL_NAME,
+        intro: gpuFailed ? 'GPU를 준비하지 못했습니다. 자동 또는 CPU를 선택해 주세요.' : '모델을 준비하지 못했습니다. 다시 시도해 주세요.',
+        onBack: back, onDiagnostics: showDiagnostics, onRetry: load,
+        onFile: String(error.code).startsWith('download-') ? onFile : undefined,
+      });
     }
   }
   function source() {
@@ -111,7 +113,9 @@ export function showLyraPreparation(coordinator, { device, usage, searchDepth = 
     sourceUI = preparationSource(body, { onOnline: consent, onFile: filePreparation, onBack: back, onCancel: () => node.close() });
   }
   function filePreparation() {
-    stop(); busy = false; ready = false; modelFile = null;
+    stop(); coordinator.cancelModelPreparation();
+    busy = false; ready = false; modelFile = null;
+    heading.textContent = 'LYRA 준비';
     sourceUI = preparationFile(body, { name: MODEL_NAME, filename: MODEL_FILENAME, releaseUrl: RELEASE_URL,
       manifest: { bytes, sha256: PACKAGE_SHA256 }, onSelect: file => { modelFile = file; consent(); },
       onBack: source, onCancel: () => node.close() });

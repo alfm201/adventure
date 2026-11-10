@@ -6,6 +6,8 @@
 
 어시스트의 **음성 안내**는 한국어·영어·일본어·중국어와 여성·남성 목소리를 지원합니다. 선택한 음성을 용량 확인 후 받을 수 있으며, 브라우저 저장·삭제를 지원합니다. 안내 음성은 Gemini 3.8 Flash TTS로 미리 생성한 AI 음성입니다.
 
+[AI 플레이 전략 분석 보고서 (PDF)](docs/reports/Adventure_AI_Play_Strategy_Analysis_ko.pdf): "왜 AI가 이 수를 추천했는가"를 실제 플레이 기록의 사후 분석으로 답하고, 그 추천이 얼마나 믿을 만한지를 수치로 확인한 분석 보고서입니다.
+
 ## 모델 선택
 
 | 모델 | 계산 방식 | 평균 기록 | 집계 방식 |
@@ -77,8 +79,6 @@ LYRA 패키지 안의 `LICENSES.txt`에는 외부 런타임의 라이선스 고�
 X36 → VELA → LYRA의 계보와 주요 전환·평가 결과는 [연구 개요](research/README.ko.md)에 정리했습니다. 유한 자원 MDP의 수식 분석, 상태 공간과 탐색 분기, Oracle 실험은 [환경과 계산량](research/topics/environment.md)에서 설명합니다.
 
 모델 생성·학습·변환 절차는 [재현 가이드](research/reproduction/README.ko.md)에서 시작합니다. 버전별 보고서는 [LYRA v2](research/lyra-v2/report-ko.md), [LYRA v1](research/lyra-v1/report-ko.md), [VELA v4.2](research/vela-v4.2/report-ko.md)를 참고하세요. VELA의 WASM 빌드는 [빌드 안내](src/policies/vela/native/README.md)에 있습니다. FULL100 원본 테이블은 앱 실행에 필요하지 않습니다.
-
-[AI 플레이 전략 분석 보고서 (PDF)](docs/reports/Adventure_AI_Play_Strategy_Analysis_ko.pdf): "왜 AI가 이 수를 추천했는가"를 실제 플레이 기록의 사후 분석으로 답하고, 그 추천이 얼마나 믿을 만한지를 수치로 확인한 분석 보고서입니다.
 
 ## 라이선스
 
