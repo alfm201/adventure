@@ -66,6 +66,8 @@ TT의 제한된 생성 실험은 `TT_GLOBAL_PREFLIGHT_20260930.md`, 정확한 �
 | L7 | `SCALE_VI_PLAN.md`의 L군·S2·수평선 점검·SCV·완화 게임 사전 검사 절, `results/svi/`, `results/relaxed_pretest_*.json` | 규모의 한계, 행동 간 값 차이가 정체의 위치라는 근거 |
 | L8 | `SCALE_VI_PLAN.md`의 DLOOP·SRCH0–2·FIT·FOCUS 절, `scripts/s2f_m40_eval.py`, `scripts/srch2_eval.py`, `scripts/fit_test.py`, `scripts/focus_train.py`, `results/focus_dev.json` | M₄₀의 탐색 여지, 탐색 이득을 1-step 가치망으로 옮기는 시도와 그 한계 |
 | L9 | `SCALE_VI_PLAN.md`의 간섭 진단·ALLOC 절, `scripts/interf_obs.py`, `scripts/interf_insample.py`, `scripts/alloc_profile.py` | 고정 교사 재학습의 학습 상태·새 상태 간 효과 차이(일반화), 2-step 이득이 소수 결정에 몰리는 정도 |
+| L10 | `SCALE_VI_PLAN.md`의 FITX·GAME-DIV·GDIV-ACT·DEEP-LOOP 판정·WARM-WIDE1·TERRAIN1·TERRAIN-COLD·FUTURE-CARD1·GPS-T·PE-RETURN-SR 절, `scripts/fitx.py`, `scripts/gdiv_diag.py`, `scripts/deep_eval.py`, `scripts/ter_diag.py`, `scripts/tcold_verdict.py`, `scripts/fut_diag.py`, `scripts/gpscale.py`, `scripts/pe_ret.py`, `results/{fitx,gdiv_offline,gdiv_diag,deep_eval,ww1_games_M40base,ter1_offline,tcold,fut1_offline,gps_eval,peret_main}.json` | 학습량·독립 게임 수·학습률의 효과, 접전 결정 교정의 자료 곡선, 폭 확장 갱신, 지형 공유 표현과 미래 카드 예측 보조 과제, 2-step 정답 학습과 탐색 정책 최종 점수 학습의 결과 |
+| L11 | `SCALE_VI_PLAN.md`의 B15-FEAS·TREL·KAPPA-HEAD·PRESID-X 절, `scripts/trel.py`, `scripts/kappa_head.py`, `scripts/presid.py`, `results/{b15_feas,trel,kappa_head,presid}.json` | 교사와 M₄₀이 갈리는 결정의 값 차이, 교정 방향의 안정성, 학습한 상태와 새 게임 사이의 교정 차이 |
 
 LYRA의 학습 단계는 [포함된 재현 코드](../reproduction/README.ko.md#lyra-v1--v₂₀-신경망-가치-모델)와 대조했습니다. 후속 연구는 인용한 프로토콜에서 보고한 범위까지만 설명하며, 공개 문서에는 정체의 기제를 뒷받침하는 결과만 옮겼습니다.
 

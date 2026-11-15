@@ -83,8 +83,9 @@ LYRA v2 uses the same 1-step policy with the 15.4M value network **M₄₀**. In
 
 Training after LYRA v2 has not raised the game score further. The following were observed; which factor drives them has not yet been isolated.
 - Error against the teacher falls sharply on trained states but barely on new states, and retraining also changes choices that were already right.
+- More training updates or more independent games did not close this gap, and training that corrects only close decisions was still worse than M₄₀ on new games.
 - Lowering teacher-referenced error or level bias did not raise the score.
-- Decision-time search still adds about +1.1 points on top of M₄₀, but the training recipes tested so far did not turn this into a lasting score gain.
+- Decision-time search still adds about +1.1 points on top of M₄₀, but none of the training recipes that learn from search (its self-play data, its 2-step targets, or its final scores) turned this into a lasting score gain.
 
 See [limits and open problems (Korean)](topics/limits.md#lyra-학습-오차-감소가-지속적인-정책-개선으로-이어지지-않았다) for the evidence; the same page covers the limits of X36 and VELA.
 
