@@ -77,7 +77,7 @@ LYRA aimed to build an iterative self-improvement loop: collect games with a mod
 
 ### 6. LYRA v2: same policy, larger value network
 
-LYRA v2 uses the same 1-step policy with the 15.4M value network **M₄₀**. Instead of continuing from V₂₀, the larger network was trained from V₀ for 40 rounds with one fixed recipe. In a sealed evaluation on 10K new seed pairs it scored +1.00 points above π₂₀ (simultaneous CI [0.53, 1.46]), and +1.08 in a confirmation at deployment precision (FP32). The scale gain over 5.5M replicated with a second training seed, but a 61M model did not improve further. [LYRA v2 report (Korean)](lyra-v2/report-ko.md) · [learning path (Korean)](topics/learning.md)
+LYRA v2 uses the same 1-step policy with the 15.4M value network **M₄₀**. Instead of continuing from V₂₀, the larger network was trained from V₀ for 40 rounds with one fixed recipe. In a sealed evaluation on 10K new seed pairs it scored +1.00 points above π₂₀ (simultaneous CI [0.53, 1.46]), and +1.08 in a confirmation at deployment precision (FP32). The scale gain over 5.5M replicated with a second training seed. A 61M model was indistinguishable from 15.4M after 8 rounds, but after 20 rounds of the same recipe it scored +0.85 points above the 15.4M model at 20 rounds (CI [0.48, 1.22], 9,200 new seed pairs, one training run). [LYRA v2 report (Korean)](lyra-v2/report-ko.md) · [learning path (Korean)](topics/learning.md)
 
 ### 7. LYRA's open problem: the gap between training and policy improvement
 
