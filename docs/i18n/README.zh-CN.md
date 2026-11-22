@@ -8,30 +8,40 @@
 
 ## 选择模型
 
-| 模型 | 评估方式 | 平均得分 | 统计方式 |
-| --- | --- | ---: | --- |
-| **LYRA · v2** | 在 CPU 或 GPU 上结合神经网络与单步搜索评估行动 | 约 1,880.1 分 | 调整后平均 |
-| **VELA · v4.3** | 在 CPU 上推演后续局面评估行动，局面接近时搜索更深 | 约 1,878.6 分 | 调整后平均 |
-| **X36 · G3** | 在 CPU 或 GPU 上反复模拟，比较不同选择 | 约 1,860.0 分 | 原始平均 |
+- **LYRA · v2：** 在 CPU 或 GPU 上结合神经网络与单步搜索评估行动
+- **VELA · v5：** 在 CPU 上推演后续局面评估行动，局面接近时搜索更深
+- **X36 · G3：** 在 CPU 或 GPU 上反复模拟，比较不同选择
+
+<table>
+<thead>
+<tr><th nowrap>模型</th><th nowrap align="right">平均得分</th><th nowrap>统计方式</th></tr>
+</thead>
+<tbody>
+<tr><td nowrap><b>LYRA · v2</b></td><td nowrap align="right">约 1,880.1 分</td><td nowrap>调整后平均</td></tr>
+<tr><td nowrap><b>VELA · v5</b></td><td nowrap align="right">约 1,880.7 分</td><td nowrap>调整后平均</td></tr>
+<tr><td nowrap><b>X36 · G3</b></td><td nowrap align="right">约 1,860.0 分</td><td nowrap>原始平均</td></tr>
+</tbody>
+</table>
 
 **各搜索方式的记录**
 
-| 模型 | 搜索 | 平均得分 | 判断耗时 |
-| --- | --- | ---: | --- |
-| **LYRA · v2** | 基本搜索 | 约 1,880.1 分 | 大多即时 |
-| | 深度搜索 | 约 1,881.0 分 | 数秒以上 |
-| **VELA · v4.3** | 快速 | 约 1,877.2 分 | 即时 |
-| | 标准 | 约 1,878.6 分 | 大多即时 |
-| | 高 | 约 1,879.3 分 | 局面接近时最多约 1 秒 |
-| | 最高 | 约 1,879.8 分 | 局面接近时最多数秒 |
+<table>
+<thead>
+<tr><th nowrap>模型</th><th nowrap>搜索</th><th nowrap align="right">平均得分</th><th nowrap>判断耗时</th></tr>
+</thead>
+<tbody>
+<tr><td nowrap rowspan="2"><b>LYRA · v2</b></td><td nowrap>基本搜索</td><td nowrap align="right">约 1,880.1 分</td><td nowrap>大多即时</td></tr>
+<tr><td nowrap>深度搜索</td><td nowrap align="right">约 1,881.0 分</td><td nowrap>数秒以上</td></tr>
+</tbody>
+</table>
 
-以上平均得分来自不同评测，仅供参考。调整后平均是利用各模型的鞅控制变量（Martingale CV），减小运气造成的平均得分估计误差后得到的值。各搜索方式的得分均为调整后平均。默认设置为 LYRA 基本搜索、VELA 标准，模型表中的得分按默认设置计算。搜索越深，每次判断耗时越长；计算耗时也取决于设备性能和当前游戏局面。VELA v4.3 与 VELA v4.2 使用同一个模型文件。
+以上平均得分来自不同评测，仅供参考。调整后平均是利用各模型的鞅控制变量（Martingale CV），减小运气造成的平均得分估计误差后得到的值。各搜索方式的得分均为调整后平均。LYRA 的默认设置为基本搜索，模型表中的得分按默认设置计算。搜索越深，每次判断耗时越长；计算耗时也取决于设备性能和当前游戏局面。VELA v5 只有一种搜索设置，每次判断使用相同的计算预算。
 
 默认选择 VELA。LYRA 为研究版模型，运行设备可设为自动、CPU 或 GPU。选择自动时，会优先使用可用的 GPU；若初始化或推理失败，则切换到 CPU。
 
-首次使用时，VELA 需要加载约 **68 MB** 的模型包，LYRA 约为 **68 MB**。访问在线网站时，如果同意将模型保存在浏览器中，下次访问即可复用。VELA 确认最新模型信息后会清理不兼容的旧模型；LYRA 则在验证并保存新模型包后清理旧包。在本机运行时，直接使用项目中的模型文件，不会再向浏览器存储一份副本。LYRA 在 CPU 与 GPU 之间切换时使用同一个模型包。
+首次使用时，VELA 需要加载约 **70 MB** 的模型包，LYRA 约为 **68 MB**。VELA 在加载模型后会生成搜索表，建议预留约 1.5 GB 以上的可用内存。访问在线网站时，如果同意将模型保存在浏览器中，下次访问即可复用。VELA 确认最新模型信息后会清理不兼容的旧模型；LYRA 则在验证并保存新模型包后清理旧包。在本机运行时，直接使用项目中的模型文件，不会再向浏览器存储一份副本。LYRA 在 CPU 与 GPU 之间切换时使用同一个模型包。
 
-各行动的评估值用于比较不同选择的优劣。预计最终得分表示持续按照所选模型的建议行动时，可能获得的最终分数。VELA v4.3 针对每种搜索强度、LYRA v2 针对自身策略，分别使用专门训练的得分预测器。游戏结束后，显示的是实际得分。也可以取消模型选择，在不显示行动建议的情况下使用应用。
+各行动的评估值用于比较不同选择的优劣。预计最终得分表示持续按照所选模型的建议行动时，可能获得的最终分数。VELA v5 和 LYRA v2 分别使用针对自身策略专门训练的得分预测器。游戏结束后，显示的是实际得分。也可以取消模型选择，在不显示行动建议的情况下使用应用。
 
 ## 在本机运行
 
@@ -39,7 +49,7 @@
 
 1. 下载并解压项目。
 2. 从下方的 **GitHub Releases** 下载所需模型，**不要解压模型文件**，直接放到对应路径。如果只使用 X36 · G3，可以跳过此步骤。
-   - **VELA v4.3** (模型文件与 VELA v4.2 相同)：[`model.bin.gz`](https://github.com/alfm201/adventure/releases/tag/vela-v4.2) → `public/models/vela-v4.2/model.bin.gz`
+   - **[VELA v5](https://github.com/alfm201/adventure/releases/tag/vela-v5)：** `vela-v5.bin.gz` → `public/models/vela-v5/vela-v5.bin.gz`
    - **[LYRA v2](https://github.com/alfm201/adventure/releases/tag/lyra-v2)：** `lyra-v2.bin.gz` → `public/models/lyra-v2/lyra-v2.bin.gz`
 3. 在项目文件夹中打开终端，运行以下命令：
 
@@ -57,10 +67,8 @@
 
 模型文件仍会通过 [GitHub Releases](https://github.com/alfm201/adventure/releases) 提供。如需从 Cloudflare 下载，请向 `https://adventure.alfm201.workers.dev` 的以下路径发送 `GET` 请求。
 
-| 模型 | Cloudflare 下载路径 |
-| --- | --- |
-| VELA v4.3 · 与 v4.2 相同的文件 | [/models/vela-v4.2/model.bin.gz](https://adventure.alfm201.workers.dev/models/vela-v4.2/model.bin.gz) |
-| LYRA v2 | [/models/lyra-v2/lyra-v2.bin.gz](https://adventure.alfm201.workers.dev/models/lyra-v2/lyra-v2.bin.gz) |
+- **VELA v5：** [/models/vela-v5/vela-v5.bin.gz](https://adventure.alfm201.workers.dev/models/vela-v5/vela-v5.bin.gz)
+- **LYRA v2：** [/models/lyra-v2/lyra-v2.bin.gz](https://adventure.alfm201.workers.dev/models/lyra-v2/lyra-v2.bin.gz)
 
 LYRA 模型包内的 `LICENSES.txt` 包含第三方运行时的许可证声明。再分发模型包时，请保留此文件。
 
@@ -78,7 +86,7 @@ LYRA 模型包内的 `LICENSES.txt` 包含第三方运行时的许可证声明�
 
 模型生成、训练与转换流程请从[复现指南](../../research/reproduction/README.md)（英语）开始。LYRA v2 的 M₄₀ 训练代码，以及转换为浏览器用 FP32 模型的代码和说明，见[复现指南的 LYRA v2 一节](../../research/reproduction/README.md#lyra-v2--m₄₀-neural-value-model)。应用采用 M₄₀ 和单步 expectimax 策略。
 
-VELA v4.2 的 FULL100 生成、Hinge 训练代码及最终结果摘要，见[复现指南的 VELA v4.2 一节](../../research/reproduction/README.md#vela-v42--compact100-hinge)；WASM 构建方法见[构建指南](../../src/policies/vela/native/README.md)。运行应用不需要 FULL100 原始表。各模型的详细指南与 WASM 构建指南均为韩语。
+VELA v5 的残差训练与模型文件打包，见[复现指南的 VELA v5 一节](../../research/reproduction/README.md#vela-v5--deck-conditioned-residual-with-a-fixed-search-budget)和 [VELA v5 报告](../../research/vela-v5/report-ko.md)。VELA v4.2 的 FULL100 生成、Hinge 训练代码及最终结果摘要，见[复现指南的 VELA v4.2 一节](../../research/reproduction/README.md#vela-v42--compact100-hinge)；WASM 构建方法见[构建指南](../../src/policies/vela/native/README.md)。运行应用不需要 FULL100 原始表。各模型的详细指南与 WASM 构建指南均为韩语。
 
 [AI 游戏策略分析报告（PDF，英文）](../reports/Adventure_AI_Play_Strategy_Analysis_en.pdf)：通过对实际对局记录的事后分析，回答“AI 为什么推荐这一步”，并用数据检验这些推荐的可信程度。
 

@@ -16,13 +16,18 @@
 
 기준은 원본 저장 FULL48 cap5 + v4 2-step expectimax + DeckPotential 0.6이다. 기존 온라인 구간의 실제 비복원 덱 전이를 유지했다. 저장 테이블은 tier0 FP32와 tier1~5 int16 delta/32, 합계 45,871,677,316 bytes (42.721 GiB)이다. FULL48의 각 r,b,p와 모든 80,730 멀티셋 손패를 대상으로 압축했고, 작은 cap2 게임이나 W±를 학습 목표로 삼지 않았다.
 
-| 자료 | 게임/정책 | seed base | 용도 |
-|---|---|---|---|
-| 학습용 방문 상태 | 512 | 3110000000 | 희소 예외 학습·개발 |
-| 별도 진단 상태 | 128 | 3111000000 | 2,533개 비어 있지 않은 손패 root; 후보 선택에도 사용 |
-| 1차 선별 평가 | 10,000 × 26개 정책 | 3112000000 | 19 FULL48 압축 + 5 온라인(추가 예산 대조 포함) + 1 FULL100 + 기준 |
-| 독립 최종 | 90,000 × 2개 정책 | 3120000000 | 동결 후보 하나와 기준, 9개 고정 shard |
-| 계산량 | 32 + 256 / 대상 | 3130000000 | 단일 thread 결정 지연 + 12-thread 처리량; 점수 증거로 미사용 |
+<table>
+<thead>
+<tr><th nowrap>자료</th><th nowrap>게임/정책</th><th nowrap>seed base</th><th nowrap>용도</th></tr>
+</thead>
+<tbody>
+<tr><td nowrap>학습용 방문 상태</td><td nowrap>512</td><td nowrap>3110000000</td><td nowrap>희소 예외 학습·개발</td></tr>
+<tr><td nowrap>별도 진단 상태</td><td nowrap>128</td><td nowrap>3111000000</td><td nowrap>2,533개 비어 있지 않은 손패 root;<br>후보 선택에도 사용</td></tr>
+<tr><td nowrap>1차 선별 평가</td><td nowrap>10,000 × 26개 정책</td><td nowrap>3112000000</td><td nowrap>19 FULL48 압축 + 5 온라인(추가 예산 대조 포함)<br>+ 1 FULL100 + 기준</td></tr>
+<tr><td nowrap>독립 최종</td><td nowrap>90,000 × 2개 정책</td><td nowrap>3120000000</td><td nowrap>동결 후보 하나와 기준, 9개 고정 shard</td></tr>
+<tr><td nowrap>계산량</td><td nowrap>32 + 256 / 대상</td><td nowrap>3130000000</td><td nowrap>단일 thread 결정 지연 + 12-thread 처리량;<br>점수 증거로 미사용</td></tr>
+</tbody>
+</table>
 
 최종 후보의 비교 게임은 10,000 + 90,000 = 100,000이다. 최종 성공 판정에 1차 선별 평가를 합치지 않았고, 중간 신뢰구간으로 중단하거나 최종 데이터로 모델을 수정하지 않았다. 같은 seed를 짝지었으나 기존 단일 RNG stream에서는 행동 분기 후 주사위/드로우 난수가 사건별로 계속 정렬되는 것은 아니다. 95% CI는 게임별 점수 차이의 표본 표준편차를 이용한 정규 근사이며, 개별 결정을 독립 표본으로 세지 않았다.
 
@@ -40,41 +45,56 @@ $`S`$는 학습용 게임의 근접 행동 관련 leaf 466,521회 조회, 452,61
 
 동결 후보 `quant_q6_k64_t12`의 실제 저장량 구성은 다음과 같다. 제안 당시의 예산표가 아니라 생성된 파일의 byte 수이며, 모든 모델의 합계와 파일 크기 일치를 검증했다.
 
-| 구성 | bytes | MiB |
-|---|---|---|
-| B | 1,136,408 | 1.0838 |
-| low_time_basis | 1,176 | 0.0011 |
-| low_position_coefficients | 19,133,400 | 18.2470 |
-| pair_shared_basis | 0 | 0.0000 |
-| hand_embedding | 10,333,440 | 9.8547 |
-| G_time_basis | 2,352 | 0.0022 |
-| G_position_coefficients | 8,905,728 | 8.4932 |
-| sparse_keys_and_values | 0 | 0.0000 |
-| header_and_scales | 44 | 0.0000 |
-| 합계 | 39,512,548 | 37.6821 |
+<table>
+<thead>
+<tr><th nowrap>구성</th><th nowrap>bytes</th><th nowrap>MiB</th></tr>
+</thead>
+<tbody>
+<tr><td nowrap>B</td><td nowrap>1,136,408</td><td nowrap>1.0838</td></tr>
+<tr><td nowrap>low_time_basis</td><td nowrap>1,176</td><td nowrap>0.0011</td></tr>
+<tr><td nowrap>low_position_coefficients</td><td nowrap>19,133,400</td><td nowrap>18.2470</td></tr>
+<tr><td nowrap>pair_shared_basis</td><td nowrap>0</td><td nowrap>0.0000</td></tr>
+<tr><td nowrap>hand_embedding</td><td nowrap>10,333,440</td><td nowrap>9.8547</td></tr>
+<tr><td nowrap>G_time_basis</td><td nowrap>2,352</td><td nowrap>0.0022</td></tr>
+<tr><td nowrap>G_position_coefficients</td><td nowrap>8,905,728</td><td nowrap>8.4932</td></tr>
+<tr><td nowrap>sparse_keys_and_values</td><td nowrap>0</td><td nowrap>0.0000</td></tr>
+<tr><td nowrap>header_and_scales</td><td nowrap>44</td><td nowrap>0.0000</td></tr>
+<tr><td nowrap>합계</td><td nowrap>39,512,548</td><td nowrap>37.6821</td></tr>
+</tbody>
+</table>
 
 진단으로 중복 카드의 저차 다항식은 80,730개 손패 전부에서 오차 0, C++/Python 값 비교는 19개 FULL48 모델 모두 허용오차 0.003 이내를 확인했다. 원본 실행 파일과 신규 reference 및 CV reference는 100게임의 점수·steps·action hash가 동일했다. 수치 검증 (원본 연구 자료), CV 전이 검증 (원본 연구 자료).
 
 ## 4. 가설 A: 시간축은 압축되지만 q=4의 국소 오차는 작지 않다
 
-| q | FULL48 계수 MAE | FULL48 최대오차 | FULL48 보존 에너지 | FULL100 MAE | FULL100 최대오차 |
-|---|---|---|---|---|---|
-| 2 | 0.9792 | 93.566 | 97.3586% | 1.2904 | 78.269 |
-| 4 | 0.6638 | 52.107 | 99.0786% | 0.7322 | 75.936 |
-| 6 | 0.3780 | 40.576 | 99.6998% | 0.5226 | 51.470 |
-| 8 | 0.2252 | 30.975 | 99.8829% | 0.3053 | 47.372 |
-| 12 | 0.0734 | 19.831 | 99.9772% | 0.1311 | 24.408 |
-| 16 | 0.0301 | 12.214 | 99.9931% | 0.0583 | 18.522 |
+<table>
+<thead>
+<tr><th nowrap>q</th><th nowrap>FULL48 계수 MAE</th><th nowrap>FULL48 최대오차</th><th nowrap>FULL48 보존 에너지</th><th nowrap>FULL100 MAE</th><th nowrap>FULL100 최대오차</th></tr>
+</thead>
+<tbody>
+<tr><td nowrap>2</td><td nowrap>0.9792</td><td nowrap>93.566</td><td nowrap>97.3586%</td><td nowrap>1.2904</td><td nowrap>78.269</td></tr>
+<tr><td nowrap>4</td><td nowrap>0.6638</td><td nowrap>52.107</td><td nowrap>99.0786%</td><td nowrap>0.7322</td><td nowrap>75.936</td></tr>
+<tr><td nowrap>6</td><td nowrap>0.3780</td><td nowrap>40.576</td><td nowrap>99.6998%</td><td nowrap>0.5226</td><td nowrap>51.470</td></tr>
+<tr><td nowrap>8</td><td nowrap>0.2252</td><td nowrap>30.975</td><td nowrap>99.8829%</td><td nowrap>0.3053</td><td nowrap>47.372</td></tr>
+<tr><td nowrap>12</td><td nowrap>0.0734</td><td nowrap>19.831</td><td nowrap>99.9772%</td><td nowrap>0.1311</td><td nowrap>24.408</td></tr>
+<tr><td nowrap>16</td><td nowrap>0.0301</td><td nowrap>12.214</td><td nowrap>99.9931%</td><td nowrap>0.0583</td><td nowrap>18.522</td></tr>
+</tbody>
+</table>
 
 에너지는 저차 계수 행렬의 제곱 크기 비율이다. 유한차분 interaction의 직교 ANOVA 분산 설명률이 아니다. q4가 평균 구조를 많이 설명해도 특정 시간·위치·pair의 큰 오차가 남는다. 따라서 $`q=4`$가 충분하다는 가정은 그대로 채택하지 않고, int16으로 q6~8 및 더 넓은 고차 구조를 예산 안에 넣는 후보를 추가했다.
 
 위 계수 표는 factor 자체의 전수 복원 진단이다. 실제 정책과 최종 전수 가치 검사는 $`r=0,b=0`$에서 정확한 terminal 값을 직접 사용한다. 아래 국소 곡선에도 이 terminal 조건을 반영했다.
 
-| q | 최대오차의 r,b,p | 실제 효과 조합 | 부호 있는 오차 |
-|---|---|---|---|
-| 4 | 1,0,2827 | NEXT_STAGE 1 + NEXT_STAGE 1 | +52.1071 |
-| 6 | 8,1,2827 | NEXT_STAGE 1 + NEXT_STAGE 1 | -40.5760 |
-| 8 | 8,1,2827 | NEXT_STAGE 1 + NEXT_STAGE 1 | -30.9750 |
+<table>
+<thead>
+<tr><th nowrap>q</th><th nowrap>최대오차의 r,b,p</th><th nowrap>실제 효과 조합</th><th nowrap>부호 있는 오차</th></tr>
+</thead>
+<tbody>
+<tr><td nowrap>4</td><td nowrap>1,0,2827</td><td nowrap>NEXT_STAGE 1 + NEXT_STAGE 1</td><td nowrap>+52.1071</td></tr>
+<tr><td nowrap>6</td><td nowrap>8,1,2827</td><td nowrap>NEXT_STAGE 1 + NEXT_STAGE 1</td><td nowrap>-40.5760</td></tr>
+<tr><td nowrap>8</td><td nowrap>8,1,2827</td><td nowrap>NEXT_STAGE 1 + NEXT_STAGE 1</td><td nowrap>-30.9750</td></tr>
+</tbody>
+</table>
 
 각 위치의 시간·계수 전체 최대오차는 위치별 최대오차 CSV (원본 연구 자료)에 보존했다. class 번호를 카드 가치 순위로 해석하지 않고 실제 이동/배수/스테이지 효과로 표시했다.
 
@@ -88,27 +108,32 @@ q4/q6/q8 모두 큰 국소 오차가 $`p=2827`$의 스테이지 카드 중복 pa
 
 기준 평균은 이번 seed에서 **1878.5862점**이다. 아래 CI는 각 압축 모델과 기준의 nominal paired 95% CI이며 다수 후보 중 최고값을 선택한 최종 증거가 아니다.
 
-| 모델 | MiB | 평균 점수 | 기준 대비 Δ | 95% CI | 진단 Q 손실 |
-|---|---|---|---|---|---|
-| aggressive_j16_k8 | 5.69 | 1864.5615 | -14.0247 | [-18.757, -9.292] | 0.08316 |
-| aggressive_j16_k8_s1 | 6.69 | 1865.2224 | -13.3638 | [-18.110, -8.617] | 0.08316 |
-| pair_q2 | 13.25 | 1851.7029 | -26.8833 | [-31.605, -22.161] | 0.11077 |
-| quant_q4_k32_t4 | 19.59 | 1872.9146 | -5.6716 | [-10.176, -1.167] | 0.01932 |
-| pair_q4 | 25.41 | 1852.7852 | -25.8010 | [-30.427, -21.175] | 0.10128 |
-| quant_q8_k0_t0 | 25.41 | 1854.4209 | -24.1653 | [-28.669, -19.662] | 0.08750 |
-| quant_q8_k16_t8 | 29.30 | 1875.5833 | -3.0029 | [-7.210, +1.204] | 0.01631 |
-| shared_q4_k16 | 31.76 | 1875.3300 | -3.2562 | [-7.808, +1.295] | 0.01868 |
-| quant_q8_k32_t8 | 33.17 | 1875.7425 | -2.8437 | [-6.973, +1.285] | 0.01463 |
-| quant_q6_k64_t8 | 34.85 | 1873.4446 | -5.1416 | [-9.180, -1.104] | 0.01168 |
-| shared_q4_k16_s4 | 35.76 | 1875.3811 | -3.2051 | [-7.769, +1.359] | 0.01909 |
-| quant_q8_k32_t16 | 36.01 | 1875.3152 | -3.2710 | [-7.351, +0.809] | 0.01527 |
-| quant_q8_k48_t8 | 37.05 | 1872.0552 | -6.5310 | [-10.541, -2.521] | 0.01537 |
-| quant_q6_k64_t12 | 37.68 | 1873.6424 | -4.9438 | [-8.946, -0.942] | 0.01073 |
-| shared_q4_k32 | 38.10 | 1873.0121 | -5.5741 | [-10.080, -1.068] | 0.01906 |
-| quant_q8_k40_t16 | 38.65 | 1872.6973 | -5.8889 | [-9.936, -1.842] | 0.01407 |
-| shared_q4_k32_s1 | 39.10 | 1872.2694 | -6.3168 | [-10.810, -1.824] | 0.01917 |
-| pair_q8 | 49.74 | 1854.5117 | -24.0745 | [-28.579, -19.570] | 0.08744 |
-| shared_q8_k32 | 65.26 | 1866.8360 | -11.7502 | [-16.380, -7.121] | 0.04847 |
+<table>
+<thead>
+<tr><th nowrap>모델</th><th nowrap>MiB</th><th nowrap>평균 점수</th><th nowrap>기준 대비 Δ</th><th nowrap>95% CI</th><th nowrap>진단 Q 손실</th></tr>
+</thead>
+<tbody>
+<tr><td nowrap>aggressive_j16_k8</td><td nowrap>5.69</td><td nowrap>1864.5615</td><td nowrap>-14.0247</td><td nowrap>[-18.757, -9.292]</td><td nowrap>0.08316</td></tr>
+<tr><td nowrap>aggressive_j16_k8_s1</td><td nowrap>6.69</td><td nowrap>1865.2224</td><td nowrap>-13.3638</td><td nowrap>[-18.110, -8.617]</td><td nowrap>0.08316</td></tr>
+<tr><td nowrap>pair_q2</td><td nowrap>13.25</td><td nowrap>1851.7029</td><td nowrap>-26.8833</td><td nowrap>[-31.605, -22.161]</td><td nowrap>0.11077</td></tr>
+<tr><td nowrap>quant_q4_k32_t4</td><td nowrap>19.59</td><td nowrap>1872.9146</td><td nowrap>-5.6716</td><td nowrap>[-10.176, -1.167]</td><td nowrap>0.01932</td></tr>
+<tr><td nowrap>pair_q4</td><td nowrap>25.41</td><td nowrap>1852.7852</td><td nowrap>-25.8010</td><td nowrap>[-30.427, -21.175]</td><td nowrap>0.10128</td></tr>
+<tr><td nowrap>quant_q8_k0_t0</td><td nowrap>25.41</td><td nowrap>1854.4209</td><td nowrap>-24.1653</td><td nowrap>[-28.669, -19.662]</td><td nowrap>0.08750</td></tr>
+<tr><td nowrap>quant_q8_k16_t8</td><td nowrap>29.30</td><td nowrap>1875.5833</td><td nowrap>-3.0029</td><td nowrap>[-7.210, +1.204]</td><td nowrap>0.01631</td></tr>
+<tr><td nowrap>shared_q4_k16</td><td nowrap>31.76</td><td nowrap>1875.3300</td><td nowrap>-3.2562</td><td nowrap>[-7.808, +1.295]</td><td nowrap>0.01868</td></tr>
+<tr><td nowrap>quant_q8_k32_t8</td><td nowrap>33.17</td><td nowrap>1875.7425</td><td nowrap>-2.8437</td><td nowrap>[-6.973, +1.285]</td><td nowrap>0.01463</td></tr>
+<tr><td nowrap>quant_q6_k64_t8</td><td nowrap>34.85</td><td nowrap>1873.4446</td><td nowrap>-5.1416</td><td nowrap>[-9.180, -1.104]</td><td nowrap>0.01168</td></tr>
+<tr><td nowrap>shared_q4_k16_s4</td><td nowrap>35.76</td><td nowrap>1875.3811</td><td nowrap>-3.2051</td><td nowrap>[-7.769, +1.359]</td><td nowrap>0.01909</td></tr>
+<tr><td nowrap>quant_q8_k32_t16</td><td nowrap>36.01</td><td nowrap>1875.3152</td><td nowrap>-3.2710</td><td nowrap>[-7.351, +0.809]</td><td nowrap>0.01527</td></tr>
+<tr><td nowrap>quant_q8_k48_t8</td><td nowrap>37.05</td><td nowrap>1872.0552</td><td nowrap>-6.5310</td><td nowrap>[-10.541, -2.521]</td><td nowrap>0.01537</td></tr>
+<tr><td nowrap>quant_q6_k64_t12</td><td nowrap>37.68</td><td nowrap>1873.6424</td><td nowrap>-4.9438</td><td nowrap>[-8.946, -0.942]</td><td nowrap>0.01073</td></tr>
+<tr><td nowrap>shared_q4_k32</td><td nowrap>38.10</td><td nowrap>1873.0121</td><td nowrap>-5.5741</td><td nowrap>[-10.080, -1.068]</td><td nowrap>0.01906</td></tr>
+<tr><td nowrap>quant_q8_k40_t16</td><td nowrap>38.65</td><td nowrap>1872.6973</td><td nowrap>-5.8889</td><td nowrap>[-9.936, -1.842]</td><td nowrap>0.01407</td></tr>
+<tr><td nowrap>shared_q4_k32_s1</td><td nowrap>39.10</td><td nowrap>1872.2694</td><td nowrap>-6.3168</td><td nowrap>[-10.810, -1.824]</td><td nowrap>0.01917</td></tr>
+<tr><td nowrap>pair_q8</td><td nowrap>49.74</td><td nowrap>1854.5117</td><td nowrap>-24.0745</td><td nowrap>[-28.579, -19.570]</td><td nowrap>0.08744</td></tr>
+<tr><td nowrap>shared_q8_k32</td><td nowrap>65.26</td><td nowrap>1866.8360</td><td nowrap>-11.7502</td><td nowrap>[-16.380, -7.121]</td><td nowrap>0.04847</td></tr>
+</tbody>
+</table>
 
 `shared_q8_k32`는 q4에서 학습한 G를 q8 저차에 붙인 교차 basis 대조군이다. q8에 맞게 다시 학습한 고용량 상한으로 해석해서는 안 된다. 나머지 quant_q8/quant_q6 모델은 해당 저차 잔차에 맞춰 G를 학습했다. 참고 Q 손실은 $`Q_{\mathrm{ref}}(a_{\mathrm{ref}})-Q_{\mathrm{ref}}(a_{\mathrm{candidate}})`$이며 실제 최적 정책 $`V^{\ast}`$에 대한 regret은 아니다.
 
@@ -126,14 +151,19 @@ q4/q6/q8 모두 큰 국소 오차가 $`p=2827`$의 스테이지 카드 중복 pa
 
 40 MiB 이하이고 1차 선별 평가 평균 손실이 5점 이하인 모델 가운데 진단 Q 손실이 가장 작은 후보 하나를 골랐다. 선택 규칙과 모델/실행 파일 SHA256을 최종 데이터 열기 전에 동결했다. 후보는 `quant_q6_k64_t12`, 실제 모델 39,512,548 bytes = 37.6821 MiB이다. 동결 기록 (원본 연구 자료).
 
-| 지표 | 원시 점수: 주 판정 | Martingale CV: 보조 판정 |
-|---|---|---|
-| 원본 평균 | 1878.0848 | 1878.3545 |
-| 압축 평균 | 1876.5108 | 1876.5089 |
-| 차이 | -1.5740 | -1.8456 |
-| paired SD | 205.5132 | 38.4289 |
-| 95% CI | [-2.917, -0.231] | [-2.097, -1.595] |
-| 0.1% 판정 | 미충족 | CI 기준 미충족 |
+<table>
+<thead>
+<tr><th nowrap>지표</th><th nowrap>원시 점수: 주 판정</th><th nowrap>Martingale CV:<br>보조 판정</th></tr>
+</thead>
+<tbody>
+<tr><td nowrap>원본 평균</td><td nowrap>1878.0848</td><td nowrap>1878.3545</td></tr>
+<tr><td nowrap>압축 평균</td><td nowrap>1876.5108</td><td nowrap>1876.5089</td></tr>
+<tr><td nowrap>차이</td><td nowrap>-1.5740</td><td nowrap>-1.8456</td></tr>
+<tr><td nowrap>paired SD</td><td nowrap>205.5132</td><td nowrap>38.4289</td></tr>
+<tr><td nowrap>95% CI</td><td nowrap>[-2.917, -0.231]</td><td nowrap>[-2.097, -1.595]</td></tr>
+<tr><td nowrap>0.1% 판정</td><td nowrap>미충족</td><td nowrap>CI 기준 미충족</td></tr>
+</tbody>
+</table>
 
 CV는 실제 다음 상태의 Phi와 실제 전이 전체의 기대 Phi 차이를 누적해 점수에서 빼는 조건부 평균 0 보정이다. Phi는 고정된 원본 FULL48와 기존 deck potential이고 계수는 1이다. 최종 seed로 Phi나 계수를 학습하지 않았다. 정책 선택과 RNG에 관여하지 않으며 추가 rollout도 없다. 원시 점수 주 판정이 실패하면 보조 CV가 좋아도 성공으로 바꾸지 않는다. 최종 CV 평가에만 원본 테이블을 읽는 것은 평가 도구의 비용이며 압축 정책의 배포 요구사항이 아니다.
 
@@ -147,34 +177,54 @@ true3와 iid3는 추가 마지막 draw의 손패 가치 분포만 실제 덱/IID
 
 두 경우의 같은 예산은 추가 상태 최대 24개와 같은 깊이 한도를 뜻한다. IID는 마지막 드로우에서 항상 22개 class를 평가하고 실제 덱은 남은 class만 평가하므로 실제 leaf 조회수와 실행시간까지 같지는 않다. 이 차이는 비용 표에 그대로 기록한다.
 
-| 탐색 선택 조건: 공통 q8 leaf 진단 | 선택 root 수 | 선택 비율 | 포함된 reference-Q 손실 비율 |
-|---|---|---|---|
-| gap_lt_1 | 146 | 5.76% | 51.78% |
-| gap_lt_1_or_hand5 | 352 | 13.90% | 93.95% |
-| gap_ge_1 | 2387 | 94.24% | 48.22% |
+<table>
+<thead>
+<tr><th nowrap>탐색 선택 조건:<br>공통 q8 leaf 진단</th><th nowrap>선택 root 수</th><th nowrap>선택 비율</th><th nowrap>포함된 reference-Q<br>손실 비율</th></tr>
+</thead>
+<tbody>
+<tr><td nowrap>gap_lt_1</td><td nowrap>146</td><td nowrap>5.76%</td><td nowrap>51.78%</td></tr>
+<tr><td nowrap>gap_lt_1_or_hand5</td><td nowrap>352</td><td nowrap>13.90%</td><td nowrap>93.95%</td></tr>
+<tr><td nowrap>gap_ge_1</td><td nowrap>2387</td><td nowrap>94.24%</td><td nowrap>48.22%</td></tr>
+</tbody>
+</table>
 
 $`\mathrm{gap}\lt 1`$만 쓰면 진단 Q 손실의 약 48.2%가 선택 밖에 남았다. 손패5 조건을 더하면 약 93.9%를 포함하지만, 무료 연쇄 보충의 실제 개선은 확인되지 않았다. 잘못 판단한 상태를 고르는 문제와 그 상태의 값을 충분히 재계산하는 문제를 분리해야 한다. 이 비율은 원본 정책의 작은 진단 상태 집합에 대한 것으로 실제 게임 regret 비율이 아니다.
 
-| 경우 | 평균 | 원본 대비 Δ | nominal 95% CI | 진단 Q 손실 |
-|---|---|---|---|---|
-| online_free_gap | 1875.1976 | -3.3886 | [-7.471, +0.694] | 0.01527 |
-| online_free_hand5 | 1875.1363 | -3.4499 | [-7.532, +0.632] | 0.01527 |
-| online_true3_select24 | 1874.3311 | -4.2551 | [-8.153, -0.358] | 0.01145 |
-| online_iid3_select24 | 1874.7187 | -3.8675 | [-7.706, -0.029] | 0.01051 |
-| full100_screen | 1873.4233 | -5.1629 | [-9.329, -0.997] | 별도 horizon |
-| online_free_balanced | 1875.1801 | -3.4061 | [-7.487, +0.675] | 0.01527 |
+<table>
+<thead>
+<tr><th nowrap>경우</th><th nowrap>평균</th><th nowrap>원본 대비 Δ</th><th nowrap>nominal 95% CI</th><th nowrap>진단 Q 손실</th></tr>
+</thead>
+<tbody>
+<tr><td nowrap>online_free_gap</td><td nowrap>1875.1976</td><td nowrap>-3.3886</td><td nowrap>[-7.471, +0.694]</td><td nowrap>0.01527</td></tr>
+<tr><td nowrap>online_free_hand5</td><td nowrap>1875.1363</td><td nowrap>-3.4499</td><td nowrap>[-7.532, +0.632]</td><td nowrap>0.01527</td></tr>
+<tr><td nowrap>online_true3_select24</td><td nowrap>1874.3311</td><td nowrap>-4.2551</td><td nowrap>[-8.153, -0.358]</td><td nowrap>0.01145</td></tr>
+<tr><td nowrap>online_iid3_select24</td><td nowrap>1874.7187</td><td nowrap>-3.8675</td><td nowrap>[-7.706, -0.029]</td><td nowrap>0.01051</td></tr>
+<tr><td nowrap>full100_screen</td><td nowrap>1873.4233</td><td nowrap>-5.1629</td><td nowrap>[-9.329, -0.997]</td><td nowrap>별도 horizon</td></tr>
+<tr><td nowrap>online_free_balanced</td><td nowrap>1875.1801</td><td nowrap>-3.4061</td><td nowrap>[-7.487, +0.675]</td><td nowrap>0.01527</td></tr>
+</tbody>
+</table>
 
-| 같은 leaf/seed 짝비교 | Δ | nominal 95% CI | 4비교 family 95% CI |
-|---|---|---|---|
-| free_gap_vs_same_leaf | -0.1176 | [-0.576, +0.341] | [-0.702, +0.466] |
-| free_hand5_vs_same_leaf | -0.1789 | [-0.645, +0.287] | [-0.773, +0.415] |
-| true_vs_iid_extra_draw | -0.3876 | [-3.355, +2.579] | [-4.169, +3.393] |
-| true_extra_vs_same_leaf | -0.9841 | [-4.516, +2.548] | [-5.485, +3.517] |
+<table>
+<thead>
+<tr><th nowrap>같은 leaf/seed 짝비교</th><th nowrap>Δ</th><th nowrap>nominal 95% CI</th><th nowrap>4비교 family 95% CI</th></tr>
+</thead>
+<tbody>
+<tr><td nowrap>free_gap_vs_same_leaf</td><td nowrap>-0.1176</td><td nowrap>[-0.576, +0.341]</td><td nowrap>[-0.702, +0.466]</td></tr>
+<tr><td nowrap>free_hand5_vs_same_leaf</td><td nowrap>-0.1789</td><td nowrap>[-0.645, +0.287]</td><td nowrap>[-0.773, +0.415]</td></tr>
+<tr><td nowrap>true_vs_iid_extra_draw</td><td nowrap>-0.3876</td><td nowrap>[-3.355, +2.579]</td><td nowrap>[-4.169, +3.393]</td></tr>
+<tr><td nowrap>true_extra_vs_same_leaf</td><td nowrap>-0.9841</td><td nowrap>[-4.516, +2.548]</td><td nowrap>[-5.485, +3.517]</td></tr>
+</tbody>
+</table>
 
-| 사후 추가 예산 배분 대조 | Δ | nominal 95% CI |
-|---|---|---|
-| balanced_vs_same_leaf | -0.1351 | [-0.462, +0.192] |
-| balanced_vs_free_gap | -0.0175 | [-0.483, +0.448] |
+<table>
+<thead>
+<tr><th nowrap>사후 추가 예산 배분 대조</th><th nowrap>Δ</th><th nowrap>nominal 95% CI</th></tr>
+</thead>
+<tbody>
+<tr><td nowrap>balanced_vs_same_leaf</td><td nowrap>-0.1351</td><td nowrap>[-0.462, +0.192]</td></tr>
+<tr><td nowrap>balanced_vs_free_gap</td><td nowrap>-0.0175</td><td nowrap>[-0.483, +0.448]</td></tr>
+</tbody>
+</table>
 
 [원본 연구의 그림: 온라인 탐색 및 덱 marginal 비교]
 
@@ -198,46 +248,66 @@ FULL100 모델은 34.33 MiB이고, FULL48 q8에서 얻은 손패 basis를 옮기
 
 실제 진단 게임의 root 분포에서는 동결 후보의 가치 MAE가 1.3274점, 최대오차가 25.6673점이었다. 행동 불일치는 1.382%, 평균 reference-Q 손실은 0.01073점이다. 이를 아래 전수 격자의 최대오차와 혼동하지 않는다.
 
-| 손패 장수 | 전체 MAE | 전체 RMSE | 최대 절대오차 |
-|---|---|---|---|
-| 0 | 0.0000 | 0.0000 | 0.0000 |
-| 1 | 0.5846 | 0.8812 | 21.7300 |
-| 2 | 1.0122 | 1.4765 | 25.4747 |
-| 3 | 0.9214 | 1.6087 | 77.2436 |
-| 4 | 1.6225 | 2.7460 | 134.2241 |
-| 5 | 2.8730 | 4.4403 | 235.1652 |
+<table>
+<thead>
+<tr><th nowrap>손패 장수</th><th nowrap>전체 MAE</th><th nowrap>전체 RMSE</th><th nowrap>최대 절대오차</th></tr>
+</thead>
+<tbody>
+<tr><td nowrap>0</td><td nowrap>0.0000</td><td nowrap>0.0000</td><td nowrap>0.0000</td></tr>
+<tr><td nowrap>1</td><td nowrap>0.5846</td><td nowrap>0.8812</td><td nowrap>21.7300</td></tr>
+<tr><td nowrap>2</td><td nowrap>1.0122</td><td nowrap>1.4765</td><td nowrap>25.4747</td></tr>
+<tr><td nowrap>3</td><td nowrap>0.9214</td><td nowrap>1.6087</td><td nowrap>77.2436</td></tr>
+<tr><td nowrap>4</td><td nowrap>1.6225</td><td nowrap>2.7460</td><td nowrap>134.2241</td></tr>
+<tr><td nowrap>5</td><td nowrap>2.8730</td><td nowrap>4.4403</td><td nowrap>235.1652</td></tr>
+</tbody>
+</table>
 
-| 손패 수 | r,b,p | 최악 행에서의 손패 효과 | C++ 확인 오차 |
-|---|---|---|---|
-| 1 | 8,1,2707 | NEXT_STAGE 1 | +21.7300 |
-| 2 | 2,1,2775 | NEXT_STAGE 1 + NEXT_STAGE 1 | +25.4748 |
-| 3 | 0,1,2838 | MOVE 1 + NEXT_STAGE 1 + NEXT_STAGE 1 | +77.2436 |
-| 4 | 0,1,1988 | MOVE 6 + MOVE 6 + MOVE 6 + MOVE 6 | -134.2241 |
-| 5 | 1,0,1143 | MOVE 11 + MOVE 11 + MOVE 11 + MOVE 11 + MOVE 11 | +235.1652 |
+<table>
+<thead>
+<tr><th nowrap>손패 수</th><th nowrap>r,b,p</th><th nowrap>최악 행에서의 손패 효과</th><th nowrap>C++ 확인 오차</th></tr>
+</thead>
+<tbody>
+<tr><td nowrap>1</td><td nowrap>8,1,2707</td><td nowrap>NEXT_STAGE 1</td><td nowrap>+21.7300</td></tr>
+<tr><td nowrap>2</td><td nowrap>2,1,2775</td><td nowrap>NEXT_STAGE 1 + NEXT_STAGE 1</td><td nowrap>+25.4748</td></tr>
+<tr><td nowrap>3</td><td nowrap>0,1,2838</td><td nowrap>MOVE 1 + NEXT_STAGE 1 + NEXT_STAGE 1</td><td nowrap>+77.2436</td></tr>
+<tr><td nowrap>4</td><td nowrap>0,1,1988</td><td nowrap>MOVE 6 + MOVE 6 + MOVE 6 + MOVE 6</td><td nowrap>-134.2241</td></tr>
+<tr><td nowrap>5</td><td nowrap>1,0,1143</td><td nowrap>MOVE 11 + MOVE 11 + MOVE 11 + MOVE 11 + MOVE 11</td><td nowrap>+235.1652</td></tr>
+</tbody>
+</table>
 
 위 극단 상태의 실제 게임 도달 가능성과 빈도는 입증하지 않았다. 특히 같은 카드 5장 패턴은 전체 basis를 구할 때는 포함됐지만, 위치별 계수를 맞추는 1,024개 손패 표본에는 없었다. 이 차이는 극단적인 중복 손패 오차의 가능한 설명이다. 모든 중복 카드를 학습에서 제외했다는 뜻도, 이런 극단 오차가 실제 게임 손실의 원인으로 확인됐다는 뜻도 아니다.
 
-| 5장 손패 중복 형태 | 테이블 손패 수 | 계수 fit 표본 | 진단 root 수 | 평균 진단 Q 손실 |
-|---|---|---|---|---|
-| 1+1+1+1+1 | 26334 | 269 | 182 | 0.02311 |
-| 2+1+1+1 | 29260 | 296 | 38 | 0.16815 |
-| 2+2+1 | 4620 | 41 | 3 | 0.00000 |
-| 3+1+1 | 4620 | 52 | 0 | — |
-| 3+2 | 462 | 9 | 0 | — |
-| 4+1 | 462 | 5 | 0 | — |
-| 5 | 22 | 0 | 0 | — |
+<table>
+<thead>
+<tr><th nowrap>5장 손패 중복 형태</th><th nowrap>테이블 손패 수</th><th nowrap>계수 fit 표본</th><th nowrap>진단 root 수</th><th nowrap>평균 진단 Q 손실</th></tr>
+</thead>
+<tbody>
+<tr><td nowrap>1+1+1+1+1</td><td nowrap>26334</td><td nowrap>269</td><td nowrap>182</td><td nowrap>0.02311</td></tr>
+<tr><td nowrap>2+1+1+1</td><td nowrap>29260</td><td nowrap>296</td><td nowrap>38</td><td nowrap>0.16815</td></tr>
+<tr><td nowrap>2+2+1</td><td nowrap>4620</td><td nowrap>41</td><td nowrap>3</td><td nowrap>0.00000</td></tr>
+<tr><td nowrap>3+1+1</td><td nowrap>4620</td><td nowrap>52</td><td nowrap>0</td><td nowrap>—</td></tr>
+<tr><td nowrap>3+2</td><td nowrap>462</td><td nowrap>9</td><td nowrap>0</td><td nowrap>—</td></tr>
+<tr><td nowrap>4+1</td><td nowrap>462</td><td nowrap>5</td><td nowrap>0</td><td nowrap>—</td></tr>
+<tr><td nowrap>5</td><td nowrap>22</td><td nowrap>0</td><td nowrap>0</td><td nowrap>—</td></tr>
+</tbody>
+</table>
 
 시간·bonus·손패 장수별, 위치 16개 묶음 최대오차에 부동소수점 여유를 더한 메타데이터는 428,064 bytes (0.4082 MiB)이다. C++ 무작위 20,000점에서 경계 위반 0건이었다. 2-step 행동 구간을 전파했을 때 진단 root 2,533개 중 686개(27.08%)에서 1위 행동 구간이 다른 행동과 분리됐고, 그 상태의 원본 행동 불일치는 0건이었다.
 
 이는 저장 FULL48 대비의 전수 수치 오차 + 보수적 반올림 여유이다. 기계 검증된 부동소수점 증명이나 실제 $`V^{\ast}`$에 대한 bound는 아니다. 메타데이터는 후속 진단에서 생성했으며 동결 정책의 행동/최종 점수를 바꾸는 데 사용하지 않았다. 구간이 넓어 행동을 구분하지 못하는 비율도 함께 보고한다.
 
-| 손패 수 | 진단 root 수 | 행동 구간 분리 비율 |
-|---|---|---|
-| 1 | 164 | 90.24% |
-| 2 | 425 | 70.35% |
-| 3 | 832 | 27.52% |
-| 4 | 889 | 1.12% |
-| 5 | 223 | 0.00% |
+<table>
+<thead>
+<tr><th nowrap>손패 수</th><th nowrap>진단 root 수</th><th nowrap>행동 구간 분리 비율</th></tr>
+</thead>
+<tbody>
+<tr><td nowrap>1</td><td nowrap>164</td><td nowrap>90.24%</td></tr>
+<tr><td nowrap>2</td><td nowrap>425</td><td nowrap>70.35%</td></tr>
+<tr><td nowrap>3</td><td nowrap>832</td><td nowrap>27.52%</td></tr>
+<tr><td nowrap>4</td><td nowrap>889</td><td nowrap>1.12%</td></tr>
+<tr><td nowrap>5</td><td nowrap>223</td><td nowrap>0.00%</td></tr>
+</tbody>
+</table>
 
 이번 메타데이터는 큰 손패에서 특히 보수적이었다. 손패가 많은 구간에서 더 세밀한 조건부 오차 묶음이 필요하다는 진단이며, 작은 메타데이터만으로 모든 결정을 확정할 수 있다는 주장을 지지하지 않는다.
 
@@ -249,35 +319,40 @@ FULL100 모델은 34.33 MiB이고, FULL48 q8에서 얻은 손패 basis를 옮기
 
 이 연구의 생성/학습/성능 비교가 종료된 뒤 별도 비용 실행을 했다. 각 모델은 단일 thread 32게임의 모든 비어 있지 않은 손패 결정 지연과 12-thread 256게임의 전체 처리량을 기록했다. 원본을 앞뒤로 반복해 환경 변화도 볼 수 있게 했다. 작은 비용 실행의 점수는 성능 증거로 쓰지 않는다. OS·컴파일·CPU 정보는 runtime_environment.json에 있다. 초기 1차 선별 평가의 일부는 다른 기기 작업과 낮은 우선순위 때문에 긴 대기가 발생했다. 최종 게임 및 별도 비용 실행은 일반 우선순위이며 각 실행 시작 전 host CPU 사용률도 기록했다. 사용 중인 Windows 기기 전체를 전용 벤치마크 환경으로 통제한 것은 아니다.
 
-| 경우 | 모델 MiB | 평균 ms | P95 ms | P99 ms | 평균/원본 | 12T 게임/s | leaf 조회/게임 | 1T RSS MiB | 12T RSS MiB |
-|---|---|---|---|---|---|---|---|---|---|
-| reference | 43746.64 | 0.343 | 1.155 | 1.938 | 1.00 | 189.58 | 890031 | 1921.3 | 5001.4 |
-| pair_q2 | 13.25 | 0.246 | 0.646 | 0.974 | 0.72 | 149.70 | 805690 | 26.1 | 56.1 |
-| pair_q4 | 25.41 | 0.277 | 0.747 | 1.178 | 0.81 | 142.27 | 829362 | 38.2 | 68.3 |
-| pair_q8 | 49.74 | 0.302 | 0.783 | 1.182 | 0.88 | 119.56 | 882886 | 62.6 | 92.6 |
-| shared_q4_k16 | 31.76 | 0.347 | 0.961 | 1.536 | 1.01 | 102.09 | 882448 | 44.6 | 74.6 |
-| shared_q4_k32 | 38.10 | 0.467 | 1.290 | 2.066 | 1.36 | 82.95 | 889877 | 51.0 | 81.0 |
-| shared_q8_k32 | 65.26 | 0.497 | 1.354 | 2.276 | 1.45 | 71.11 | 928070 | 78.1 | 108.1 |
-| aggressive_j16_k8 | 5.69 | 0.455 | 1.155 | 1.700 | 1.33 | 98.48 | 878154 | 18.6 | 48.6 |
-| shared_q4_k16_s4 | 35.76 | 0.552 | 1.552 | 2.515 | 1.61 | 69.41 | 877324 | 48.6 | 78.6 |
-| shared_q4_k32_s1 | 39.10 | 0.608 | 1.695 | 2.808 | 1.77 | 60.63 | 886843 | 52.0 | 82.0 |
-| aggressive_j16_k8_s1 | 6.69 | 0.639 | 1.652 | 2.653 | 1.86 | 69.51 | 882192 | 19.6 | 49.6 |
-| quant_q4_k32_t4 | 19.59 | 0.533 | 1.421 | 2.259 | 1.55 | 69.62 | 887912 | 32.4 | 62.5 |
-| quant_q8_k0_t0 | 25.41 | 0.360 | 0.926 | 1.330 | 1.05 | 109.09 | 881724 | 38.2 | 68.3 |
-| quant_q8_k16_t8 | 29.30 | 0.439 | 1.171 | 1.737 | 1.28 | 88.64 | 871384 | 42.2 | 72.2 |
-| quant_q8_k32_t8 | 33.17 | 0.550 | 1.484 | 2.339 | 1.61 | 70.82 | 872076 | 46.0 | 76.0 |
-| quant_q8_k32_t16 | 36.01 | 0.545 | 1.449 | 2.084 | 1.59 | 67.38 | 869732 | 48.8 | 78.9 |
-| quant_q8_k48_t8 | 37.05 | 0.679 | 1.916 | 3.201 | 1.98 | 59.69 | 869294 | 49.9 | 80.0 |
-| quant_q8_k40_t16 | 38.65 | 0.656 | 1.727 | 3.135 | 1.91 | 64.67 | 867890 | 51.5 | 81.5 |
-| quant_q6_k64_t8 | 34.85 | 0.897 | 2.443 | 4.020 | 2.62 | 48.81 | 878210 | 47.7 | 77.7 |
-| quant_q6_k64_t12 | 37.68 | 1.015 | 2.777 | 4.167 | 2.96 | 45.89 | 876018 | 50.5 | 80.6 |
-| online_free_gap | 36.01 | 0.605 | 1.660 | 2.800 | 1.76 | 57.08 | 951423 | 50.4 | 80.9 |
-| online_free_hand5 | 36.01 | 0.700 | 1.983 | 3.264 | 2.04 | 58.06 | 1013647 | 50.5 | 80.9 |
-| online_true3_select24 | 36.01 | 1.062 | 3.389 | 13.938 | 3.10 | 41.33 | 1701647 | 49.1 | 80.2 |
-| online_iid3_select24 | 36.01 | 1.210 | 4.470 | 16.388 | 3.53 | 35.12 | 2026230 | 49.1 | 80.6 |
-| reference_repeat | 43746.64 | 0.348 | 1.167 | 1.896 | 1.01 | 196.26 | 890031 | 1897.2 | 4882.4 |
-| online_free_balanced | 36.01 | 0.616 | 1.700 | 2.788 | 1.80 | 63.29 | 945916 | 50.4 | 80.7 |
-| full100_quant_q8_k32_t8 | 34.33 | 0.639 | 1.628 | 2.680 | 1.86 | 60.01 | 895984 | 47.2 | 77.2 |
+<table>
+<thead>
+<tr><th nowrap>경우</th><th nowrap>모델 MiB</th><th nowrap>평균 ms</th><th nowrap>P95 ms</th><th nowrap>P99 ms</th><th nowrap>평균<br>/원본</th><th nowrap>12T<br>게임/s</th><th nowrap>leaf<br>조회/게임</th><th nowrap>1T RSS<br>MiB</th><th nowrap>12T RSS<br>MiB</th></tr>
+</thead>
+<tbody>
+<tr><td nowrap>reference</td><td nowrap>43746.64</td><td nowrap>0.343</td><td nowrap>1.155</td><td nowrap>1.938</td><td nowrap>1.00</td><td nowrap>189.58</td><td nowrap>890031</td><td nowrap>1921.3</td><td nowrap>5001.4</td></tr>
+<tr><td nowrap>pair_q2</td><td nowrap>13.25</td><td nowrap>0.246</td><td nowrap>0.646</td><td nowrap>0.974</td><td nowrap>0.72</td><td nowrap>149.70</td><td nowrap>805690</td><td nowrap>26.1</td><td nowrap>56.1</td></tr>
+<tr><td nowrap>pair_q4</td><td nowrap>25.41</td><td nowrap>0.277</td><td nowrap>0.747</td><td nowrap>1.178</td><td nowrap>0.81</td><td nowrap>142.27</td><td nowrap>829362</td><td nowrap>38.2</td><td nowrap>68.3</td></tr>
+<tr><td nowrap>pair_q8</td><td nowrap>49.74</td><td nowrap>0.302</td><td nowrap>0.783</td><td nowrap>1.182</td><td nowrap>0.88</td><td nowrap>119.56</td><td nowrap>882886</td><td nowrap>62.6</td><td nowrap>92.6</td></tr>
+<tr><td nowrap>shared_q4_k16</td><td nowrap>31.76</td><td nowrap>0.347</td><td nowrap>0.961</td><td nowrap>1.536</td><td nowrap>1.01</td><td nowrap>102.09</td><td nowrap>882448</td><td nowrap>44.6</td><td nowrap>74.6</td></tr>
+<tr><td nowrap>shared_q4_k32</td><td nowrap>38.10</td><td nowrap>0.467</td><td nowrap>1.290</td><td nowrap>2.066</td><td nowrap>1.36</td><td nowrap>82.95</td><td nowrap>889877</td><td nowrap>51.0</td><td nowrap>81.0</td></tr>
+<tr><td nowrap>shared_q8_k32</td><td nowrap>65.26</td><td nowrap>0.497</td><td nowrap>1.354</td><td nowrap>2.276</td><td nowrap>1.45</td><td nowrap>71.11</td><td nowrap>928070</td><td nowrap>78.1</td><td nowrap>108.1</td></tr>
+<tr><td nowrap>aggressive_j16_k8</td><td nowrap>5.69</td><td nowrap>0.455</td><td nowrap>1.155</td><td nowrap>1.700</td><td nowrap>1.33</td><td nowrap>98.48</td><td nowrap>878154</td><td nowrap>18.6</td><td nowrap>48.6</td></tr>
+<tr><td nowrap>shared_q4_k16_s4</td><td nowrap>35.76</td><td nowrap>0.552</td><td nowrap>1.552</td><td nowrap>2.515</td><td nowrap>1.61</td><td nowrap>69.41</td><td nowrap>877324</td><td nowrap>48.6</td><td nowrap>78.6</td></tr>
+<tr><td nowrap>shared_q4_k32_s1</td><td nowrap>39.10</td><td nowrap>0.608</td><td nowrap>1.695</td><td nowrap>2.808</td><td nowrap>1.77</td><td nowrap>60.63</td><td nowrap>886843</td><td nowrap>52.0</td><td nowrap>82.0</td></tr>
+<tr><td nowrap>aggressive_j16_k8_s1</td><td nowrap>6.69</td><td nowrap>0.639</td><td nowrap>1.652</td><td nowrap>2.653</td><td nowrap>1.86</td><td nowrap>69.51</td><td nowrap>882192</td><td nowrap>19.6</td><td nowrap>49.6</td></tr>
+<tr><td nowrap>quant_q4_k32_t4</td><td nowrap>19.59</td><td nowrap>0.533</td><td nowrap>1.421</td><td nowrap>2.259</td><td nowrap>1.55</td><td nowrap>69.62</td><td nowrap>887912</td><td nowrap>32.4</td><td nowrap>62.5</td></tr>
+<tr><td nowrap>quant_q8_k0_t0</td><td nowrap>25.41</td><td nowrap>0.360</td><td nowrap>0.926</td><td nowrap>1.330</td><td nowrap>1.05</td><td nowrap>109.09</td><td nowrap>881724</td><td nowrap>38.2</td><td nowrap>68.3</td></tr>
+<tr><td nowrap>quant_q8_k16_t8</td><td nowrap>29.30</td><td nowrap>0.439</td><td nowrap>1.171</td><td nowrap>1.737</td><td nowrap>1.28</td><td nowrap>88.64</td><td nowrap>871384</td><td nowrap>42.2</td><td nowrap>72.2</td></tr>
+<tr><td nowrap>quant_q8_k32_t8</td><td nowrap>33.17</td><td nowrap>0.550</td><td nowrap>1.484</td><td nowrap>2.339</td><td nowrap>1.61</td><td nowrap>70.82</td><td nowrap>872076</td><td nowrap>46.0</td><td nowrap>76.0</td></tr>
+<tr><td nowrap>quant_q8_k32_t16</td><td nowrap>36.01</td><td nowrap>0.545</td><td nowrap>1.449</td><td nowrap>2.084</td><td nowrap>1.59</td><td nowrap>67.38</td><td nowrap>869732</td><td nowrap>48.8</td><td nowrap>78.9</td></tr>
+<tr><td nowrap>quant_q8_k48_t8</td><td nowrap>37.05</td><td nowrap>0.679</td><td nowrap>1.916</td><td nowrap>3.201</td><td nowrap>1.98</td><td nowrap>59.69</td><td nowrap>869294</td><td nowrap>49.9</td><td nowrap>80.0</td></tr>
+<tr><td nowrap>quant_q8_k40_t16</td><td nowrap>38.65</td><td nowrap>0.656</td><td nowrap>1.727</td><td nowrap>3.135</td><td nowrap>1.91</td><td nowrap>64.67</td><td nowrap>867890</td><td nowrap>51.5</td><td nowrap>81.5</td></tr>
+<tr><td nowrap>quant_q6_k64_t8</td><td nowrap>34.85</td><td nowrap>0.897</td><td nowrap>2.443</td><td nowrap>4.020</td><td nowrap>2.62</td><td nowrap>48.81</td><td nowrap>878210</td><td nowrap>47.7</td><td nowrap>77.7</td></tr>
+<tr><td nowrap>quant_q6_k64_t12</td><td nowrap>37.68</td><td nowrap>1.015</td><td nowrap>2.777</td><td nowrap>4.167</td><td nowrap>2.96</td><td nowrap>45.89</td><td nowrap>876018</td><td nowrap>50.5</td><td nowrap>80.6</td></tr>
+<tr><td nowrap>online_free_gap</td><td nowrap>36.01</td><td nowrap>0.605</td><td nowrap>1.660</td><td nowrap>2.800</td><td nowrap>1.76</td><td nowrap>57.08</td><td nowrap>951423</td><td nowrap>50.4</td><td nowrap>80.9</td></tr>
+<tr><td nowrap>online_free_hand5</td><td nowrap>36.01</td><td nowrap>0.700</td><td nowrap>1.983</td><td nowrap>3.264</td><td nowrap>2.04</td><td nowrap>58.06</td><td nowrap>1013647</td><td nowrap>50.5</td><td nowrap>80.9</td></tr>
+<tr><td nowrap>online_true3_select24</td><td nowrap>36.01</td><td nowrap>1.062</td><td nowrap>3.389</td><td nowrap>13.938</td><td nowrap>3.10</td><td nowrap>41.33</td><td nowrap>1701647</td><td nowrap>49.1</td><td nowrap>80.2</td></tr>
+<tr><td nowrap>online_iid3_select24</td><td nowrap>36.01</td><td nowrap>1.210</td><td nowrap>4.470</td><td nowrap>16.388</td><td nowrap>3.53</td><td nowrap>35.12</td><td nowrap>2026230</td><td nowrap>49.1</td><td nowrap>80.6</td></tr>
+<tr><td nowrap>reference_repeat</td><td nowrap>43746.64</td><td nowrap>0.348</td><td nowrap>1.167</td><td nowrap>1.896</td><td nowrap>1.01</td><td nowrap>196.26</td><td nowrap>890031</td><td nowrap>1897.2</td><td nowrap>4882.4</td></tr>
+<tr><td nowrap>online_free_balanced</td><td nowrap>36.01</td><td nowrap>0.616</td><td nowrap>1.700</td><td nowrap>2.788</td><td nowrap>1.80</td><td nowrap>63.29</td><td nowrap>945916</td><td nowrap>50.4</td><td nowrap>80.7</td></tr>
+<tr><td nowrap>full100_quant_q8_k32_t8</td><td nowrap>34.33</td><td nowrap>0.639</td><td nowrap>1.628</td><td nowrap>2.680</td><td nowrap>1.86</td><td nowrap>60.01</td><td nowrap>895984</td><td nowrap>47.2</td><td nowrap>77.2</td></tr>
+</tbody>
+</table>
 
 [원본 연구의 그림: 단일 결정 지연 및 병렬 게임 처리량]
 

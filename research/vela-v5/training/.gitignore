@@ -1,0 +1,9 @@
+work/
+finalrun/base/
+finalrun/warm/*.bin
+engine_probe/
+onward/residual/collect
+onward/residual/recollect
+onward/residual/branch_train
+*.exe
+__pycache__/

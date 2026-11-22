@@ -22,10 +22,8 @@ To train, pass the teacher file and `--execute`. The script first runs the LYRA 
 python research/lyra-v2/training/run.py --execute --teacher "D:/models/hinge_k256_e1.bin"
 ```
 
-| Stage | Settings |
-|---|---|
-| V₀ | LYRA v1 V₀ data, 384/8/8, batch 2048, lr 1e-3, 2 epochs, seed 1, FP16 mixed precision |
-| V₁–V₄₀ | 2,000 self-play games (seed `mix(1800000000 + 1000000*k + i)`, k = 0…39), 150,000 parents, 4 children per action, no V₀ target mixing, X2 top-2 backup, FP16 self-play and targets; 2 epochs at lr 3e-4 from the previous weights |
+- **V₀:** LYRA v1 V₀ data, 384/8/8, batch 2048, lr 1e-3, 2 epochs, seed 1, FP16 mixed precision
+- **V₁–V₄₀:** 2,000 self-play games (seed `mix(1800000000 + 1000000*k + i)`, k = 0…39), 150,000 parents, 4 children per action, no V₀ target mixing, X2 top-2 backup, FP16 self-play and targets; 2 epochs at lr 3e-4 from the previous weights
 
 The final weights are written to `research/lyra-v2/training/runs/v40/model.pt`. The original study decided the extension with development evaluations during training; this procedure runs the selected path to V₄₀ and includes no evaluation.
 
@@ -88,12 +86,46 @@ The default output directory is `research/lyra-v1/output/`; change it with `--ou
 
 Converting the fixed checkpoint reproduces the current browser model's ONNX and feature SHA-256, array definitions and game rules. A full retraining run of the included pipeline has not been verified. GPU, CUDA, PyTorch and floating-point differences can change retraining results, so byte-identical retraining or identical scores are not guaranteed. Converting new weights does not replace the application or deployed model.
 
+## VELA v5 — deck-conditioned residual with a fixed search budget
+
+This reproduces the model in the [VELA v5 report](../vela-v5/report-ko.md). The value table is the VELA v4.2 `hinge_k256_e1.bin` (released as `model.bin.gz`) from the section below; a residual on top of it is packed into the same file. The residual training can be re-run, and the released file is built from the weights kept in the repository.
+
+### Residual training
+
+Requires a C++20 compiler (g++), Python 3, NumPy and SciPy. Place `public/models/vela-v4.2/model.bin.gz` first.
+
+```sh
+bash research/vela-v5/training/run.sh
+```
+
+- Builds the two inference tables from Hinge, then runs the three stages of data collection and training. Commands and seeds are those of the original study.
+- Outputs `research/vela-v5/training/work/m2.bin.npz` (residual weights) and `work/m2.bin`.
+- Verified by re-running exactly as committed (Windows MSYS2 g++, about 7 minutes). The retrained weights differ from the released `training/m2.bin.npz`: floating-point results differ in their last digits across compilers and CPUs, and training amplifies the difference. The retrained model's 2-step score was indistinguishable from the released model's: +0.08, CI [−0.20, +0.37] over 20,000 games on the same seeds.
+- On Windows MSYS2 the mmap replacement in `training/win/` is compiled in (`run.sh` handles this).
+
+### Model file
+
+```sh
+bash research/vela-v5/training/export.sh
+python scripts/vela/delivery.py --pack research/vela-v5/training/work/vela-v5.bin
+python scripts/vela/delivery.py
+```
+
+- `export.sh` converts the released weights `training/m2.bin.npz` into the runtime file, compares it with `training/m2.m2s`, and packs `m2.m2s` with Hinge into `work/vela-v5.bin` (91,641,720 bytes). Its SHA-256 is `0b2b176f93b58f5f3496cd679897058723887d4fd6f8d2e571532e51d7afc581`.
+- The projection matrices and sine/cosine values in the runtime file can differ in their last digits between environments, so the released file is built from the `m2.m2s` in the repository.
+- `delivery.py --pack` writes `public/models/vela-v5/vela-v5.bin.gz` (70,156,799 bytes); `delivery.py` without arguments updates the manifest hashes.
+
+### Runtime and predictor
+
+- **Build:** `python scripts/vela/build.py` builds `vela-v5.mjs` and `vela-v5.wasm`. Requirements and build flags are in the [runtime source notes](../../src/policies/vela/native/README.md).
+- **Score predictor:** `public/models/vela-v5/predictor.json` is a separately trained model. Its method and accuracy are in section 7 of the report; its training data and code are not in this package.
+
 ## VELA v4.3 — VELA v4.2 Hinge with decision-time search
 
 The decision-time search in the [VELA v4.3 report](../vela-v4.3/report-ko.md) creates no new model. The value model is the VELA v4.2 `hinge_k256_e1.bin` (released as `model.bin.gz`) from the section below.
 
-- **Search:** `src/policies/vela/native/dabe.hpp`. The node budget of each search strength (Fast 0, Normal 2,400, High 47,400, Max 383,400) is in `src/policies/vela/search.js`.
-- **Build:** `python scripts/vela/build.py` builds `vela.mjs` and `vela.wasm`. Requirements and build flags are in the [runtime source notes](../../src/policies/vela/native/README.md).
+- **Search:** `src/policies/vela/native/dabe.hpp`. The node budgets of the search strengths are Fast 0, Normal 2,400, High 47,400 and Max 383,400.
+- **Runtime:** `src/policies/vela/vela.mjs` and `vela.wasm` are the v4.3 runtime. The current `scripts/vela/build.py` builds v5.
 - **Score predictors:** The per-strength final-score predictors are separately trained models; their training data is not in this package.
 
 ## VELA v4.2 — COMPACT100 Hinge
@@ -133,11 +165,9 @@ try {
 
 ## VELA v4.1 — COMPACT48
 
-| Directory | Purpose |
-|---|---|
-| `vela-v4.1/full48/` | One-shot cap-5, horizon-48 table generator |
-| `vela-v4.1/include/` | Required generator headers |
-| `vela-v4.1/compression/src/` | Shared time/hand structure fitting and quantized export |
+- `vela-v4.1/full48/`: One-shot cap-5, horizon-48 table generator
+- `vela-v4.1/include/`: Required generator headers
+- `vela-v4.1/compression/src/`: Shared time/hand structure fitting and quantized export
 
 The selected output is `vela-v4.1/compression/models/quant_q6_k64_t12.bin` (37.68 MiB). Generation requires the FULL48 tables; the runtime uses only the compressed model. See the [native build guide](../../src/policies/vela/native/README.md) for WASM.
 
@@ -174,11 +204,9 @@ To generate the VELA-v4 models from scratch, use the generators from **V1, V3, a
 
 ### Required directories
 
-| Directory | Purpose |
-|---|---|
-| `vela-v1/research/` | Compute DP4 values and generate `four-projected-24.bin` |
-| `vela-v3/research/` | Compute DP5 values and export the H24 checkpoint |
-| `vela-v4/research/` | Convert the H24 checkpoint to `h24.raw` |
+- `vela-v1/research/`: Compute DP4 values and generate `four-projected-24.bin`
+- `vela-v3/research/`: Compute DP5 values and export the H24 checkpoint
+- `vela-v4/research/`: Convert the H24 checkpoint to `h24.raw`
 
 Use all 16 files across these directories, including the headers and scripts.
 

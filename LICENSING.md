@@ -27,10 +27,12 @@ This does not assert ownership or copyright protection over every coordinate, nu
 
 ## Third-party software
 
-| Component | Files | Applicable terms |
-| --- | --- | --- |
-| fflate | `src/vendor/fflate/` | [MIT license and copyright notice](src/vendor/fflate/LICENSE) |
-| ONNX Runtime Web 1.30.0 | `public/runtime/onnxruntime-web/1.30.0/` and ONNX Runtime WASM files inside the LYRA package | [Microsoft MIT license](public/runtime/onnxruntime-web/1.30.0/LICENSE) and applicable [third-party notices](public/runtime/onnxruntime-web/1.30.0/ThirdPartyNotices.txt), including Apache 2.0 components |
+- **fflate**
+  - Files: `src/vendor/fflate/`
+  - Applicable terms: [MIT license and copyright notice](src/vendor/fflate/LICENSE)
+- **ONNX Runtime Web 1.30.0**
+  - Files: `public/runtime/onnxruntime-web/1.30.0/` and ONNX Runtime WASM files inside the LYRA package
+  - Applicable terms: [Microsoft MIT license](public/runtime/onnxruntime-web/1.30.0/LICENSE) and applicable [third-party notices](public/runtime/onnxruntime-web/1.30.0/ThirdPartyNotices.txt), including Apache 2.0 components
 
 Retain the applicable license texts, copyright notices and modification notices when redistributing these components. ONNX Runtime's upstream notice file covers the wider project; individual entries apply only to components included in the distributed build. The local runtime modification is described in [LYRA-CACHE.md](public/runtime/onnxruntime-web/1.30.0/LYRA-CACHE.md).
 

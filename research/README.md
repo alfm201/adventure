@@ -4,16 +4,14 @@ English | [한국어](README.ko.md)
 
 Adventure action recommendations started with X36 terminal rollouts. VELA (precomputed value tables) and LYRA (learned value networks) are now two approaches developed side by side; LYRA uses VELA v4.2 as its starting teacher and evaluation baseline. This overview explains the background of each family, the reported performance, and the remaining research questions.
 
-| Read about | Guide |
-|---|---|
-| Generation, training and conversion | [Reproduction guide](reproduction/README.md) |
-| Finite-resource MDP, state space and oracle experiments | [Environment and computational cost — Korean](topics/environment.md) |
-| Exact solutions under the real rules (Q\*, V\*, a\*) and search cost | [Exact solutions — Korean](topics/exact-solutions.md) |
-| X36, value tables and planning | [Value representation and planning — Korean](topics/value-and-planning.md) |
-| Earlier neural branches and LYRA v1/v2 training | [Learning-based research — Korean](topics/learning.md) |
-| Limits of X36, VELA and LYRA, and open questions | [Limits and open problems — Korean](topics/limits.md) |
-| Scores, evidence and terminology | [Evaluation and shared criteria — Korean](topics/evaluation.md) |
-| Reports and shared-hub evidence | [Sources and scope — Korean](topics/sources.md) |
+- [Reproduction guide](reproduction/README.md): Generation, training and conversion
+- [Environment and computational cost — Korean](topics/environment.md): Finite-resource MDP, state space and oracle experiments
+- [Exact solutions — Korean](topics/exact-solutions.md): Exact solutions under the real rules (Q\*, V\*, a\*) and search cost
+- [Value representation and planning — Korean](topics/value-and-planning.md): X36, value tables and planning
+- [Learning-based research — Korean](topics/learning.md): Earlier neural branches and LYRA v1/v2 training
+- [Limits and open problems — Korean](topics/limits.md): Limits of X36, VELA and LYRA, and open questions
+- [Evaluation and shared criteria — Korean](topics/evaluation.md): Scores, evidence and terminology
+- [Sources and scope — Korean](topics/sources.md): Reports and shared-hub evidence
 
 ## At a glance
 
@@ -31,7 +29,8 @@ flowchart TD
         V2["v3 → v4 · five-card hands and execution structure<br/>≈1874 → 1875"]
         V3["v4.1 → v4.2 · compression and longer horizon<br/>≈1877 → 1878 · report evaluations"]
         V4["v4.3 · decision-time search strength<br/>≈1878 → 1879"]
-        V1 --> V2 --> V3 --> V4
+        V5["v5 · deck-conditioned residual and new engine<br/>≈1879 → 1881"]
+        V1 --> V2 --> V3 --> V4 --> V5
     end
     subgraph L["LYRA family · neural values and expectimax"]
         L0["Hinge teacher → Actor → initial value network V₀"]
@@ -71,15 +70,19 @@ Representing larger hands and longer horizons requires larger tables. v4 combine
 
 v4.3 keeps the v4.2 value model and splits decision-time computation into search-strength levels. It refines the 2-step result one step deeper and, when the top actions are close, expands branches up to 6 steps. On 20K pairs from two seed sets the Normal, High and Max levels scored +1.41, +2.10 and +2.65 over v4.2, and each step up was also confirmed. More than half of the gain comes from the smallest budget. The [report](vela-v4.3/report-ko.md) describes the search and the variants that were not adopted.
 
-### 5. LYRA v1: learn a value representation
+### 5. VELA v5: a residual that sees the actual remaining deck
+
+v5 keeps the v4.2 value table and adds a small residual that takes the actual remaining deck as input. The residual is a 20-component inner product between a board-and-time vector and a hand-and-deck vector, trained on complete games as the difference between the policy's value and the Hinge value. The search rule is the same as in v4.3; the engine was rewritten with float32 SIMD and the search strength is fixed at one setting. On the 20K seed pairs used to confirm the v4.3 budget extensions, v5 scored +0.71 over the v4.3 Max level (CI [+0.30, +1.13]), and the native mean decision time fell from 415 ms to 8 ms. Turning the residual off in the same engine costs 1.6 points, and so does removing only its deck inputs. The [report](vela-v5/report-ko.md) describes the value function, the two ways to ship the residual, and the variants that were not adopted.
+
+### 6. LYRA v1: learn a value representation
 
 LYRA aimed to build an iterative self-improvement loop: collect games with a model, train its successor, and repeat. It began with VELA v4.2 imitation followed by PPO, which did not deliver the desired improvement. The research then moved to value iteration using neural child-state values and exact expectations over actual-deck transitions. **LYRA v1 is the V₂₀ value network with the π₂₀ 1-step policy.** The older QStar `v20` is a separate research version.
 
-### 6. LYRA v2: same policy, larger value network
+### 7. LYRA v2: same policy, larger value network
 
 LYRA v2 uses the same 1-step policy with the 15.4M value network **M₄₀**. Instead of continuing from V₂₀, the larger network was trained from V₀ for 40 rounds with one fixed recipe. In a sealed evaluation on 10K new seed pairs it scored +1.00 points above π₂₀ (simultaneous CI [0.53, 1.46]), and +1.08 in a confirmation at deployment precision (FP32). The scale gain over 5.5M replicated with a second training seed. A 61M model was indistinguishable from 15.4M after 8 rounds, but after 20 rounds of the same recipe it scored +0.85 points above the 15.4M model at 20 rounds (CI [0.48, 1.22], 9,200 new seed pairs, one training run). [LYRA v2 report (Korean)](lyra-v2/report-ko.md) · [learning path (Korean)](topics/learning.md)
 
-### 7. LYRA's open problem: the gap between training and policy improvement
+### 8. LYRA's open problem: the gap between training and policy improvement
 
 Training after LYRA v2 has not raised the game score further. The following were observed; which factor drives them has not yet been isolated.
 - Error against the teacher falls sharply on trained states but barely on new states, and retraining also changes choices that were already right.
@@ -91,21 +94,20 @@ See [limits and open problems (Korean)](topics/limits.md#lyra-학습-오차-감�
 
 ## Representative research evaluations
 
-These evaluations used fixed policies. Seed sets, sample sizes and statistical adjustments differ, so individual report means can differ from the service references (X36 ≈1860, VELA ≈1877, LYRA v1 ≈1879, LYRA v2 ≈1880). Read each improvement claim within its stated comparison.
+These evaluations used fixed policies. Seed sets, sample sizes and statistical adjustments differ, so individual report means can differ from the service references (X36 ≈1860, VELA ≈1881, LYRA v1 ≈1879, LYRA v2 ≈1880). Read each improvement claim within its stated comparison.
 
-| Milestone | Mean score | Evaluation and interpretation | Evidence |
-|---|---:|---|---|
-| Early X36 / G2 / G3, direct | 1776.42 / 1779.30 / 1791.76 | 10M episodes each under common evaluation conditions; not root-engine scores | [Historical evaluation](topics/value-and-planning.md#x36-계열의-두-층) |
-| G3-based R100K | 1860.11 | Archived 512 episodes; mean CI [1842.29, 1877.94] | [Historical evaluation](topics/value-and-planning.md#x36-계열의-두-층) |
-| VELA v1 | 1857.11013 | Independent 100K episodes | [Report](vela-v1/report-ko.md) |
-| VELA v2 | 1863.96061 | Paired v1 delta +6.20234, CI [4.85477, 7.54991] | [Report](vela-v2/report-ko.md) |
-| VELA v3 | 1873.62695 | Paired v2 delta +9.80262, CI [8.28441, 11.32083] | [Report](vela-v3/report-ko.md) |
-| VELA v4 | 1874.83320 | Independent 50K; a higher point estimate does not establish superiority to v3 | [Report](vela-v4/report-ko.md) |
-| VELA v4.1 / COMPACT48 | 1876.5108 | Independent 90K pairs; FULL48 delta -1.5740; original noninferiority gate not met | [Report](vela-v4.1/report-ko.md) |
-| VELA v4.2 / Hinge | 1878.13502 | Frozen 100K; FULL100 delta +0.09784, CI [-1.04640, 1.24208]; superiority not established | [Report](vela-v4.2/report-ko.md#3-평가-결과) |
-| VELA v4.3 / search strength | 1878.59 / 1879.28 / 1879.83 | Normal / High / Max. Control-variate-adjusted means on 20K pairs from two seed sets; +1.41 / +2.10 / +2.65 vs v4.2 | [Report](vela-v4.3/report-ko.md) |
-| LYRA v1 / π₂₀ | ≈1879 | Control-variate-adjusted reference; v4.2 deltas +1.30 / +1.49 in separate sets of 10K episode pairs | [Report](lyra-v1/report-ko.md) |
-| LYRA v2 / M₄₀ | ≈1880 | Control-variate-adjusted reference; sealed 10K new-seed pairs: +1.00 vs π₂₀, simultaneous CI [0.53, 1.46]; FP32 confirmation on 10K pairs: +1.08 | [Report](lyra-v2/report-ko.md) |
+- **Early X36 / G2 / G3, direct: 1776.42 / 1779.30 / 1791.76.** 10M episodes each under common evaluation conditions; not root-engine scores. [Historical evaluation](topics/value-and-planning.md#x36-계열의-두-층)
+- **G3-based R100K: 1860.11.** Archived 512 episodes; mean CI [1842.29, 1877.94]. [Historical evaluation](topics/value-and-planning.md#x36-계열의-두-층)
+- **VELA v1: 1857.11013.** Independent 100K episodes. [Report](vela-v1/report-ko.md)
+- **VELA v2: 1863.96061.** Paired v1 delta +6.20234, CI [4.85477, 7.54991]. [Report](vela-v2/report-ko.md)
+- **VELA v3: 1873.62695.** Paired v2 delta +9.80262, CI [8.28441, 11.32083]. [Report](vela-v3/report-ko.md)
+- **VELA v4: 1874.83320.** Independent 50K; a higher point estimate does not establish superiority to v3. [Report](vela-v4/report-ko.md)
+- **VELA v4.1 / COMPACT48: 1876.5108.** Independent 90K pairs; FULL48 delta -1.5740; original noninferiority gate not met. [Report](vela-v4.1/report-ko.md)
+- **VELA v4.2 / Hinge: 1878.13502.** Frozen 100K; FULL100 delta +0.09784, CI [-1.04640, 1.24208]; superiority not established. [Report](vela-v4.2/report-ko.md#3-평가-결과)
+- **VELA v4.3 / search strength: 1878.59 / 1879.28 / 1879.83.** Normal / High / Max. Control-variate-adjusted means on 20K pairs from two seed sets; +1.41 / +2.10 / +2.65 vs v4.2. [Report](vela-v4.3/report-ko.md)
+- **VELA v5 / deck-conditioned residual: 1880.55.** Control-variate-adjusted mean on the 20K seed pairs of the v4.3 budget-extension check; +0.71 vs v4.3 Max, CI [+0.30, +1.13]; +1.42 vs Normal. [Report](vela-v5/report-ko.md)
+- **LYRA v1 / π₂₀: ≈1879.** Control-variate-adjusted reference; v4.2 deltas +1.30 / +1.49 in separate sets of 10K episode pairs. [Report](lyra-v1/report-ko.md)
+- **LYRA v2 / M₄₀: ≈1880.** Control-variate-adjusted reference; sealed 10K new-seed pairs: +1.00 vs π₂₀, simultaneous CI [0.53, 1.46]; FP32 confirmation on 10K pairs: +1.08. [Report](lyra-v2/report-ko.md)
 
 CI denotes a confidence interval. The [evaluation guide](topics/evaluation.md) explains raw and adjusted scores and how the comparisons were made.
 
@@ -121,6 +123,6 @@ VELA and LYRA take their names from the story of Jason and the Argonauts' quest 
 
 ## Continue reading
 
-- **Reproduce:** [guide](reproduction/README.md). Model reports (Korean): [VELA v4.2](vela-v4.2/report-ko.md), [VELA v4.3](vela-v4.3/report-ko.md), [LYRA v1](lyra-v1/report-ko.md), [LYRA v2](lyra-v2/report-ko.md).
+- **Reproduce:** [guide](reproduction/README.md). Model reports (Korean): [VELA v4.2](vela-v4.2/report-ko.md), [VELA v4.3](vela-v4.3/report-ko.md), [VELA v5](vela-v5/report-ko.md), [LYRA v1](lyra-v1/report-ko.md), [LYRA v2](lyra-v2/report-ko.md).
 - **Research detail:** [values and search](topics/value-and-planning.md), [learning-based research](topics/learning.md), [limits and open problems](topics/limits.md).
 - **Shared foundations:** [environment, state space and oracle experiments — Korean](topics/environment.md), [state definitions, policies and evaluation criteria](topics/evaluation.md), [sources and evidence limits](topics/sources.md).

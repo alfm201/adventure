@@ -13,14 +13,14 @@
 
 경로는 **VELA v4.2 Hinge 교사 → Actor → DAgger → 초기 가치망 V₀ → 반복 가치 갱신 → V₂₀ / π₂₀**입니다. DAgger는 학생이 실제로 방문하는 상태를 교사에게 다시 평가받아 학습 자료를 보완하는 방식입니다.
 
-| 단계 | 데이터·학습 설정 |
-|---|---|
-| 교사 데이터 | Hinge 2-step 100,000게임, seed `mix(960000000+i)` |
-| G1 Actor → DAgger → X2 Actor | G1: 128/3/4, 4 epoch → G1로 5,000게임 수집(`mix(964000000+i)`) → 교사+DAgger로 X2: 256/6/8, 4 epoch. 공통 batch 4096, AdamW lr 1e-3, seed 1 |
-| V₀ | 교사 게임 ID < 95,000에서 부모 800,000개, 합법 행동당 자식 8개, Hinge 1-step backup 정답. 256/6/8, batch 2048, lr 1e-3, 2 epoch, seed 1 |
-| V₁–V₆ | 직전 가치망의 2,000게임에서 부모 100,000개, 행동당 자식 4개. 새 정답과 V₀ 정답을 1:1 혼합, 직전 가중치에서 lr 3e-4로 2 epoch |
-| V₇–V₁₇ | 부모 150,000개, V₀ 혼합 제거, 정답 backup만 X2 Actor 상위 2개 합법 행동 사용. 나머지 설정 유지 |
-| V₁₈–V₂₀ | 부모 225,000개, 4 epoch로 변경. 나머지 설정 유지 |
+- **교사 데이터:** Hinge 2-step 100,000게임, seed `mix(960000000+i)`
+- **G1 Actor → DAgger → X2 Actor:** G1: 128/3/4, 4 epoch → G1로 5,000게임 수집(`mix(964000000+i)`) → 교사+DAgger로 X2: 256/6/8, 4 epoch. 공통 batch 4096, AdamW lr 1e-3, seed 1
+- **V₀:** 교사 게임 ID < 95,000에서 부모 800,000개, 합법 행동당 자식 8개, Hinge 1-step backup 정답. 256/6/8, batch 2048, lr 1e-3, 2 epoch, seed 1
+- **V₁–V₆:** 직전 가치망의 2,000게임에서 부모 100,000개, 행동당 자식 4개. 새 정답과 V₀ 정답을 1:1 혼합, 직전 가중치에서 lr 3e-4로 2 epoch
+- **V₇–V₁₇:** 부모 150,000개, V₀ 혼합 제거, 정답 backup만 X2 Actor 상위 2개 합법 행동 사용. 나머지 설정 유지
+- **V₁₈–V₂₀:** 부모 225,000개, 4 epoch로 변경. 나머지 설정 유지
+
+<!-- -->
 
 - V₁–V₂₀의 게임 seed는 `mix(1190000000 + 10000000*k + i)`, 자식 표본 RNG는 20261013, V₀ 표본 RNG는 20261012입니다.
 - 가치망 학습은 AdamW, wd 0.01, warmup·cosine, gradient clip 1.0이고, 매 단계 마지막 가중치를 씁니다.
@@ -28,12 +28,10 @@
 
 전환마다 확인된 의미는 다음과 같습니다.
 
-| 전환 | 결과의 의미 |
-|---|---|
-| 정책 모방과 후속 PPO | 시험한 모방 정책은 Hinge보다 낮았고, 해당 PPO 처방도 개선을 만들지 못함 |
-| 가치망 + 확률적 다음 상태의 기대값 | 행동을 직접 복사하는 대신 가치 추정과 실제 전이를 결합하는 경로 확보 |
-| 옛 초기 정답을 계속 섞는 반복 → 새 backup 중심 반복 | 반복 개선이 진행되어 π₂₀에 도달. 초기 정답 혼합 제거만의 순수 인과효과로 모든 차이를 설명하지는 않음 |
-| V₂₀와 π₂₀ 동결 | LYRA v1 배포 기준 |
+- **정책 모방과 후속 PPO:** 시험한 모방 정책은 Hinge보다 낮았고, 해당 PPO 처방도 개선을 만들지 못함
+- **가치망 + 확률적 다음 상태의 기대값:** 행동을 직접 복사하는 대신 가치 추정과 실제 전이를 결합하는 경로 확보
+- **옛 초기 정답을 계속 섞는 반복 → 새 backup 중심 반복:** 반복 개선이 진행되어 π₂₀에 도달. 초기 정답 혼합 제거만의 순수 인과효과로 모든 차이를 설명하지는 않음
+- **V₂₀와 π₂₀ 동결:** LYRA v1 배포 기준
 
 ## 3. 한계와 후속 연구
 
@@ -42,17 +40,17 @@
 
 ## 4. 포함 자료
 
-| 파일 | 용도 |
-|---|---|
-| `model.pt` | 원본 V₂₀ 체크포인트 |
-| `board.npz` | 특징 생성에 필요한 보드 데이터 |
-| `model.py` | 원본에서 추린 모델 구조·특징 계산 및 변환용 encoder |
-| `export.py` | ONNX·특징 배열·메타데이터 생성 |
-| `training/run.py` | 교사 데이터 생성부터 V₂₀까지의 학습 순서·설정 |
-| `training/artifacts.py` | 학습 파일의 원자적 저장과 재사용 전 무결성 확인 |
-| `training/scripts/` | 교사·DAgger 데이터, 초기 가치 정답, 가치 반복 정답 생성 |
-| `training/src/` | Actor·ValueNet 정의, Actor·가치망 학습, self-play·backup 함수 |
-| `training/kernel/` | 실제 덱 전이와 Hinge 교사 레이블 생성용 C++·Python 코드 및 의존 헤더 |
+- `model.pt`: 원본 V₂₀ 체크포인트
+- `board.npz`: 특징 생성에 필요한 보드 데이터
+- `model.py`: 원본에서 추린 모델 구조·특징 계산 및 변환용 encoder
+- `export.py`: ONNX·특징 배열·메타데이터 생성
+- `training/run.py`: 교사 데이터 생성부터 V₂₀까지의 학습 순서·설정
+- `training/artifacts.py`: 학습 파일의 원자적 저장과 재사용 전 무결성 확인
+- `training/scripts/`: 교사·DAgger 데이터, 초기 가치 정답, 가치 반복 정답 생성
+- `training/src/`: Actor·ValueNet 정의, Actor·가치망 학습, self-play·backup 함수
+- `training/kernel/`: 실제 덱 전이와 Hinge 교사 레이블 생성용 C++·Python 코드 및 의존 헤더
+
+<!-- -->
 
 - 출처는 외부 보관 연구 `deck_actor_20261011`의 `runs/v20_value/model.pt`, `data/board.npz`, `src/actor.py`입니다.
 - 원본 체크포인트 SHA-256은 `b4edb84d4c64cd4b7d0d16bcc8db0eab6f521d5090b13426f797b50ac363d09a`입니다.

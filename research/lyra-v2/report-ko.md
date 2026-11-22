@@ -13,11 +13,11 @@
 
 v1과 달리 V₂₀을 이어 학습하지 않았습니다. 더 큰 가치망을 **V₀부터 하나의 고정 처방으로 40회** 반복 학습했습니다. 이 처방은 규모 비교 연구(SCALE-VI)에서 5.5M·15.4M 모델에 똑같이 적용한 것입니다.
 
-| 단계 | 데이터·학습 설정 |
-|---|---|
-| 공통 자료 | LYRA v1 경로의 V₀ 학습 자료(교사 게임에서 부모 800,000개, 자식 8개, Hinge 1-step backup 정답)와 X2 Actor를 그대로 씁니다 |
-| V₀ | 새 384/8/8 가치망. batch 2048, lr 1e-3, 2 epoch, seed 1, FP16 혼합정밀도 |
-| V₁–V₄₀ | 직전 가치망의 1-step 정책으로 2,000게임 self-play(seed `mix(1800000000 + 1000000*k + i)`, k = 0…39). 부모 150,000개, 행동당 자식 4개, V₀ 정답 혼합 없음, 정답 backup만 X2 Actor 상위 2개 합법 행동 사용. 직전 가중치에서 lr 3e-4로 2 epoch |
+- **공통 자료:** LYRA v1 경로의 V₀ 학습 자료(교사 게임에서 부모 800,000개, 자식 8개, Hinge 1-step backup 정답)와 X2 Actor를 그대로 씁니다
+- **V₀:** 새 384/8/8 가치망. batch 2048, lr 1e-3, 2 epoch, seed 1, FP16 혼합정밀도
+- **V₁–V₄₀:** 직전 가치망의 1-step 정책으로 2,000게임 self-play(seed `mix(1800000000 + 1000000*k + i)`, k = 0…39). 부모 150,000개, 행동당 자식 4개, V₀ 정답 혼합 없음, 정답 backup만 X2 Actor 상위 2개 합법 행동 사용. 직전 가중치에서 lr 3e-4로 2 epoch
+
+<!-- -->
 
 - self-play와 정답 생성의 가치망 계산은 FP16(출력층 FP32)입니다. 결정 일치율은 FP32 대비 99.85%였습니다.
 - 가치망 학습은 AdamW, wd 0.01, warmup·cosine, gradient clip 1.0이고, 매 단계 마지막 가중치를 씁니다.
@@ -28,16 +28,26 @@ v1과 달리 V₂₀을 이어 학습하지 않았습니다. 더 큰 가치망�
 
 **개발 평가** (개발 시드 3,600쌍, 제어변량 보정 평균. 같은 시드에서 π₂₀은 1878.6)
 
-| 반복 | V₈ | V₁₂ | V₁₆ | V₂₀ | V₂₄ | V₂₈ | V₃₂ | V₃₆ | V₄₀ |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| M | 1879.1 | 1879.2 | 1878.9 | 1879.8 | 1879.7 | 1879.8 | 1879.8 | 1879.9 | 1880.3 |
+<table>
+<thead>
+<tr><th nowrap>반복</th><th nowrap align="right">V₈</th><th nowrap align="right">V₁₂</th><th nowrap align="right">V₁₆</th><th nowrap align="right">V₂₀</th><th nowrap align="right">V₂₄</th><th nowrap align="right">V₂₈</th><th nowrap align="right">V₃₂</th><th nowrap align="right">V₃₆</th><th nowrap align="right">V₄₀</th></tr>
+</thead>
+<tbody>
+<tr><td nowrap>M</td><td nowrap align="right">1879.1</td><td nowrap align="right">1879.2</td><td nowrap align="right">1878.9</td><td nowrap align="right">1879.8</td><td nowrap align="right">1879.7</td><td nowrap align="right">1879.8</td><td nowrap align="right">1879.8</td><td nowrap align="right">1879.9</td><td nowrap align="right">1880.3</td></tr>
+</tbody>
+</table>
 
 **봉인 평가** (새 시드 10K쌍, 2개 비교의 다중 보정 구간, 평가 대상 망을 운 측정기로 쓰는 추정기)
 
-| 비교 | 보정 대응 차이 | 동시 CI |
-|---|---:|---|
-| M₄₀ − π₂₀ | **+1.00점** | [0.53, 1.46] |
-| M₄₀ − M₂₀ | +0.35점 | [−0.04, 0.74] |
+<table>
+<thead>
+<tr><th nowrap>비교</th><th nowrap align="right">보정 대응 차이</th><th nowrap>동시 CI</th></tr>
+</thead>
+<tbody>
+<tr><td nowrap>M₄₀ − π₂₀</td><td nowrap align="right"><b>+1.00점</b></td><td nowrap>[0.53, 1.46]</td></tr>
+<tr><td nowrap>M₄₀ − M₂₀</td><td nowrap align="right">+0.35점</td><td nowrap>[−0.04, 0.74]</td></tr>
+</tbody>
+</table>
 
 **배포 정밀도 확인** (FP32, 다른 새 시드 10K쌍, 양쪽 모두 FP32): M₄₀ − π₂₀ = **+1.08점**(SE 0.19)입니다.
 
@@ -52,11 +62,16 @@ v1과 달리 V₂₀을 이어 학습하지 않았습니다. 더 큰 가치망�
 - **초기 상태:** v1과 같은 방식으로, 시작 상태 예측을 학습·검증 9,000판의 시작 상태 라벨 평균(1879.85 ± 0.14)에 맞췄습니다. 시험 1,000판의 라벨 평균은 1879.83 ± 0.42였습니다.
 - **정확도:** 시험 게임에서 남은 주사위 100…1마다 상태를 하나씩 골라 상태마다 128회 이어 플레이한 평균을 참값으로 썼습니다.
 
-| 지표 | 값 |
-|---|---:|
-| 기준 상태 100개 MAE | **1.09점**, 95% [0.93, 1.25] |
-| RMSE / 참값 잡음 보정 RMSE | 1.36 / 1.02 |
-| 편향 | −0.18 |
+<table>
+<thead>
+<tr><th nowrap>지표</th><th nowrap align="right">값</th></tr>
+</thead>
+<tbody>
+<tr><td nowrap>기준 상태 100개 MAE</td><td nowrap align="right"><b>1.09점</b>, 95% [0.93, 1.25]</td></tr>
+<tr><td nowrap>RMSE / 참값 잡음 보정 RMSE</td><td nowrap align="right">1.36 / 1.02</td></tr>
+<tr><td nowrap>편향</td><td nowrap align="right">−0.18</td></tr>
+</tbody>
+</table>
 
 참값 자체의 SE가 RMS 0.91점이라 MAE의 상당 부분은 참값의 잡음입니다. v1 예측기의 MAE 3.02점과는 정책과 라벨 방식이 달라 직접 비교하지 않습니다. [출처 L6](../topics/sources.md#lyra-연구와-후속-방향)
 

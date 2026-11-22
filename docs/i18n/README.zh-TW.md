@@ -10,30 +10,40 @@
 
 ## 選擇模型
 
-| 模型 | 評估方式 | 平均分數 | 統計方式 |
-| --- | --- | ---: | --- |
-| **LYRA · v2** | 在 CPU 或 GPU 上結合神經網路與單步搜尋，評估各項行動 | 約 1,880.1 分 | 調整後平均 |
-| **VELA · v4.3** | 在 CPU 上推演後續局面評估各項行動，局面接近時搜尋更深 | 約 1,878.6 分 | 調整後平均 |
-| **X36 · G3** | 在 CPU 或 GPU 上反覆模擬，比較不同選擇 | 約 1,860.0 分 | 原始平均 |
+- **LYRA · v2：** 在 CPU 或 GPU 上結合神經網路與單步搜尋，評估各項行動
+- **VELA · v5：** 在 CPU 上推演後續局面評估各項行動，局面接近時搜尋更深
+- **X36 · G3：** 在 CPU 或 GPU 上反覆模擬，比較不同選擇
+
+<table>
+<thead>
+<tr><th nowrap>模型</th><th nowrap align="right">平均分數</th><th nowrap>統計方式</th></tr>
+</thead>
+<tbody>
+<tr><td nowrap><b>LYRA · v2</b></td><td nowrap align="right">約 1,880.1 分</td><td nowrap>調整後平均</td></tr>
+<tr><td nowrap><b>VELA · v5</b></td><td nowrap align="right">約 1,880.7 分</td><td nowrap>調整後平均</td></tr>
+<tr><td nowrap><b>X36 · G3</b></td><td nowrap align="right">約 1,860.0 分</td><td nowrap>原始平均</td></tr>
+</tbody>
+</table>
 
 **各搜尋方式的紀錄**
 
-| 模型 | 搜尋 | 平均分數 | 判斷時間 |
-| --- | --- | ---: | --- |
-| **LYRA · v2** | 基本搜尋 | 約 1,880.1 分 | 大多即時 |
-| | 深度搜尋 | 約 1,881.0 分 | 數秒以上 |
-| **VELA · v4.3** | 快速 | 約 1,877.2 分 | 即時 |
-| | 標準 | 約 1,878.6 分 | 大多即時 |
-| | 高 | 約 1,879.3 分 | 局面接近時最多約 1 秒 |
-| | 最高 | 約 1,879.8 分 | 局面接近時最多數秒 |
+<table>
+<thead>
+<tr><th nowrap>模型</th><th nowrap>搜尋</th><th nowrap align="right">平均分數</th><th nowrap>判斷時間</th></tr>
+</thead>
+<tbody>
+<tr><td nowrap rowspan="2"><b>LYRA · v2</b></td><td nowrap>基本搜尋</td><td nowrap align="right">約 1,880.1 分</td><td nowrap>大多即時</td></tr>
+<tr><td nowrap>深度搜尋</td><td nowrap align="right">約 1,881.0 分</td><td nowrap>數秒以上</td></tr>
+</tbody>
+</table>
 
-以上平均分數來自不同評估，僅供參考。調整後平均是利用各模型的鞅控制變數（Martingale CV），減少運氣造成的平均分數估計誤差後得到的值。各搜尋方式的分數皆為調整後平均。預設設定為 LYRA 基本搜尋、VELA 標準，模型表中的分數以預設設定計算。搜尋越深，每次判斷的時間越長；計算時間也會因裝置效能和當前遊戲局面而異。VELA v4.3 與 VELA v4.2 使用同一個模型檔案。
+以上平均分數來自不同評估，僅供參考。調整後平均是利用各模型的鞅控制變數（Martingale CV），減少運氣造成的平均分數估計誤差後得到的值。各搜尋方式的分數皆為調整後平均。LYRA 的預設設定為基本搜尋，模型表中的分數以預設設定計算。搜尋越深，每次判斷的時間越長；計算時間也會因裝置效能和當前遊戲局面而異。VELA v5 只有一種搜尋設定，每次判斷使用相同的計算預算。
 
 預設選擇 VELA。LYRA 為研究版模型，執行裝置可設為自動、CPU 或 GPU。選擇自動時，會優先使用可用的 GPU；若初始化或推論失敗，則改用 CPU。
 
-首次使用時，VELA 需要載入約 **68 MB** 的模型套件，LYRA 約為 **68 MB**。使用線上網站時，如果同意將模型儲存在瀏覽器中，下次造訪即可重複使用。VELA 確認最新模型資訊後會清除不相容的舊模型；LYRA 則在驗證並儲存新套件後清除舊套件。在自己的電腦上執行時，直接使用專案中的模型檔案，不會在瀏覽器中額外儲存一份。LYRA 切換 CPU 或 GPU 時，使用的是同一份模型套件。
+首次使用時，VELA 需要載入約 **70 MB** 的模型套件，LYRA 約為 **68 MB**。VELA 在載入模型後會產生搜尋表，建議保留約 1.5 GB 以上的可用記憶體。使用線上網站時，如果同意將模型儲存在瀏覽器中，下次造訪即可重複使用。VELA 確認最新模型資訊後會清除不相容的舊模型；LYRA 則在驗證並儲存新套件後清除舊套件。在自己的電腦上執行時，直接使用專案中的模型檔案，不會在瀏覽器中額外儲存一份。LYRA 切換 CPU 或 GPU 時，使用的是同一份模型套件。
 
-各項行動的評估值可用來比較不同選擇的優劣。預估最終分數，是持續依照所選模型的建議行動時的預測結果。VELA v4.3 依每種搜尋強度、LYRA v2 依自身策略，分別使用專門訓練的分數預測器。遊戲結束後，會顯示實際分數。也可以取消模型選擇，在不顯示行動建議的情況下使用工具。
+各項行動的評估值可用來比較不同選擇的優劣。預估最終分數，是持續依照所選模型的建議行動時的預測結果。VELA v5 與 LYRA v2 分別使用依自身策略專門訓練的分數預測器。遊戲結束後，會顯示實際分數。也可以取消模型選擇，在不顯示行動建議的情況下使用工具。
 
 ## 在自己的電腦上執行
 
@@ -41,7 +51,7 @@
 
 1. 下載專案並解壓縮。
 2. 從下方的 **GitHub Releases** 下載要使用的模型，**不要解壓縮模型檔案**，直接放到指定路徑。若只使用 X36 · G3，可以略過此步驟。
-   - **VELA v4.3** (模型檔案與 VELA v4.2 相同)：[`model.bin.gz`](https://github.com/alfm201/adventure/releases/tag/vela-v4.2) → `public/models/vela-v4.2/model.bin.gz`
+   - **[VELA v5](https://github.com/alfm201/adventure/releases/tag/vela-v5)：** `vela-v5.bin.gz` → `public/models/vela-v5/vela-v5.bin.gz`
    - **[LYRA v2](https://github.com/alfm201/adventure/releases/tag/lyra-v2)：** `lyra-v2.bin.gz` → `public/models/lyra-v2/lyra-v2.bin.gz`
 3. 在專案資料夾中開啟終端機，執行以下指令：
 
@@ -59,10 +69,8 @@
 
 模型檔案仍會透過 [GitHub Releases](https://github.com/alfm201/adventure/releases) 提供。如需從 Cloudflare 下載，請向 `https://adventure.alfm201.workers.dev` 的以下路徑傳送 `GET` 請求。
 
-| 模型 | Cloudflare 下載路徑 |
-| --- | --- |
-| VELA v4.3 · 與 v4.2 相同的檔案 | [/models/vela-v4.2/model.bin.gz](https://adventure.alfm201.workers.dev/models/vela-v4.2/model.bin.gz) |
-| LYRA v2 | [/models/lyra-v2/lyra-v2.bin.gz](https://adventure.alfm201.workers.dev/models/lyra-v2/lyra-v2.bin.gz) |
+- **VELA v5：** [/models/vela-v5/vela-v5.bin.gz](https://adventure.alfm201.workers.dev/models/vela-v5/vela-v5.bin.gz)
+- **LYRA v2：** [/models/lyra-v2/lyra-v2.bin.gz](https://adventure.alfm201.workers.dev/models/lyra-v2/lyra-v2.bin.gz)
 
 LYRA 模型套件內的 `LICENSES.txt` 包含第三方執行階段的授權聲明。再散布套件時，請保留此檔案。
 
@@ -80,7 +88,7 @@ LYRA 模型套件內的 `LICENSES.txt` 包含第三方執行階段的授權聲�
 
 模型產生、訓練與轉換流程請從[重現指南](../../research/reproduction/README.md)（英語）開始。LYRA v2 的 M₄₀ 訓練程式碼，以及轉換為瀏覽器用 FP32 模型的程式碼與步驟，請參閱[重現指南的 LYRA v2 一節](../../research/reproduction/README.md#lyra-v2--m₄₀-neural-value-model)。工具採用 M₄₀ 與單步 expectimax 策略。
 
-VELA v4.2 的 FULL100 產生程式、Hinge 訓練程式碼與最終結果摘要，請參閱[重現指南的 VELA v4.2 一節](../../research/reproduction/README.md#vela-v42--compact100-hinge)；WASM 建置方式請參閱[建置指南](../../src/policies/vela/native/README.md)。執行工具不需要 FULL100 原始表。各模型的詳細指南與 WASM 建置指南皆為韓語。
+VELA v5 的殘差訓練與模型檔打包，請參閱[重現指南的 VELA v5 一節](../../research/reproduction/README.md#vela-v5--deck-conditioned-residual-with-a-fixed-search-budget)和 [VELA v5 報告](../../research/vela-v5/report-ko.md)。VELA v4.2 的 FULL100 產生程式、Hinge 訓練程式碼與最終結果摘要，請參閱[重現指南的 VELA v4.2 一節](../../research/reproduction/README.md#vela-v42--compact100-hinge)；WASM 建置方式請參閱[建置指南](../../src/policies/vela/native/README.md)。執行工具不需要 FULL100 原始表。各模型的詳細指南與 WASM 建置指南皆為韓語。
 
 [AI 遊戲策略分析報告（PDF，英文）](../reports/Adventure_AI_Play_Strategy_Analysis_en.pdf)：透過對實際對局紀錄的事後分析，回答「AI 為什麼推薦這一步」，並以數據檢驗這些推薦的可信程度。
 

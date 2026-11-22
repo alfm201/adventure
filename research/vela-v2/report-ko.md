@@ -12,10 +12,15 @@
 
 같은 새로운 시드 100,000개에서 기존 v1도 다시 실행했다.
 
-| 정책 | 게임 수 | 평균 최종 score | 95% 신뢰구간 |
-|---|---:|---:|---:|
-| v1: DP4, 2단계 탐색 | 100,000 | 1857.75827 | 1856.50604 ~ 1859.01050 |
-| **v2: 덱 잔차 + 보존 가중치 조정** | **100,000** | **1863.96061** | **1862.70309 ~ 1865.21813** |
+<table>
+<thead>
+<tr><th nowrap>정책</th><th nowrap align="right">게임 수</th><th nowrap align="right">평균 최종 score</th><th nowrap align="right">95% 신뢰구간</th></tr>
+</thead>
+<tbody>
+<tr><td nowrap>v1: DP4, 2단계 탐색</td><td nowrap align="right">100,000</td><td nowrap align="right">1857.75827</td><td nowrap align="right">1856.50604 ~ 1859.01050</td></tr>
+<tr><td nowrap><b>v2: 덱 잔차 + 보존 가중치 조정</b></td><td nowrap align="right"><b>100,000</b></td><td nowrap align="right"><b>1863.96061</b></td><td nowrap align="right"><b>1862.70309 ~ 1865.21813</b></td></tr>
+</tbody>
+</table>
 
 같은 시드끼리 대응시킨 개선량은 **+6.20234점**, 차이의 95% 신뢰구간은 **[4.85477, 7.54991]**이다. 이전 보고서의 v1 평균 1857.11013은 다른 최종 시드 은행의 값이다. 이를 이번 동일 시드 대응 비교의 기준으로 혼합하지 않았다.
 
@@ -72,12 +77,17 @@ z(D)&=\sum_{\mathrm{id}\in D}\mathrm{deckCard}[\mathrm{class}(\mathrm{id})],\\
 
 동일한 개발 시드 2709101000에서 각각 10,000게임을 실행했다.
 
-| 덱 강도 | 손패 가중치 | 평균 score |
-|---:|---:|---:|
-| 0 | 0.95 | 1857.7414 |
-| 0.6 | 0.95 | 1861.7012 |
-| 0.6 | 1.0 | 1862.2425 |
-| **0.6** | **0.975** | **1864.8335** |
+<table>
+<thead>
+<tr><th nowrap align="right">덱 강도</th><th nowrap align="right">손패 가중치</th><th nowrap align="right">평균 score</th></tr>
+</thead>
+<tbody>
+<tr><td nowrap align="right">0</td><td nowrap align="right">0.95</td><td nowrap align="right">1857.7414</td></tr>
+<tr><td nowrap align="right">0.6</td><td nowrap align="right">0.95</td><td nowrap align="right">1861.7012</td></tr>
+<tr><td nowrap align="right">0.6</td><td nowrap align="right">1.0</td><td nowrap align="right">1862.2425</td></tr>
+<tr><td nowrap align="right"><b>0.6</b></td><td nowrap align="right"><b>0.975</b></td><td nowrap align="right"><b>1864.8335</b></td></tr>
+</tbody>
+</table>
 
 다른 5,000게임 개발 은행에서는 보정 강도 0.3, 0.6, 1.0도 비교했다. 강도 0.6·가중치 0.95가 1865.5770, 강도 1.0은 1859.9656이었다. 보정을 강하게 하는 것 자체가 개선을 보장하지 않았다.
 

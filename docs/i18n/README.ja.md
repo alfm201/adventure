@@ -8,30 +8,40 @@
 
 ## モデルを選ぶ
 
-| モデル | 評価方法 | 平均スコア | 集計方法 |
-| --- | --- | ---: | --- |
-| **LYRA · v2** | CPUまたはGPUでニューラルネットワークと1ステップ探索を使って行動を評価 | 約1,880.1点 | 補正平均 |
-| **VELA · v4.3** | CPUで先の展開を調べて行動を評価し、接戦ではより深く探索 | 約1,878.6点 | 補正平均 |
-| **X36 · G3** | CPUまたはGPUでシミュレーションを繰り返し、選択肢を比較 | 約1,860.0点 | 単純平均 |
+- **LYRA · v2：** CPUまたはGPUでニューラルネットワークと1ステップ探索を使って行動を評価
+- **VELA · v5：** CPUで先の展開を調べて行動を評価し、接戦ではより深く探索
+- **X36 · G3：** CPUまたはGPUでシミュレーションを繰り返し、選択肢を比較
+
+<table>
+<thead>
+<tr><th nowrap>モデル</th><th nowrap align="right">平均スコア</th><th nowrap>集計方法</th></tr>
+</thead>
+<tbody>
+<tr><td nowrap><b>LYRA · v2</b></td><td nowrap align="right">約1,880.1点</td><td nowrap>補正平均</td></tr>
+<tr><td nowrap><b>VELA · v5</b></td><td nowrap align="right">約1,880.7点</td><td nowrap>補正平均</td></tr>
+<tr><td nowrap><b>X36 · G3</b></td><td nowrap align="right">約1,860.0点</td><td nowrap>単純平均</td></tr>
+</tbody>
+</table>
 
 **探索ごとの記録**
 
-| モデル | 探索 | 平均スコア | 判断時間 |
-| --- | --- | ---: | --- |
-| **LYRA · v2** | 基本探索 | 約1,880.1点 | ほぼ即時 |
-| | 深い探索 | 約1,881.0点 | 数秒以上 |
-| **VELA · v4.3** | 高速 | 約1,877.2点 | 即時 |
-| | 標準 | 約1,878.6点 | ほぼ即時 |
-| | 高 | 約1,879.3点 | 接戦時は最大約1秒 |
-| | 最高 | 約1,879.8点 | 接戦時は最大数秒 |
+<table>
+<thead>
+<tr><th nowrap>モデル</th><th nowrap>探索</th><th nowrap align="right">平均スコア</th><th nowrap>判断時間</th></tr>
+</thead>
+<tbody>
+<tr><td nowrap rowspan="2"><b>LYRA · v2</b></td><td nowrap>基本探索</td><td nowrap align="right">約1,880.1点</td><td nowrap>ほぼ即時</td></tr>
+<tr><td nowrap>深い探索</td><td nowrap align="right">約1,881.0点</td><td nowrap>数秒以上</td></tr>
+</tbody>
+</table>
 
-平均スコアは、それぞれ異なる条件で評価した参考値です。補正平均は、各モデルを用いたマルチンゲール制御変量（Martingale CV）で、運による平均スコアの推定誤差を小さくした値です。探索ごとのスコアはすべて補正平均です。初期設定はLYRAが基本探索、VELAが標準で、モデル表のスコアは初期設定の値です。深く探索するほど判断に時間がかかり、計算時間は端末の性能やゲームの状況によっても変わります。VELA v4.3はVELA v4.2と同じモデルファイルを使います。
+平均スコアは、それぞれ異なる条件で評価した参考値です。補正平均は、各モデルを用いたマルチンゲール制御変量（Martingale CV）で、運による平均スコアの推定誤差を小さくした値です。探索ごとのスコアはすべて補正平均です。LYRAの初期設定は基本探索で、モデル表のスコアは初期設定の値です。深く探索するほど判断に時間がかかり、計算時間は端末の性能やゲームの状況によっても変わります。VELA v5の探索設定は1つで、どの判断にも同じ計算予算を使います。
 
 初期設定ではVELAが選択されています。LYRAは研究用モデルで、実行デバイスを自動・CPU・GPUから選べます。自動では利用可能なGPUを優先し、準備や推論に失敗した場合はCPUに切り替わります。
 
-初回の読み込みには、VELAで約**68 MB**、LYRAで約**68 MB**のモデルパッケージが必要です。公開サイトでは、ブラウザーへの保存に同意すると、次回から保存済みのモデルを再利用できます。VELAは最新のモデル情報を確認して互換性のない旧モデルを削除し、LYRAは新しいパッケージを検証・保存した後に旧パッケージを削除します。自分のPCで起動する場合はプロジェクト内のモデルファイルを使い、ブラウザーには重複して保存しません。LYRAはCPUとGPUを切り替えても同じパッケージを使います。
+初回の読み込みには、VELAで約**70 MB**、LYRAで約**68 MB**のモデルパッケージが必要です。VELAはモデルの読み込み後に探索用のテーブルを作成します。メモリの空きは約1.5 GB以上を推奨します。公開サイトでは、ブラウザーへの保存に同意すると、次回から保存済みのモデルを再利用できます。VELAは最新のモデル情報を確認して互換性のない旧モデルを削除し、LYRAは新しいパッケージを検証・保存した後に旧パッケージを削除します。自分のPCで起動する場合はプロジェクト内のモデルファイルを使い、ブラウザーには重複して保存しません。LYRAはCPUとGPUを切り替えても同じパッケージを使います。
 
-行動ごとの評価値は、各選択肢の有利さを表します。予想最終スコアは、選択したモデルのおすすめに従い続けた場合の見込みです。VELA v4.3には探索強度ごと、LYRA v2には方策に合わせて学習した専用のスコア予測器を使っています。ゲーム終了時には実際のスコアを表示します。モデル選択をキャンセルすれば、おすすめ表示なしでも利用できます。
+行動ごとの評価値は、各選択肢の有利さを表します。予想最終スコアは、選択したモデルのおすすめに従い続けた場合の見込みです。VELA v5とLYRA v2には、それぞれの方策に合わせて学習した専用のスコア予測器を使っています。ゲーム終了時には実際のスコアを表示します。モデル選択をキャンセルすれば、おすすめ表示なしでも利用できます。
 
 ## 自分のPCで起動する
 
@@ -39,7 +49,7 @@
 
 1. プロジェクトをダウンロードして展開します。
 2. 使いたいモデルを以下の**GitHub Releases**からダウンロードし、**解凍せずに**指定の場所へ置きます。X36 · G3だけを使う場合、この手順は不要です。
-   - **VELA v4.3** (モデルファイルはVELA v4.2と同じ)：[`model.bin.gz`](https://github.com/alfm201/adventure/releases/tag/vela-v4.2) → `public/models/vela-v4.2/model.bin.gz`
+   - **[VELA v5](https://github.com/alfm201/adventure/releases/tag/vela-v5)：** `vela-v5.bin.gz` → `public/models/vela-v5/vela-v5.bin.gz`
    - **[LYRA v2](https://github.com/alfm201/adventure/releases/tag/lyra-v2)：** `lyra-v2.bin.gz` → `public/models/lyra-v2/lyra-v2.bin.gz`
 3. プロジェクトフォルダーでターミナルを開き、次のコマンドを実行します。
 
@@ -57,10 +67,8 @@
 
 モデルファイルは[GitHub Releases](https://github.com/alfm201/adventure/releases)でも引き続き提供します。Cloudflareからダウンロードする場合は、`https://adventure.alfm201.workers.dev`に以下のパスで`GET`リクエストを送信してください。
 
-| モデル | Cloudflareのダウンロードパス |
-| --- | --- |
-| VELA v4.3 · v4.2と同じファイル | [/models/vela-v4.2/model.bin.gz](https://adventure.alfm201.workers.dev/models/vela-v4.2/model.bin.gz) |
-| LYRA v2 | [/models/lyra-v2/lyra-v2.bin.gz](https://adventure.alfm201.workers.dev/models/lyra-v2/lyra-v2.bin.gz) |
+- **VELA v5：** [/models/vela-v5/vela-v5.bin.gz](https://adventure.alfm201.workers.dev/models/vela-v5/vela-v5.bin.gz)
+- **LYRA v2：** [/models/lyra-v2/lyra-v2.bin.gz](https://adventure.alfm201.workers.dev/models/lyra-v2/lyra-v2.bin.gz)
 
 LYRAパッケージ内の`LICENSES.txt`には、外部ランタイムのライセンス告知が含まれます。再配布時もこのファイルを保持してください。
 
@@ -78,7 +86,7 @@ LYRAパッケージ内の`LICENSES.txt`には、外部ランタイムのライ�
 
 モデルの生成・学習・変換は、[再現ガイド](../../research/reproduction/README.md)（英語）を参照してください。LYRA v2のM₄₀学習と、ブラウザー向けFP32モデルへの変換コード・手順は、[再現ガイドのLYRA v2の節](../../research/reproduction/README.md#lyra-v2--m₄₀-neural-value-model)にあります。アプリではM₄₀と1ステップのexpectimaxを使っています。
 
-VELA v4.2のFULL100生成、Hinge学習のコードと結果の概要は[再現ガイドのVELA v4.2の節](../../research/reproduction/README.md#vela-v42--compact100-hinge)、WASMのビルド方法は[ビルド手順](../../src/policies/vela/native/README.md)を参照してください。アプリの実行にFULL100の元テーブルは必要ありません。モデル別のガイドとWASMのビルド手順は韓国語です。
+VELA v5の残差学習とモデルファイルの作成は[再現ガイドのVELA v5の節](../../research/reproduction/README.md#vela-v5--deck-conditioned-residual-with-a-fixed-search-budget)と[VELA v5レポート](../../research/vela-v5/report-ko.md)を参照してください。VELA v4.2のFULL100生成、Hinge学習のコードと結果の概要は[再現ガイドのVELA v4.2の節](../../research/reproduction/README.md#vela-v42--compact100-hinge)、WASMのビルド方法は[ビルド手順](../../src/policies/vela/native/README.md)を参照してください。アプリの実行にFULL100の元テーブルは必要ありません。モデル別のガイドとWASMのビルド手順は韓国語です。
 
 [AI プレイ戦略分析レポート（PDF・英語）](../reports/Adventure_AI_Play_Strategy_Analysis_en.pdf)：「AI はなぜこの手を推奨したのか」に実際のプレイ記録の事後分析で答え、その推奨がどこまで信頼できるかを数値で確かめた分析レポートです。
 

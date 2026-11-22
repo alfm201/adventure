@@ -10,30 +10,40 @@
 
 ## 모델 선택
 
-| 모델 | 계산 방식 | 평균 기록 | 집계 방식 |
-| --- | --- | ---: | --- |
-| **LYRA · v2** | CPU 또는 GPU에서 신경망과 1-step 탐색으로 행동 평가 | 약 1,880.1점 | 보정 평균 |
-| **VELA · v4.3** | CPU로 다음 상황을 전개해 행동 평가, 접전에서는 더 깊이 탐색 | 약 1,878.6점 | 보정 평균 |
-| **X36 · G3** | CPU 또는 GPU로 여러 번 시뮬레이션해 선택 비교 | 약 1,860.0점 | 실제 평균 |
+- **LYRA · v2:** CPU 또는 GPU에서 신경망과 1-step 탐색으로 행동 평가
+- **VELA · v5:** CPU로 다음 상황을 전개해 행동 평가, 접전에서는 더 깊이 탐색
+- **X36 · G3:** CPU 또는 GPU로 여러 번 시뮬레이션해 선택 비교
+
+<table>
+<thead>
+<tr><th nowrap>모델</th><th nowrap align="right">평균 기록</th><th nowrap>집계 방식</th></tr>
+</thead>
+<tbody>
+<tr><td nowrap><b>LYRA · v2</b></td><td nowrap align="right">약 1,880.1점</td><td nowrap>보정 평균</td></tr>
+<tr><td nowrap><b>VELA · v5</b></td><td nowrap align="right">약 1,880.7점</td><td nowrap>보정 평균</td></tr>
+<tr><td nowrap><b>X36 · G3</b></td><td nowrap align="right">약 1,860.0점</td><td nowrap>실제 평균</td></tr>
+</tbody>
+</table>
 
 **탐색별 기록**
 
-| 모델 | 탐색 | 평균 기록 | 판단 시간 |
-| --- | --- | ---: | --- |
-| **LYRA · v2** | 기본 탐색 | 약 1,880.1점 | 대부분 즉시 |
-| | 깊은 탐색 | 약 1,881.0점 | 수 초 이상 |
-| **VELA · v4.3** | 빠름 | 약 1,877.2점 | 즉시 |
-| | 보통 | 약 1,878.6점 | 대부분 즉시 |
-| | 높음 | 약 1,879.3점 | 접전 시 최대 약 1초 |
-| | 최고 | 약 1,879.8점 | 접전 시 최대 수 초 |
+<table>
+<thead>
+<tr><th nowrap>모델</th><th nowrap>탐색</th><th nowrap align="right">평균 기록</th><th nowrap>판단 시간</th></tr>
+</thead>
+<tbody>
+<tr><td nowrap rowspan="2"><b>LYRA · v2</b></td><td nowrap>기본 탐색</td><td nowrap align="right">약 1,880.1점</td><td nowrap>대부분 즉시</td></tr>
+<tr><td nowrap>깊은 탐색</td><td nowrap align="right">약 1,881.0점</td><td nowrap>수 초 이상</td></tr>
+</tbody>
+</table>
 
-평균 기록은 서로 다른 평가에서 얻은 참고값입니다. 보정 평균은 각 모델을 이용한 마팅게일 제어변량(Martingale CV)으로 우연에 따른 평균 점수의 추정 오차를 줄인 값입니다. 탐색별 기록은 모두 보정 평균입니다. 기본값은 LYRA 기본 탐색, VELA 보통이며, 모델 표의 기록은 기본값 기준입니다. 깊게 탐색할수록 판단에 시간이 더 걸리며, 기기와 게임 상황에 따라 계산 시간이 달라집니다. VELA v4.3은 VELA v4.2와 같은 모델 파일을 사용합니다.
+평균 기록은 서로 다른 평가에서 얻은 참고값입니다. 보정 평균은 각 모델을 이용한 마팅게일 제어변량(Martingale CV)으로 우연에 따른 평균 점수의 추정 오차를 줄인 값입니다. 탐색별 기록은 모두 보정 평균입니다. LYRA의 기본값은 기본 탐색이며, 모델 표의 기록은 기본값 기준입니다. 깊게 탐색할수록 판단에 시간이 더 걸리며, 기기와 게임 상황에 따라 계산 시간이 달라집니다. VELA v5는 탐색 설정이 하나이며, 판단마다 같은 계산 예산을 씁니다.
 
 기본 선택은 VELA입니다. LYRA는 연구용 모델이며 실행 장치를 자동·CPU·GPU 중 선택할 수 있습니다. 자동은 사용 가능한 GPU를 우선 사용하고, 준비·추론에 실패하면 CPU로 전환합니다.
 
-VELA는 처음에 약 **68MB**, LYRA는 약 **68MB**의 모델 패키지를 불러옵니다. 웹사이트에서는 브라우저 저장에 동의하면 다음 접속부터 저장된 모델을 재사용합니다. VELA는 최신 모델 정보를 확인한 뒤 호환되지 않는 이전 모델을 정리하고, LYRA는 새 패키지를 검증·저장한 뒤 이전 패키지를 정리합니다. 로컬 실행에서는 프로젝트의 모델 파일을 사용하며 브라우저에 추가로 저장하지 않습니다. LYRA는 CPU/GPU를 전환해도 같은 패키지를 재사용합니다.
+VELA는 처음에 약 **70MB**, LYRA는 약 **68MB**의 모델 패키지를 불러옵니다. VELA는 모델을 불러온 뒤 탐색에 쓰는 표를 만들며, 메모리 여유 약 1.5GB 이상을 권장합니다. 웹사이트에서는 브라우저 저장에 동의하면 다음 접속부터 저장된 모델을 재사용합니다. VELA는 최신 모델 정보를 확인한 뒤 호환되지 않는 이전 모델을 정리하고, LYRA는 새 패키지를 검증·저장한 뒤 이전 패키지를 정리합니다. 로컬 실행에서는 프로젝트의 모델 파일을 사용하며 브라우저에 추가로 저장하지 않습니다. LYRA는 CPU/GPU를 전환해도 같은 패키지를 재사용합니다.
 
-행동별 평가값은 선택의 유리함을 나타냅니다. 예상 최종 점수는 선택한 모델의 추천을 계속 따를 때의 예측입니다. VELA v4.3은 탐색 강도마다, LYRA v2는 자체 정책에 맞춰 학습한 전용 예측기를 사용합니다. 게임이 끝나면 실제 점수를 표시합니다. 모델 선택을 취소하면 추천 없이도 사용할 수 있습니다.
+행동별 평가값은 선택의 유리함을 나타냅니다. 예상 최종 점수는 선택한 모델의 추천을 계속 따를 때의 예측입니다. VELA v5와 LYRA v2는 각자의 정책에 맞춰 학습한 전용 예측기를 사용합니다. 게임이 끝나면 실제 점수를 표시합니다. 모델 선택을 취소하면 추천 없이도 사용할 수 있습니다.
 
 ## 내 PC에서 실행
 
@@ -41,7 +51,7 @@ VELA는 처음에 약 **68MB**, LYRA는 약 **68MB**의 모델 패키지를 불�
 
 1. 프로젝트를 내려받아 압축을 풉니다.
 2. 사용할 모델의 파일을 아래 **GitHub Releases**에서 내려받아, **압축을 풀지 말고** 다음 경로에 넣으세요. X36 · G3만 사용한다면 이 단계는 건너뛰어도 됩니다.
-   - **VELA v4.3** (모델 파일은 VELA v4.2와 같음): [`model.bin.gz`](https://github.com/alfm201/adventure/releases/tag/vela-v4.2) → `public/models/vela-v4.2/model.bin.gz`
+   - **[VELA v5](https://github.com/alfm201/adventure/releases/tag/vela-v5):** `vela-v5.bin.gz` → `public/models/vela-v5/vela-v5.bin.gz`
    - **[LYRA v2](https://github.com/alfm201/adventure/releases/tag/lyra-v2):** `lyra-v2.bin.gz` → `public/models/lyra-v2/lyra-v2.bin.gz`
 3. 프로젝트 폴더에서 터미널을 열고 다음을 실행합니다.
 
@@ -59,10 +69,8 @@ VELA는 처음에 약 **68MB**, LYRA는 약 **68MB**의 모델 패키지를 불�
 
 모델 파일은 [GitHub Releases](https://github.com/alfm201/adventure/releases)에서도 계속 제공합니다. Cloudflare에서 받으려면 `https://adventure.alfm201.workers.dev`에 아래 경로로 `GET` 요청을 보내세요.
 
-| 모델 | Cloudflare 다운로드 경로 |
-| --- | --- |
-| VELA v4.3 · v4.2와 같은 파일 | [/models/vela-v4.2/model.bin.gz](https://adventure.alfm201.workers.dev/models/vela-v4.2/model.bin.gz) |
-| LYRA v2 | [/models/lyra-v2/lyra-v2.bin.gz](https://adventure.alfm201.workers.dev/models/lyra-v2/lyra-v2.bin.gz) |
+- **VELA v5:** [/models/vela-v5/vela-v5.bin.gz](https://adventure.alfm201.workers.dev/models/vela-v5/vela-v5.bin.gz)
+- **LYRA v2:** [/models/lyra-v2/lyra-v2.bin.gz](https://adventure.alfm201.workers.dev/models/lyra-v2/lyra-v2.bin.gz)
 
 LYRA 패키지 안의 `LICENSES.txt`에는 외부 런타임의 라이선스 고지가 들어 있습니다. 패키지를 재배포할 때도 이 파일을 유지해 주세요.
 
@@ -78,7 +86,7 @@ LYRA 패키지 안의 `LICENSES.txt`에는 외부 런타임의 라이선스 고�
 
 X36 → VELA → LYRA의 계보와 주요 전환·평가 결과는 [연구 개요](research/README.ko.md)에 정리했습니다. 유한 자원 MDP의 수식 분석, 상태 공간과 탐색 분기, Oracle 실험은 [환경과 계산량](research/topics/environment.md)에서 설명합니다.
 
-모델 생성·학습·변환 절차는 [재현 가이드](research/reproduction/README.ko.md)에서 시작합니다. 버전별 보고서는 [LYRA v2](research/lyra-v2/report-ko.md), [LYRA v1](research/lyra-v1/report-ko.md), [VELA v4.2](research/vela-v4.2/report-ko.md)를 참고하세요. VELA의 WASM 빌드는 [빌드 안내](src/policies/vela/native/README.md)에 있습니다. FULL100 원본 테이블은 앱 실행에 필요하지 않습니다.
+모델 생성·학습·변환 절차는 [재현 가이드](research/reproduction/README.ko.md)에서 시작합니다. 버전별 보고서는 [VELA v5](research/vela-v5/report-ko.md), [LYRA v2](research/lyra-v2/report-ko.md), [LYRA v1](research/lyra-v1/report-ko.md), [VELA v4.2](research/vela-v4.2/report-ko.md)를 참고하세요. VELA의 WASM 빌드는 [빌드 안내](src/policies/vela/native/README.md)에 있습니다. FULL100 원본 테이블은 앱 실행에 필요하지 않습니다.
 
 ## 라이선스
 

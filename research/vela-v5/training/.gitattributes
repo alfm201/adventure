@@ -1,0 +1,3 @@
+*.sh text eol=lf
+*.npz binary
+*.m2s binary

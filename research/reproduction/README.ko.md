@@ -22,10 +22,8 @@ python research/lyra-v2/training/run.py
 python research/lyra-v2/training/run.py --execute --teacher "D:/models/hinge_k256_e1.bin"
 ```
 
-| 단계 | 설정 |
-|---|---|
-| V₀ | LYRA v1의 V₀ 학습 자료, 384/8/8, batch 2048, lr 1e-3, 2 epoch, seed 1, FP16 혼합정밀도 |
-| V₁–V₄₀ | self-play 2,000게임(seed `mix(1800000000 + 1000000*k + i)`, k = 0…39), 부모 150,000개, 행동당 자식 4개, V₀ 정답 혼합 없음, X2 상위 2개 backup, self-play·정답 계산 FP16. 직전 가중치에서 lr 3e-4, 2 epoch |
+- **V₀:** LYRA v1의 V₀ 학습 자료, 384/8/8, batch 2048, lr 1e-3, 2 epoch, seed 1, FP16 혼합정밀도
+- **V₁–V₄₀:** self-play 2,000게임(seed `mix(1800000000 + 1000000*k + i)`, k = 0…39), 부모 150,000개, 행동당 자식 4개, V₀ 정답 혼합 없음, X2 상위 2개 backup, self-play·정답 계산 FP16. 직전 가중치에서 lr 3e-4, 2 epoch
 
 최종 가중치는 `research/lyra-v2/training/runs/v40/model.pt`에 생성됩니다. 원본 연구는 반복 도중 개발 평가로 연장 여부를 정했지만, 이 절차는 선택된 V₄₀까지의 경로를 고정해 실행하며 평가는 포함하지 않습니다.
 
@@ -88,12 +86,46 @@ python research/lyra-v1/export.py --checkpoint research/lyra-v1/training/runs/v2
 
 고정 체크포인트의 변환 결과는 현재 브라우저용 모델과 ONNX·특징 데이터 SHA-256 및 배열 정의·게임 규칙이 일치하는 것을 확인했습니다. 포함된 학습 파이프라인의 전체 재학습 검증은 수행하지 않았습니다. GPU·CUDA·PyTorch·부동소수점 연산 차이로 재학습 결과가 달라질 수 있으므로, 학습부터의 바이트 동일 재현이나 동일 점수를 보증하지 않습니다. 새 가중치 변환은 앱이나 배포 모델을 자동 교체하지 않습니다.
 
+## VELA v5 — 덱 조건부 잔차와 고정 예산 탐색
+
+[VELA v5 보고서](../vela-v5/report-ko.md)의 모델을 다시 만드는 절차입니다. 가치표는 아래 VELA v4.2 절의 `hinge_k256_e1.bin`(배포 파일 `model.bin.gz`)을 그대로 쓰고, 그 위에 잔차를 더해 한 파일로 합칩니다. 잔차의 학습은 다시 실행해 볼 수 있고, 배포 파일은 저장소에 둔 가중치로 만듭니다.
+
+### 잔차 학습
+
+C++20 컴파일러(g++), Python 3, NumPy, SciPy가 필요합니다. `public/models/vela-v4.2/model.bin.gz`를 먼저 준비합니다.
+
+```sh
+bash research/vela-v5/training/run.sh
+```
+
+- Hinge에서 추론용 표 두 개를 만든 뒤, 세 단계의 자료 수집과 학습을 차례로 실행합니다. 명령과 시드는 원 연구와 같습니다.
+- 결과는 `research/vela-v5/training/work/m2.bin.npz`(잔차 가중치)와 `work/m2.bin`입니다.
+- 저장소에 넣은 상태 그대로 다시 실행해 확인했습니다(Windows MSYS2 g++, 약 7분). 다시 학습한 가중치는 배포한 `training/m2.bin.npz`와 값이 다릅니다. 부동소수점 결과가 컴파일러와 CPU에 따라 끝자리에서 달라지고, 그 차이가 학습을 거치며 커지기 때문입니다. 다시 학습한 모델의 2-step 점수는 배포한 모델과 +0.08, CI [−0.20, +0.37]로 구분되지 않았습니다(같은 시드 20,000판).
+- Windows의 MSYS2에서는 `training/win/`의 mmap 대체 구현을 함께 컴파일합니다(`run.sh`가 처리합니다).
+
+### 모델 파일
+
+```sh
+bash research/vela-v5/training/export.sh
+python scripts/vela/delivery.py --pack research/vela-v5/training/work/vela-v5.bin
+python scripts/vela/delivery.py
+```
+
+- `export.sh`는 배포한 가중치 `training/m2.bin.npz`에서 실행 엔진용 파일을 만들어 `training/m2.m2s`와 견주고, `m2.m2s`를 Hinge와 합쳐 `work/vela-v5.bin`(91,641,720 bytes)을 만듭니다. SHA-256은 `0b2b176f93b58f5f3496cd679897058723887d4fd6f8d2e571532e51d7afc581`입니다.
+- 실행 엔진용 파일에 들어가는 투영 행렬과 사인·코사인 값은 실행 환경에 따라 끝자리가 달라질 수 있습니다. 그래서 배포 파일은 저장소의 `m2.m2s`로 만듭니다.
+- `delivery.py --pack`은 `public/models/vela-v5/vela-v5.bin.gz`(70,156,799 bytes)를 만들고, 인자 없는 `delivery.py`는 매니페스트의 해시를 갱신합니다.
+
+### 실행 파일과 예측기
+
+- **빌드:** `python scripts/vela/build.py`로 `vela-v5.mjs`와 `vela-v5.wasm`을 만듭니다. 준비 사항과 빌드 옵션은 [실행 소스 안내](../../src/policies/vela/native/README.md)를 따릅니다.
+- **점수 예측기:** `public/models/vela-v5/predictor.json`은 별도로 학습한 모델입니다. 학습 방법과 정확도는 보고서 7절에 있고, 학습 자료와 코드는 이 패키지에 포함하지 않습니다.
+
 ## VELA v4.3 — VELA v4.2 Hinge와 판단 시점 탐색
 
 [VELA v4.3 보고서](../vela-v4.3/report-ko.md)의 판단 시점 탐색은 새 모델을 만들지 않습니다. 가치 모델은 아래 VELA v4.2 절의 `hinge_k256_e1.bin`(배포 파일 `model.bin.gz`)을 그대로 씁니다.
 
-- **탐색:** `src/policies/vela/native/dabe.hpp`에 있습니다. 탐색 강도별 노드 예산(빠름 0, 보통 2,400, 높음 47,400, 최고 383,400)은 `src/policies/vela/search.js`에 있습니다.
-- **빌드:** `python scripts/vela/build.py`로 `vela.mjs`와 `vela.wasm`을 만듭니다. 준비 사항과 빌드 옵션은 [실행 소스 안내](../../src/policies/vela/native/README.md)를 따릅니다.
+- **탐색:** `src/policies/vela/native/dabe.hpp`에 있습니다. 탐색 강도별 노드 예산은 빠름 0, 보통 2,400, 높음 47,400, 최고 383,400입니다.
+- **실행 파일:** `src/policies/vela/vela.mjs`와 `vela.wasm`이 v4.3의 실행 파일입니다. 지금의 `scripts/vela/build.py`는 v5를 빌드합니다.
 - **점수 예측기:** 탐색 강도별 최종 점수 예측기는 별도로 학습한 모델이며, 예측기 학습 자료는 이 패키지에 포함하지 않습니다.
 
 ## VELA v4.2 — COMPACT100 Hinge
@@ -133,11 +165,9 @@ try {
 
 ## VELA v4.1 — COMPACT48
 
-| 폴더 | 역할 |
-|---|---|
-| `vela-v4.1/full48/` | 손패 최대 5장, horizon 48의 연속 DP 생성기 |
-| `vela-v4.1/include/` | 생성기에 필요한 의존 헤더 |
-| `vela-v4.1/compression/src/` | 시간·손패 공유 구조 학습 및 양자화 내보내기 |
+- `vela-v4.1/full48/`: 손패 최대 5장, horizon 48의 연속 DP 생성기
+- `vela-v4.1/include/`: 생성기에 필요한 의존 헤더
+- `vela-v4.1/compression/src/`: 시간·손패 공유 구조 학습 및 양자화 내보내기
 
 최종 파일은 `vela-v4.1/compression/models/quant_q6_k64_t12.bin`(37.68 MiB)입니다. FULL48 테이블은 생성 과정에만 필요하며 실행에는 필요하지 않습니다. WASM 빌드는 [native 안내](../../src/policies/vela/native/README.md)를 참고하세요.
 
@@ -174,11 +204,9 @@ VELA-v4 모델을 처음부터 만들 때는 **V1, V3, V4**의 생성기 파일�
 
 ### 필요한 폴더
 
-| 폴더 | 역할 |
-|---|---|
-| `vela-v1/research/` | DP4 계산으로 `four-projected-24.bin` 생성 |
-| `vela-v3/research/` | DP5 계산 및 H24 체크포인트 export |
-| `vela-v4/research/` | H24 체크포인트를 `h24.raw`로 변환 |
+- `vela-v1/research/`: DP4 계산으로 `four-projected-24.bin` 생성
+- `vela-v3/research/`: DP5 계산 및 H24 체크포인트 export
+- `vela-v4/research/`: H24 체크포인트를 `h24.raw`로 변환
 
 각 폴더의 헤더와 스크립트를 포함해 총 16개 파일을 함께 사용합니다.
 

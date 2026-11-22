@@ -10,18 +10,23 @@
 
 1860 목표의 통과를 유지하면서 기준선을 높였다. **1880 목표는 이번에도 미달**이며, 점추정 기준으로 **6.37305점** 남았다. 이 결과는 평가한 정책의 성능이며, 전역 최적 정책 또는 최적 score를 증명한 결과가 아니다.
 
-| 항목 | v3 | 동일 시드의 v2 |
-|---|---:|---:|
-| 게임 수 | 100,000 | 100,000 |
-| 평균 최종 score | 1873.62695 | 1863.82433 |
-| 95% 신뢰구간 | 1872.37263 ~ 1874.88127 | 1862.57309 ~ 1865.07557 |
-| 게임별 score 표준편차 | 202.37324 | 201.87607 |
-| 중앙값 | 1872 | 1861 |
-| 하위 10% 위치 | 1612 | 1602 |
-| 상위 10% 위치 | 2138 | 2123 |
-| 최소 / 최대 score | 968 / 2719 | 968 / 2848 |
-| 게임당 평균 행동 수 | 166.45037 | 165.85732 |
-| 제외 게임 / 안전 한도 실패 | 0 / 0 | 0 / 0 |
+<table>
+<thead>
+<tr><th nowrap>항목</th><th nowrap align="right">v3</th><th nowrap align="right">동일 시드의 v2</th></tr>
+</thead>
+<tbody>
+<tr><td nowrap>게임 수</td><td nowrap align="right">100,000</td><td nowrap align="right">100,000</td></tr>
+<tr><td nowrap>평균 최종 score</td><td nowrap align="right">1873.62695</td><td nowrap align="right">1863.82433</td></tr>
+<tr><td nowrap>95% 신뢰구간</td><td nowrap align="right">1872.37263 ~ 1874.88127</td><td nowrap align="right">1862.57309 ~ 1865.07557</td></tr>
+<tr><td nowrap>게임별 score 표준편차</td><td nowrap align="right">202.37324</td><td nowrap align="right">201.87607</td></tr>
+<tr><td nowrap>중앙값</td><td nowrap align="right">1872</td><td nowrap align="right">1861</td></tr>
+<tr><td nowrap>하위 10% 위치</td><td nowrap align="right">1612</td><td nowrap align="right">1602</td></tr>
+<tr><td nowrap>상위 10% 위치</td><td nowrap align="right">2138</td><td nowrap align="right">2123</td></tr>
+<tr><td nowrap>최소 / 최대 score</td><td nowrap align="right">968 / 2719</td><td nowrap align="right">968 / 2848</td></tr>
+<tr><td nowrap>게임당 평균 행동 수</td><td nowrap align="right">166.45037</td><td nowrap align="right">165.85732</td></tr>
+<tr><td nowrap>제외 게임 / 안전 한도 실패</td><td nowrap align="right">0 / 0</td><td nowrap align="right">0 / 0</td></tr>
+</tbody>
+</table>
 
 v2 보고서의 평균 1863.96061은 다른 시드 은행의 결과다. 새 대응 비교에는 그 값을 섞지 않았다. 평균 목표는 개별 게임마다 해당 점수를 보장한다는 의미가 아니다.
 
@@ -33,15 +38,20 @@ v2는 최대 네 장의 손패를 가진 보조 문제를 풀고, 빈 손패·�
 
 30개 카드 ID는 효과 기준 22개 클래스로 묶을 수 있다. 덱 재생성 때문에 같은 효과 또는 같은 ID가 중복 보유될 수 있으므로 중복 조합을 허용한다. 빈 손패부터 다섯 장까지의 클래스 손패 수는 80,730개다. 네 장 이하의 14,950개보다 약 5.4배 많다.
 
-| 설정 | v2 | v3 |
-|---|---|---|
-| 보조 문제의 손패 한도 | 4 | 5 |
-| 실제 손패 가치 표현 | 단일·두 카드 상호작용 투영 | 0~5장 손패 가치 직접 조회 |
-| 보조 문제 계획 지평 | 24회 | 24회 |
-| 온라인 기대값 탐색 | 2단계 | 1단계 |
-| 손패 가치 전체 가중치 | 0.975 | 1.0 |
-| 덱 보정 계수 | 0.6 | 0.6 |
-| 덱 보정의 드로우율 계수 | 0.7 | 0.7 |
+<table>
+<thead>
+<tr><th nowrap>설정</th><th nowrap>v2</th><th nowrap>v3</th></tr>
+</thead>
+<tbody>
+<tr><td nowrap>보조 문제의 손패 한도</td><td nowrap>4</td><td nowrap>5</td></tr>
+<tr><td nowrap>실제 손패 가치 표현</td><td nowrap>단일·두 카드 상호작용 투영</td><td nowrap>0~5장 손패 가치 직접 조회</td></tr>
+<tr><td nowrap>보조 문제 계획 지평</td><td nowrap>24회</td><td nowrap>24회</td></tr>
+<tr><td nowrap>온라인 기대값 탐색</td><td nowrap>2단계</td><td nowrap>1단계</td></tr>
+<tr><td nowrap>손패 가치 전체 가중치</td><td nowrap>0.975</td><td nowrap>1.0</td></tr>
+<tr><td nowrap>덱 보정 계수</td><td nowrap>0.6</td><td nowrap>0.6</td></tr>
+<tr><td nowrap>덱 보정의 드로우율 계수</td><td nowrap>0.7</td><td nowrap>0.7</td></tr>
+</tbody>
+</table>
 
 이 비교에는 여러 설계 변경이 함께 포함된다. 개선량 전체를 특정 한 가지 변경의 인과 효과로 해석하지 않는다.
 
@@ -82,21 +92,26 @@ v3 계산을 시작할 때 다섯 장 지평 12 체크포인트는 사용할 수
 
 아래 수치는 **개발용 결과**이며 최종 100,000게임과 구분해야 한다. 네 장의 장기 지평 후보들은 같은 5,000게임에서, 다섯 장 전체 모델 후보들은 같은 3,000게임에서 비교했다.
 
-| 개발 후보 | 게임 수 | 평균 score |
-|---|---:|---:|
-| v2, 기본 지평 24 | 5,000 | 1865.53000 |
-| 네 장 투영, 지평 32 | 5,000 | 1869.18180 |
-| 네 장 투영, 지평 40 | 5,000 | 1869.69860 |
-| 네 장 투영, 지평 48 | 5,000 | 1870.29700 |
-| 다섯 장 모델의 두 카드 투영, 지평 24 | 5,000 | 1862.43200 |
-| **다섯 장 전체 표, 가중치 1.0, 덱 계수 0.6, 1단계** | **3,000** | **1875.00333** |
-| 다섯 장 전체 표, 가중치 1.025 | 3,000 | 1873.26233 |
-| 다섯 장 전체 표, 가중치 0.975 | 3,000 | 1871.74567 |
-| 다섯 장 전체 표, 덱 보정 없음 | 3,000 | 1869.30767 |
-| 다섯 장 전체 표, 덱 계수 1.0 | 3,000 | 1872.97067 |
-| 세 장 이하 직접 조회 + 네·다섯 장 회귀 근사, 2단계 | 3,000 | 1869.56800 |
-| 위 회귀의 위치 표본 범위를 변경한 후보, 2단계 | 3,000 | 1872.04133 |
-| 지평 22~24만 전체 표, 나머지 회귀 근사, 2단계 | 3,000 | 1870.37267 |
+<table>
+<thead>
+<tr><th nowrap>개발 후보</th><th nowrap align="right">게임 수</th><th nowrap align="right">평균 score</th></tr>
+</thead>
+<tbody>
+<tr><td nowrap>v2, 기본 지평 24</td><td nowrap align="right">5,000</td><td nowrap align="right">1865.53000</td></tr>
+<tr><td nowrap>네 장 투영, 지평 32</td><td nowrap align="right">5,000</td><td nowrap align="right">1869.18180</td></tr>
+<tr><td nowrap>네 장 투영, 지평 40</td><td nowrap align="right">5,000</td><td nowrap align="right">1869.69860</td></tr>
+<tr><td nowrap>네 장 투영, 지평 48</td><td nowrap align="right">5,000</td><td nowrap align="right">1870.29700</td></tr>
+<tr><td nowrap>다섯 장 모델의 두 카드 투영, 지평 24</td><td nowrap align="right">5,000</td><td nowrap align="right">1862.43200</td></tr>
+<tr><td nowrap><b>다섯 장 전체 표, 가중치 1.0, 덱 계수 0.6, 1단계</b></td><td nowrap align="right"><b>3,000</b></td><td nowrap align="right"><b>1875.00333</b></td></tr>
+<tr><td nowrap>다섯 장 전체 표, 가중치 1.025</td><td nowrap align="right">3,000</td><td nowrap align="right">1873.26233</td></tr>
+<tr><td nowrap>다섯 장 전체 표, 가중치 0.975</td><td nowrap align="right">3,000</td><td nowrap align="right">1871.74567</td></tr>
+<tr><td nowrap>다섯 장 전체 표, 덱 보정 없음</td><td nowrap align="right">3,000</td><td nowrap align="right">1869.30767</td></tr>
+<tr><td nowrap>다섯 장 전체 표, 덱 계수 1.0</td><td nowrap align="right">3,000</td><td nowrap align="right">1872.97067</td></tr>
+<tr><td nowrap>세 장 이하 직접 조회 + 네·다섯 장 회귀 근사, 2단계</td><td nowrap align="right">3,000</td><td nowrap align="right">1869.56800</td></tr>
+<tr><td nowrap>위 회귀의 위치 표본 범위를 변경한 후보, 2단계</td><td nowrap align="right">3,000</td><td nowrap align="right">1872.04133</td></tr>
+<tr><td nowrap>지평 22~24만 전체 표, 나머지 회귀 근사, 2단계</td><td nowrap align="right">3,000</td><td nowrap align="right">1870.37267</td></tr>
+</tbody>
+</table>
 
 카드별 가중치 조정, 전방 위치 평균으로 만든 덱 가치 보정도 시험했다. 시험한 설정에서 기본 전체 표 후보보다 높은 개발 평균을 확보하지 못하여 최종 정책에 넣지 않았다. 적은 표본의 점수 차이만으로 이 접근들이 일반적으로 효과가 없다고 결론 내리지 않는다.
 
@@ -118,17 +133,15 @@ v3 계산을 시작할 때 다섯 장 지평 12 체크포인트는 사용할 수
 
 ## 6. 구현 검증
 
-| 검사 | 결과와 범위 |
-|---|---|
-| 원본 엔진 회귀 검사 | 테이블 검사 37,798건, 상태 전이 265,267건 통과 |
-| 기존 네 장 가치표와 수치 비교 | 4,800,744개 값, 최대 차이 0.0001220703125점 |
-| 벡터화 전후 작은 문제 비교 | 비교한 네 장 지평 2 저장 데이터가 바이트 단위 일치 |
-| 새 다섯 장 표의 Bellman 표본 검사 | 720개 상태, 최대 잔차 0.0269317627점, 검사 허용치 0.06점 이내 |
-| 재생성 절차의 초기 구간 | 다섯 장 지평 0~2의 tier 데이터 2,808,470,028바이트 전부 일치; 투영 float 데이터도 일치 |
-| 원본 Board.js + v3 네이티브 정책 | 1,024게임 score·행동 수 전체 일치; 행동·점수 해시 2263418870 |
-| 배치 평가기 | 위 1,024게임과 score·행동 수·해시 전체 일치 |
-| RNG 접근·상태 변경 | v3 결정 중 RNG 접근 시 예외가 나도록 하고 불법 행동·직접 상태 변경 검사 통과 |
-| 원본 게임 파일 | 다섯 파일의 SHA-256 모두 유지 |
+- **원본 엔진 회귀 검사:** 테이블 검사 37,798건, 상태 전이 265,267건 통과
+- **기존 네 장 가치표와 수치 비교:** 4,800,744개 값, 최대 차이 0.0001220703125점
+- **벡터화 전후 작은 문제 비교:** 비교한 네 장 지평 2 저장 데이터가 바이트 단위 일치
+- **새 다섯 장 표의 Bellman 표본 검사:** 720개 상태, 최대 잔차 0.0269317627점, 검사 허용치 0.06점 이내
+- **재생성 절차의 초기 구간:** 다섯 장 지평 0~2의 tier 데이터 2,808,470,028바이트 전부 일치; 투영 float 데이터도 일치
+- **원본 Board.js + v3 네이티브 정책:** 1,024게임 score·행동 수 전체 일치; 행동·점수 해시 2263418870
+- **배치 평가기:** 위 1,024게임과 score·행동 수·해시 전체 일치
+- **RNG 접근·상태 변경:** v3 결정 중 RNG 접근 시 예외가 나도록 하고 불법 행동·직접 상태 변경 검사 통과
+- **원본 게임 파일:** 다섯 파일의 SHA-256 모두 유지
 
 v3의 원본 엔진 검증은 **C++ 정책을 Node.js 브리지로 원본 Board.js에서 실행**한 것이다. 독립적인 순수 JavaScript v3 정책을 따로 구현했다고 주장하지 않는다. 모든 가능한 상태를 형식적으로 검증한 것도 아니다. 지평 24 전체 모델을 두 번 재생성한 것은 아니며, 초기 0~2 구간의 완전 비교와 이후 사용한 재개 경로, 최종 파일 해시를 제공한다.
 
@@ -136,11 +149,16 @@ v3의 원본 엔진 검증은 **C++ 정책을 Node.js 브리지로 원본 Board.
 
 이 후보는 v3의 압축판이 아니다. 기존의 두 카드 투영 방식에 더 긴 계획 지평을 적용한 **별도 정책**이다. 최종 평가 전에 보조 후보와 20,000게임 표본 수를 정했다.
 
-| 항목 | 지평 48 후보 | 같은 20,000시드의 v2 |
-|---|---:|---:|
-| 평균 score | 1866.61830 | 1862.60040 |
-| 95% 신뢰구간 | 1863.85404 ~ 1869.38256 | 1859.79648 ~ 1865.40432 |
-| 게임 수 | 20,000 | 20,000 |
+<table>
+<thead>
+<tr><th nowrap>항목</th><th nowrap align="right">지평 48 후보</th><th nowrap align="right">같은 20,000시드의 v2</th></tr>
+</thead>
+<tbody>
+<tr><td nowrap>평균 score</td><td nowrap align="right">1866.61830</td><td nowrap align="right">1862.60040</td></tr>
+<tr><td nowrap>95% 신뢰구간</td><td nowrap align="right">1863.85404 ~ 1869.38256</td><td nowrap align="right">1859.79648 ~ 1865.40432</td></tr>
+<tr><td nowrap>게임 수</td><td nowrap align="right">20,000</td><td nowrap align="right">20,000</td></tr>
+</tbody>
+</table>
 
 대응 개선량은 **+4.01790점**, 95% 신뢰구간은 **1.00255 ~ 7.03325점**이다. v3와도 같은 첫 20,000시드에서 비교하면 v3가 평균 **+4.87715점** 높았다. 서로 다른 표본 수의 평균을 빼서 대응 개선량으로 부르지 않았다.
 

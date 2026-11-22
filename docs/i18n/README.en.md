@@ -8,30 +8,40 @@ Assist mode offers **voice guidance** in Korean, English, Japanese and Chinese, 
 
 ## Choose a model
 
-| Model | How it evaluates actions | Average score | Mean type |
-| --- | --- | ---: | --- |
-| **LYRA · v2** | Neural network with 1-step search on CPU or GPU | About 1,880.1 | Adjusted mean |
-| **VELA · v4.3** | Evaluates future states on CPU, searching deeper in close decisions | About 1,878.6 | Adjusted mean |
-| **X36 · G3** | Compares actions through repeated simulations on CPU or GPU | About 1,860.0 | Raw mean |
+- **LYRA · v2:** Neural network with 1-step search on CPU or GPU
+- **VELA · v5:** Evaluates future states on CPU, searching deeper in close decisions
+- **X36 · G3:** Compares actions through repeated simulations on CPU or GPU
+
+<table>
+<thead>
+<tr><th nowrap>Model</th><th nowrap align="right">Average score</th><th nowrap>Mean type</th></tr>
+</thead>
+<tbody>
+<tr><td nowrap><b>LYRA · v2</b></td><td nowrap align="right">About 1,880.1</td><td nowrap>Adjusted mean</td></tr>
+<tr><td nowrap><b>VELA · v5</b></td><td nowrap align="right">About 1,880.7</td><td nowrap>Adjusted mean</td></tr>
+<tr><td nowrap><b>X36 · G3</b></td><td nowrap align="right">About 1,860.0</td><td nowrap>Raw mean</td></tr>
+</tbody>
+</table>
 
 **Results by search**
 
-| Model | Search | Average score | Decision time |
-| --- | --- | ---: | --- |
-| **LYRA · v2** | Default search | About 1,880.1 | Mostly instant |
-| | Deep search | About 1,881.0 | Several seconds or more |
-| **VELA · v4.3** | Fast | About 1,877.2 | Instant |
-| | Normal | About 1,878.6 | Mostly instant |
-| | High | About 1,879.3 | Up to about 1 s in close calls |
-| | Max | About 1,879.8 | Up to several seconds in close calls |
+<table>
+<thead>
+<tr><th nowrap>Model</th><th nowrap>Search</th><th nowrap align="right">Average score</th><th nowrap>Decision time</th></tr>
+</thead>
+<tbody>
+<tr><td nowrap rowspan="2"><b>LYRA · v2</b></td><td nowrap>Default search</td><td nowrap align="right">About 1,880.1</td><td nowrap>Mostly instant</td></tr>
+<tr><td nowrap>Deep search</td><td nowrap align="right">About 1,881.0</td><td nowrap>Several seconds or more</td></tr>
+</tbody>
+</table>
 
-These scores are reference figures from different evaluations. Adjusted means use a martingale control variate (Martingale CV) based on each model to reduce luck-driven error in the estimated average. All scores by search are adjusted means. The defaults are LYRA Default search and VELA Normal, and the model table shows the defaults. Deeper search takes longer per decision, and computation time also depends on your device and the game state. VELA v4.3 uses the same model file as VELA v4.2.
+These scores are reference figures from different evaluations. Adjusted means use a martingale control variate (Martingale CV) based on each model to reduce luck-driven error in the estimated average. All scores by search are adjusted means. LYRA defaults to Default search, and the model table shows the default. Deeper search takes longer per decision, and computation time also depends on your device and the game state. VELA v5 has a single search setting and uses the same computation budget for every decision.
 
 VELA is selected by default. LYRA is a research model that can run on CPU or GPU. With device selection set to Automatic, it uses an available GPU first and falls back to CPU if initialization or inference fails.
 
-VELA loads a model package of about **68 MB** on first use; LYRA loads about **68 MB**. On the hosted site, you can allow the app to save the model in your browser for future visits. VELA removes incompatible older models after checking current metadata; LYRA clears its previous package after the new one has been verified and saved. When running locally, it reads the project's model files without saving an extra browser copy. LYRA uses the same package for both CPU and GPU.
+VELA loads a model package of about **70 MB** on first use; LYRA loads about **68 MB**. After loading, VELA builds its search tables; about 1.5 GB of free memory is recommended. On the hosted site, you can allow the app to save the model in your browser for future visits. VELA removes incompatible older models after checking current metadata; LYRA clears its previous package after the new one has been verified and saved. When running locally, it reads the project's model files without saving an extra browser copy. LYRA uses the same package for both CPU and GPU.
 
-Action values help you compare the available choices. The expected final score estimates your result if you keep following the selected model's recommendations. VELA v4.3 uses a score predictor trained for each search strength, and LYRA v2 uses one trained for its own policy. Once the game ends, the actual score is displayed. You can also cancel model selection and use the app without recommendations.
+Action values help you compare the available choices. The expected final score estimates your result if you keep following the selected model's recommendations. VELA v5 and LYRA v2 each use a score predictor trained for their own policy. Once the game ends, the actual score is displayed. You can also cancel model selection and use the app without recommendations.
 
 ## Run on your PC
 
@@ -39,7 +49,7 @@ With **Node.js 22 or later**, no package installation or build is required.
 
 1. Download and extract the project.
 2. Download your chosen model from **GitHub Releases** and place it at the following path **without extracting it**. Skip this step if you only use X36 · G3.
-   - **VELA v4.3** (same model file as VELA v4.2): [`model.bin.gz`](https://github.com/alfm201/adventure/releases/tag/vela-v4.2) → `public/models/vela-v4.2/model.bin.gz`
+   - **[VELA v5](https://github.com/alfm201/adventure/releases/tag/vela-v5):** `vela-v5.bin.gz` → `public/models/vela-v5/vela-v5.bin.gz`
    - **[LYRA v2](https://github.com/alfm201/adventure/releases/tag/lyra-v2):** `lyra-v2.bin.gz` → `public/models/lyra-v2/lyra-v2.bin.gz`
 3. Open a terminal in the project folder and run:
 
@@ -57,10 +67,8 @@ Our VELA and LYRA models may be freely used in other services. See [Licensing an
 
 Model files remain available on [GitHub Releases](https://github.com/alfm201/adventure/releases). To download from Cloudflare, send a `GET` request to `https://adventure.alfm201.workers.dev` using one of these paths:
 
-| Model | Cloudflare download path |
-| --- | --- |
-| VELA v4.3 · same file as v4.2 | [/models/vela-v4.2/model.bin.gz](https://adventure.alfm201.workers.dev/models/vela-v4.2/model.bin.gz) |
-| LYRA v2 | [/models/lyra-v2/lyra-v2.bin.gz](https://adventure.alfm201.workers.dev/models/lyra-v2/lyra-v2.bin.gz) |
+- **VELA v5:** [/models/vela-v5/vela-v5.bin.gz](https://adventure.alfm201.workers.dev/models/vela-v5/vela-v5.bin.gz)
+- **LYRA v2:** [/models/lyra-v2/lyra-v2.bin.gz](https://adventure.alfm201.workers.dev/models/lyra-v2/lyra-v2.bin.gz)
 
 The LYRA package includes third-party runtime notices in `LICENSES.txt`. Keep this file when redistributing the package.
 
@@ -78,7 +86,7 @@ The [research overview](../../research/README.md) traces X36 → VELA → LYRA, 
 
 Start with the [reproduction guide](../../research/reproduction/README.md) for model generation, training and conversion. The [LYRA v2 section](../../research/reproduction/README.md#lyra-v2--m₄₀-neural-value-model) covers M₄₀ training and conversion to the browser's FP32 model format. The app uses M₄₀ with 1-step expectimax.
 
-For VELA v4.2 FULL100 generation, Hinge training and a summary of the results, see the [VELA v4.2 section](../../research/reproduction/README.md#vela-v42--compact100-hinge) and its linked report. WASM build instructions are in the [build guide](../../src/policies/vela/native/README.md). The original FULL100 table is not required to run the app. The model-specific and WASM build guides are in Korean.
+For VELA v5 residual training and model packaging, see the [VELA v5 section](../../research/reproduction/README.md#vela-v5--deck-conditioned-residual-with-a-fixed-search-budget) and the [VELA v5 report](../../research/vela-v5/report-ko.md). For VELA v4.2 FULL100 generation, Hinge training and a summary of the results, see the [VELA v4.2 section](../../research/reproduction/README.md#vela-v42--compact100-hinge) and its linked report. WASM build instructions are in the [build guide](../../src/policies/vela/native/README.md). The original FULL100 table is not required to run the app. The model-specific and WASM build guides are in Korean.
 
 [AI play strategy analysis (PDF)](../reports/Adventure_AI_Play_Strategy_Analysis_en.pdf): A report that answers "Why did the AI recommend this move?" with a post-hoc analysis of real game records, and measures how far those recommendations can be trusted.
 

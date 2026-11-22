@@ -18,11 +18,16 @@ CPU는 ONNX Runtime Web 1.30.0의 WASM 1스레드를 사용한다. GPU는 하드
 
 사용량에 따른 배치와 양보 시간은 다음과 같다. 모든 후보와 전이를 계산하며 정밀도는 동일하다.
 
-| 사용량 | CPU | GPU |
-|---|---|---|
-| 낮음 | 최대 8개, 배치 사이 16ms 양보 | 최대 16개, 8ms 양보 |
-| 보통 | 최대 64개, 배치 사이 타이머 양보 | 최대 64개, 배치 사이 타이머 양보 |
-| 높음 | 전체 후보 한 배치 | 전체 후보 한 배치 |
+<table>
+<thead>
+<tr><th nowrap>사용량</th><th nowrap>CPU</th><th nowrap>GPU</th></tr>
+</thead>
+<tbody>
+<tr><td nowrap>낮음</td><td nowrap>최대 8개, 배치 사이 16ms 양보</td><td nowrap>최대 16개, 8ms 양보</td></tr>
+<tr><td nowrap>보통</td><td nowrap>최대 64개, 배치 사이 타이머 양보</td><td nowrap>최대 64개, 배치 사이 타이머 양보</td></tr>
+<tr><td nowrap>높음</td><td nowrap>전체 후보 한 배치</td><td nowrap>전체 후보 한 배치</td></tr>
+</tbody>
+</table>
 
 압축 해제 컨테이너와 불필요한 로딩 복사본은 엔진 초기화 전에 정리한다. 자동 GPU는 CPU 전환에 필요한 가중치를 유지한다. GPU 계산 중 버퍼 재사용은 유지하고 완료 후 미사용 캐시만 정리한다. [런타임 캐시 안내](../../../public/runtime/onnxruntime-web/1.30.0/LYRA-CACHE.md) 참고.
 

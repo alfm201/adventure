@@ -106,12 +106,17 @@ Q_2(s,a)&=\mathbb E[\max_{a'}Q_1(s',a')\mid s,a],\\
 
 후보·설정·모델을 고정한 뒤, 이전 선택 과정에서 사용하지 않은 시작 시드 1937719000의 100,000게임 은행을 실행했다. 각 게임의 실제 PRNG 초기값은 `mix(baseSeed + episode)`다. 원시 CSV의 `seed` 열은 이미 이 변환을 적용한 초기값이다.
 
-| 정책 | 게임 수 | 평균 최종 score | 95% 신뢰구간 |
-|---|---:|---:|---:|
-| 일반 주사위만 사용 | 100,000 | 943.68135 | 943.30783~944.05487 |
-| 튜닝한 단순 카드 휴리스틱 | 100,000 | 1784.97128 | 1783.77084~1786.17172 |
-| 동일 DP4 가치 모델, 한 단계 선택 | 100,000 | 1847.88476 | 1846.64634~1849.12318 |
-| **DP4 + 두 단계 기대값 탐색** | **100,000** | **1857.11013** | **1855.85355~1858.36671** |
+<table>
+<thead>
+<tr><th nowrap>정책</th><th nowrap align="right">게임 수</th><th nowrap align="right">평균 최종 score</th><th nowrap align="right">95% 신뢰구간</th></tr>
+</thead>
+<tbody>
+<tr><td nowrap>일반 주사위만 사용</td><td nowrap align="right">100,000</td><td nowrap align="right">943.68135</td><td nowrap align="right">943.30783~944.05487</td></tr>
+<tr><td nowrap>튜닝한 단순 카드 휴리스틱</td><td nowrap align="right">100,000</td><td nowrap align="right">1784.97128</td><td nowrap align="right">1783.77084~1786.17172</td></tr>
+<tr><td nowrap>동일 DP4 가치 모델, 한 단계 선택</td><td nowrap align="right">100,000</td><td nowrap align="right">1847.88476</td><td nowrap align="right">1846.64634~1849.12318</td></tr>
+<tr><td nowrap><b>DP4 + 두 단계 기대값 탐색</b></td><td nowrap align="right"><b>100,000</b></td><td nowrap align="right"><b>1857.11013</b></td><td nowrap align="right"><b>1855.85355~1858.36671</b></td></tr>
+</tbody>
+</table>
 
 한 단계 정책 대비 평균 차이는 **+9.22537점**이다. 동일 초기 시드를 대응시킨 점수 차이의 95% 신뢰구간은 **[7.86859, 10.58215]**다. 이 개선은 최종 표본에서도 확인되었지만, 개선의 크기는 1860을 넘기기에 부족했다.
 
