@@ -1,11 +1,11 @@
-import { velaSearch } from "../policies/vela/search.js";
+import { VELA_NODE_BUDGET, VELA_POLICY_ID } from "../policies/vela/search.js";
 import { diagnostics } from "../platform/report.js";
 import { RULES_VERSION } from "../rules/index.js";
 import { POLICY_VERSION } from "../policies/versions.js";
 import { MODEL_ID as LYRA_MODEL_ID } from "../compute/lyra/model.js";
 
 const activePolicyVersion = coordinator => !coordinator.enabled ? null
-  : coordinator.settings.model === "vela" ? velaSearch(coordinator.settings.velaStrength).policyId
+  : coordinator.settings.model === "vela" ? VELA_POLICY_ID
   : coordinator.settings.model === "lyra" ? (coordinator.settings.lyraDepth === 2 ? `${LYRA_MODEL_ID}-depth2` : LYRA_MODEL_ID)
   : POLICY_VERSION;
 
@@ -28,7 +28,7 @@ export function attachDiagnostics(session, coordinator, assets) {
     lyraGpuSupport: coordinator.lyraGpuSupport, lyra: coordinator.lyra?.info ?? null,
     preparedLyra: coordinator.preparedLyra?.info ?? null,
     model: modelInfo(coordinator.settings.model === 'lyra' ? coordinator.lyra?.info : coordinator.vela?.info),
-    velaSearch: coordinator.settings.model === "vela" ? { strength: velaSearch(coordinator.settings.velaStrength).key, nodeBudget: velaSearch(coordinator.settings.velaStrength).nodeBudget } : null,
+    velaSearch: coordinator.settings.model === "vela" ? { nodeBudget: VELA_NODE_BUDGET } : null,
     preparedModel: modelInfo(coordinator.preparedLyra?.info ?? coordinator.preparedVela?.info), restoreModel: modelInfo(coordinator.restoreVela),
     workers: { cpu: coordinator.cpu?.slots.length || 0, vela: !!coordinator.vela?.worker, lyra: !!coordinator.lyra?.worker,
       preparing: !!(coordinator.preparedVela?.worker || coordinator.preparedLyra?.worker), downloading: !!coordinator.transferVela?.worker },

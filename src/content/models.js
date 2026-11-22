@@ -1,7 +1,6 @@
-import { velaSearch } from "../policies/vela/search.js";
 export const modelComparison = {
   lyra: { meanScore: 1880.09, relativeTime: "GPU 빠름 · CPU 보통" },
-  vela: { meanScore: velaSearch("normal").score, relativeTime: "매우 빠름" },
+  vela: { meanScore: 1880.669, relativeTime: "매우 빠름" },
   x36: { meanScore: 1859.9914, relativeTime: "GPU 보통 · CPU 느림" },
 };
 

@@ -1,7 +1,12 @@
 import { compatibilityMessage } from "../../content/compatibility.js";
 import { message as phrase, setLocalizedAttribute } from "../../localization/index.js";
+import { VERSION_MISMATCH } from "../../compute/version.js";
+import { reloadForNewVersion, versionNoticeCode } from "../../platform/reload.js";
 
 export function showSupport(container, code, { retry, target = "사용 가능 여부", label, retryLabel = "다시 확인" } = {}) {
+  // 화면과 계산 코드의 버전이 다르면 다시 확인해도 결과가 같다. 어느 화면에서든 설명을 펼쳐 보이고 새로고침을 권한다.
+  const outdated = code === VERSION_MISMATCH;
+  if (outdated) { code = versionNoticeCode(); retry = reloadForNewVersion; retryLabel = "새로고침"; }
   const key = `${code}:${target}:${!!retry}`;
   if (container.dataset.support === key && container.firstChild) return;
   container.dataset.support = key;
@@ -10,12 +15,12 @@ export function showSupport(container, code, { retry, target = "사용 가능 �
   const row = document.createElement("div"), toggle = document.createElement("button"), message = document.createElement("p");
   row.className = "support-actions";
   toggle.type = "button"; toggle.className = "support-toggle";
-  toggle.setAttribute("aria-expanded", "false");
+  toggle.setAttribute("aria-expanded", String(outdated));
   setLocalizedAttribute(toggle, "aria-label", "{0}: {1}. 원인과 해결 방법", phrase(target), phrase(title));
   const text = document.createElement("span"); text.textContent = label || title;
   toggle.append(text);
   message.id = "support-detail-" + Math.random().toString(36).slice(2);
-  message.className = "support-message"; message.textContent = detail; message.hidden = true;
+  message.className = "support-message"; message.textContent = detail; message.hidden = !outdated;
   toggle.setAttribute("aria-controls", message.id);
   toggle.onclick = () => { message.hidden = !message.hidden; toggle.setAttribute("aria-expanded", String(!message.hidden)); };
   row.append(toggle);
@@ -25,7 +30,7 @@ export function showSupport(container, code, { retry, target = "사용 가능 �
     setLocalizedAttribute(button, "aria-label", "{0}: {1}", phrase(target), phrase(retryLabel));
     button.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M16 8a6 6 0 1 0 0 4M16 3v5h-5"/></svg><span></span>';
     button.querySelector("span").textContent = retryLabel;
-    button.onclick = retry; row.append(button);
+    button.onclick = outdated ? () => { button.disabled = true; retry(); } : retry; row.append(button);
   }
   container.append(row, message);
 }

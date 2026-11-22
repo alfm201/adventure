@@ -1,5 +1,6 @@
 import { RULES_VERSION } from "../../rules/index.js";
 import { POLICY_VERSION } from "../../policies/versions.js";
+import { versionMismatch } from "../version.js";
 const cancelled = () => new DOMException("Cancelled", "AbortError");
 export class CpuBackend {
   constructor(size = 1) {
@@ -69,12 +70,13 @@ export class CpuBackend {
         if (!job || data.id !== job.entry.id) return;
         slot.job = null;
         if (data.requestId !== job.entry.requestId ||
-            data.revision !== job.entry.revision ||
-            data.rulesVersion !== RULES_VERSION || data.protocolVersion !== 1 ||
-            data.policyVersion !== POLICY_VERSION || data.batchId !== job.entry.batchId)
+            data.revision !== job.entry.revision || data.batchId !== job.entry.batchId)
           job.reject(Error("Mismatched worker response"));
+        else if (data.rulesVersion !== RULES_VERSION || data.protocolVersion !== 1 ||
+            data.policyVersion !== POLICY_VERSION)
+          job.reject(versionMismatch());
         else if (job.signal?.aborted) job.reject(cancelled());
-        else if (data.error) job.reject(Object.assign(Error(data.error), data.stack ? { stack: data.stack } : {}));
+        else if (data.error) job.reject(Object.assign(Error(data.error), data.code ? { code: data.code } : {}, data.stack ? { stack: data.stack } : {}));
         else job.resolve(data.stats);
         this.pump();
       };

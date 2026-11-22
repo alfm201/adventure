@@ -1,10 +1,11 @@
-import { velaSearch } from "../policies/vela/search.js";
+import { VELA_NODE_BUDGET } from "../policies/vela/search.js";
 import { profile, workerLimit } from "../evaluation/profile.js";
 import { freshSeed } from "../environment/random.js";
 import { cacheAllowed, rememberCacheChoice, clearModelCache, inspectModels, hasCachedModel, hasModelCache } from "../compute/vela/storage.js";
 import { sameModel, LOCAL_MODEL, MODEL_NAME as VELA_MODEL_NAME } from "../compute/vela/model.js";
 import { velaRequirements, probeVela } from "../compute/vela/support.js";
 import { compatibilityMessage } from "../content/compatibility.js";
+import { VERSION_MISMATCH } from "../compute/version.js";
 import { diagnostics } from "../platform/report.js";
 import { Forecast } from "./forecast.js";
 import { MODEL_ID as LYRA_MODEL_ID, MODEL_NAME as LYRA_MODEL_NAME } from "../compute/lyra/model.js";
@@ -22,7 +23,6 @@ export class Coordinator extends EventTarget {
       lyraDevice: "auto",
       lyraUsage: "medium",
       lyraDepth: 1,
-      velaStrength: "normal",
     };
     this.gpu = null;
     this.requestId = 0;
@@ -110,7 +110,10 @@ export class Coordinator extends EventTarget {
       if (!required.available) return required;
       const { latest, cached } = await this.inspectVela();
       return probeVela({ manifest: latest, persist: !!cached });
-    })().catch(error => { diagnostics.capture(error, "vela.probe"); return { available: false, code: "network", uncertain: true }; }).then(result => {
+    })().catch(error => {
+      diagnostics.capture(error, "vela.probe");
+      return error?.code === VERSION_MISMATCH ? { available: false, code: VERSION_MISMATCH } : { available: false, code: "network", uncertain: true };
+    }).then(result => {
       if (!result.available) diagnostics.record("vela.unavailable", result);
       if (this.velaCheck === task) {
         this.velaSupport = { ...result, state: result.available ? "available" : "unavailable" };
@@ -285,7 +288,7 @@ export class Coordinator extends EventTarget {
       controller = (this.controller = new AbortController());
     this.calculationStartedAt = performance.now();
     const p = this.settings.model === "lyra" ? { model: "lyra", engine: this.lyra?.info?.engine ?? "cpu", device: this.settings.lyraDevice, usage: this.settings.lyraUsage, searchDepth: this.settings.lyraDepth }
-      : this.settings.model === "vela" ? { model: "vela", engine: "cpu", searchStrength: this.settings.velaStrength, nodeBudget: velaSearch(this.settings.velaStrength).nodeBudget } : profile(this.settings, {
+      : this.settings.model === "vela" ? { model: "vela", engine: "cpu", nodeBudget: VELA_NODE_BUDGET } : profile(this.settings, {
         noEarlyStop:
           new URLSearchParams(location.search).get("noEarlyStop") === "1",
       }),
@@ -346,11 +349,11 @@ export class Coordinator extends EventTarget {
           this.vela ??= new VelaBackend();
           if (!this.vela.preparing) this.notice("이전 모델을 다시 준비하고 있습니다.");
           const saved = this.restoreVela.cacheSaved && cacheAllowed();
-          await this.vela.prepare({ manifest: this.restoreVela.manifest, persist: saved, cachedOnly: saved, strength: this.settings.velaStrength });
+          await this.vela.prepare({ manifest: this.restoreVela.manifest, persist: saved, cachedOnly: saved });
           if (!current()) return;
         }
         const result = await evaluateVela({ snapshot: state, backend: this.vela,
-          signal: controller.signal, requestId: id, revision, strength: this.settings.velaStrength });
+          signal: controller.signal, requestId: id, revision });
         accept(result);
         return;
       }
@@ -391,7 +394,9 @@ export class Coordinator extends EventTarget {
           status: "error",
           model: this.settings.model,
           message:
-            this.settings.model === "lyra" && this.settings.lyraDevice === "gpu"
+            error.code === VERSION_MISMATCH
+              ? "새 버전이 배포되었습니다. 페이지를 새로고침해 주세요."
+            : this.settings.model === "lyra" && this.settings.lyraDevice === "gpu"
               ? "GPU 계산을 완료하지 못했습니다. 모델 선택에서 자동 또는 CPU를 선택해 주세요."
             : p.engine === "gpu"
               ? "GPU 계산을 완료하지 못했습니다. 계산 설정에서 CPU를 선택하거나 다시 시도해 주세요."
@@ -406,7 +411,6 @@ export class Coordinator extends EventTarget {
     }
   }
   async configure(settings) {
-    if (settings.velaStrength !== undefined) velaSearch(settings.velaStrength);
     const resume = this.suspend();
     try {
       this.forecast.clear();

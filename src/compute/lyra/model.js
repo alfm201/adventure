@@ -1,6 +1,9 @@
 // The hosted package is shared by CPU and GPU.
 import { isLocalModelSource } from '../vela/source.js';
 export const MODEL_ID = 'lyra-v2';
+// 화면과 worker 사이의 약속을 가리키는 식별자(../version.js). 모델이 바뀌면 함께 바뀐다.
+// 같은 모델에서 두 쪽이 주고받는 메시지의 형식을 바꾸면 뒤의 숫자를 올린다.
+export const WORKER_VERSION = `${MODEL_ID}:1`;
 export const MODEL_NAME = 'LYRA v2';
 export const ASSET_URL = new URL('../../../public/models/lyra-v2/', import.meta.url);
 export const ORT_URL = new URL('../../../public/runtime/onnxruntime-web/1.30.0/', import.meta.url);

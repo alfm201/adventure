@@ -1,5 +1,6 @@
 import { Features, evaluate, evaluateTwoStep } from '../../policies/lyra/policy.js';
-import { MANIFEST, ASSET_URL, ORT_URL, adapterDetails, usageProfile } from './model.js';
+import { MANIFEST, ASSET_URL, ORT_URL, adapterDetails, usageProfile, WORKER_VERSION } from './model.js';
+import { assertSameVersion, VERSION_MISMATCH } from '../version.js';
 import { researchState, slotValues } from './state.js';
 import { unpackPackage } from './package.js';
 import { loadScorePredictor, SCORE_ID, SCORE_SHA256 } from './score.js';
@@ -132,7 +133,7 @@ async function loadAssets(data, device) {
   if (device !== 'cpu') wasmBinaries.gpu = files['ort-wasm-simd-threaded.jsep.wasm'].slice();
 }
 async function run(data, task) {
-  if (data.type === 'prepare') { await prepare(data.device, data.usage, data); return; }
+  if (data.type === 'prepare') { assertSameVersion(data.version, WORKER_VERSION); await prepare(data.device, data.usage, data); return; }
   if (data.type === 'configure') {
     if (!session || !['low','medium','high'].includes(data.usage) || ![1,2].includes(data.searchDepth ?? searchDepth)) throw Error('Invalid LYRA settings');
     searchDepth = data.searchDepth ?? searchDepth;
@@ -184,6 +185,6 @@ self.onmessage = ({ data }) => {
   if (task) evaluations.set(data.id, task);
   queue = queue.then(() => run(data, task)).catch(error => {
     if (task && error.name === 'AbortError') post('cancelled', { id: data.id });
-    else post('error', { id: data.id, message: error.message, stack: error.stack, code: 'lyra-runtime' });
+    else post('error', { id: data.id, message: error.message, stack: error.stack, code: error.code === VERSION_MISMATCH ? VERSION_MISMATCH : 'lyra-runtime' });
   }).finally(() => { if (task) evaluations.delete(data.id); });
 };

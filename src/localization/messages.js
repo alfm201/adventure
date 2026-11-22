@@ -1,6 +1,8 @@
 // Korean source messages map to English, Japanese and Simplified Chinese.
 // Stage names use descriptive translations/transliterations, not verified regional game names.
 globalThis.adventureMessages = {
+  "탐색 표를 만드는 중": ["Building search tables","探索テーブルを作成中","正在生成搜索表"],
+  "CPU 전용": ["CPU only","CPU のみ","仅限 CPU"],
   "다운로드가 오래 걸리나요?": ["Taking a while to download?","ダウンロードに時間がかかっていますか？","下载需要较长时间吗？"],
   "GitHub Releases에서 받은 모델 파일도 사용할 수 있습니다.": ["You can also use a model file from GitHub Releases.","GitHub Releasesから取得したモデルファイルも使えます。","也可以使用从 GitHub Releases 下载的模型文件。"],
   "온라인 다운로드 실패": ["Online download failed","オンラインダウンロードに失敗しました","在线下载失败"],
@@ -16,7 +18,6 @@ globalThis.adventureMessages = {
   "모델 파일 다운로드": ["Download the model file","モデルファイルをダウンロード","下载模型文件"],
   "다운로드한 파일 불러오기": ["Load the downloaded file","ダウンロードしたファイルを読み込む","加载下载的文件"],
   "압축은 풀지 마세요.": ["Do not decompress the file.","解凍しないでください。","请勿解压文件。"],
-  "VELA v4.3과 v4.2는 같은 모델 파일을 사용합니다.": ["VELA v4.3 and v4.2 use the same model file.", "VELA v4.3とv4.2は同じモデルファイルを使用します。", "VELA v4.3 与 v4.2 使用相同的模型文件。"],
   "새 탭에서 열기": ["Open in a new tab", "新しいタブで開く", "在新标签页中打开"],
   "모델을 가져올 방법을 선택하세요.": ["Choose how to get the model.","モデルの読み込み方法を選択してください。","请选择模型加载方式。"],
   "온라인 다운로드": ["Download online","オンラインでダウンロード","在线下载"],
@@ -38,15 +39,10 @@ globalThis.adventureMessages = {
   "빠름": ["Fast", "高速", "快速"],
   "탐색 강도": ["Search strength", "探索強度", "搜索强度"],
   "탐색 강도 안내": ["About search strength", "探索強度について", "搜索强度说明"],
-  "VELA 탐색 강도": ["VELA search strength", "VELAの探索強度", "VELA 搜索强度"],
-  "강도가 높을수록 접전에서 더 깊이 계산합니다.": ["Higher strengths search deeper when the top choices are close.", "強度が高いほど、接戦でより深く計算します。", "强度越高，局面接近时计算得越深。"],
   "즉시": ["Instant", "即時", "即时"],
   "대부분 즉시": ["Mostly instant", "ほぼ即時", "大多即时"],
   "접전 시 최대 약 1초": ["Up to about 1 s in close calls", "接戦時は最大約1秒", "局面接近时最多约 1 秒"],
   "접전 시 최대 수 초": ["Up to several seconds in close calls", "接戦時は最大数秒", "局面接近时最多数秒"],
-  "CPU 전용 · 탐색 강도 선택 가능": ["CPU only · Adjustable search", "CPU専用・探索強度を選択可能", "仅限CPU · 可选择搜索强度"],
-  "기존 VELA v4.2와 같은 추천입니다.": ["Uses the same recommendations as VELA v4.2.", "VELA v4.2と同じ行動をおすすめします。", "与 VELA v4.2 的推荐相同。"],
-  "일부 판단이 수 초 이상 걸릴 수 있습니다. 높음 대비 점수 차이는 작습니다.": ["Some decisions may take several seconds or longer. The score gain over High is small.", "判断に数秒以上かかる場合があります。「高」とのスコア差はわずかです。", "部分决策可能需要数秒或更长时间，与高档的分数差距较小。"],
   "빠름 안내": ["About Fast", "「高速」について", "快速档说明"],
   "최고 안내": ["About Max", "「最高」について", "最高档说明"],
   "최고": ["Max", "最高", "最高"],
@@ -897,10 +893,27 @@ globalThis.adventureMessages = {
     "モデルファイルなし",
     "缺少模型文件"
   ],
-  "사용할 버전의 model.bin.gz를 압축을 풀지 않고 public/models/{0}/ 폴더에 넣어 주세요.": [
-    "Place this version's model.bin.gz in public/models/{0}/ without extracting it.",
-    "このバージョンのmodel.bin.gzを解凍せずpublic/models/{0}/に配置してください。",
-    "请将此版本的 model.bin.gz 放入 public/models/{0}/，不要解压。"
+  "압축을 풀지 말고 {0} 파일을 public/models/{1}/ 폴더에 넣어 주세요.": [
+    "Place {0} in public/models/{1}/ without extracting it.",
+    "{0}を解凍せずpublic/models/{1}/に配置してください。",
+    "请将 {0} 放入 public/models/{1}/，不要解压。"
+  ],
+  "새 버전 안내": ["New version", "新しいバージョン", "新版本"],
+  "새 버전이 있습니다": ["A new version is available", "新しいバージョンがあります", "有新版本可用"],
+  "이 화면을 연 뒤에 새 버전이 배포되었습니다. 새로고침하면 새 버전으로 이용할 수 있습니다.": [
+    "A new version was released after this page was opened. Refresh the page to use it.",
+    "このページを開いた後に新しいバージョンが公開されました。更新すると新しいバージョンを利用できます。",
+    "打开此页面后已发布新版本。刷新后即可使用新版本。"
+  ],
+  "브라우저가 이전 파일을 아직 보관하고 있습니다. 10분쯤 뒤에 다시 새로고침해 주세요. PC에서는 Ctrl+Shift+R로 바로 새 파일을 받을 수 있습니다.": [
+    "Your browser is still keeping the previous files. Refresh again in about 10 minutes. On a PC, Ctrl+Shift+R fetches the new files right away.",
+    "ブラウザーが以前のファイルをまだ保持しています。10分ほど後にもう一度更新してください。PCではCtrl+Shift+Rですぐに新しいファイルを取得できます。",
+    "浏览器仍保留着旧文件。请约 10 分钟后再次刷新。在电脑上按 Ctrl+Shift+R 可立即获取新文件。"
+  ],
+  "새 버전이 배포되었습니다. 페이지를 새로고침해 주세요.": [
+    "A new version has been released. Please refresh the page.",
+    "新しいバージョンが公開されました。ページを更新してください。",
+    "已发布新版本。请刷新页面。"
   ],
   "모델 실행 기능 미지원": [
     "Model runtime unsupported",

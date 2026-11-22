@@ -1,9 +1,16 @@
 import { ASSET_URL, PACKAGE_URL, PACKAGE_SHA256, PACKAGE_BYTES, DECODED_BYTES, MODEL_ID, MANIFEST, LOCAL_MODEL, LOCAL_PACKAGE_URL } from './model.js';
 import { modelDownloadError, readModelFile } from '../model-file.js';
+import { versionMismatch } from '../version.js';
 const consentKey='adventure-lyra-cache-consent-v2';
 export const PACKAGE_CACHE_NAME=`adventure-lyra-package-v1:${new URL('../',ASSET_URL).pathname}`;
 const cacheName=PACKAGE_CACHE_NAME;
 const cacheKey=new URL(`__cache__/${PACKAGE_SHA256}`,ASSET_URL).href;
+// 캐시 키의 경로는 `${모델 폴더}/__cache__/${패키지 해시 64자리}`로 끝나고 모델 폴더 이름이 모델 ID(lyra-v<주>[.<부>])다.
+// 이 형식이 아닌 키는 버전을 알 수 없는 것으로 본다.
+const packageRelease=url=>{let path;try{path=new URL(url).pathname;}catch{return null;}const m=/\/lyra-v(\d+)(?:\.(\d+))?\/__cache__\/[0-9a-f]{64}$/.exec(path);return m?[+m[1],+(m[2]??0)]:null;};
+// 정리할 패키지인지: 자기보다 낮은 버전만 지운다. 같은 버전의 다른 패키지, 더 높은 버전, 형식을 모르는 키는
+// 같은 브라우저에서 새 버전의 화면이 저장한 것일 수 있어 남긴다(../version.js).
+export function isEarlierPackage(url,own=cacheKey){const a=packageRelease(url),b=packageRelease(own);return !!a&&!!b&&(a[0]<b[0]||(a[0]===b[0]&&a[1]<b[1]));}
 let resident;
 export const hashBytes=async bytes=>[...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map(n=>n.toString(16).padStart(2,'0')).join('');
 export function cacheAllowed(){if(LOCAL_MODEL)return false;try{return localStorage.getItem(consentKey)==='yes';}catch{return false;}}
@@ -34,6 +41,8 @@ export async function loadPackage({persist=cacheAllowed(),file,signal,onProgress
     signal?.throwIfAborted();
     throw Object.assign(new Error(error.message, { cause: error }), { code: error instanceof SyntaxError ? 'integrity' : 'network' });
   }
+  // 다른 모델의 설명이면 화면과 배포가 서로 다른 버전이다. 파일 손상과 구분해 알린다.
+  if(manifest?.id&&manifest.id!==MODEL_ID)throw versionMismatch();
   if(manifest?.id!==MODEL_ID||manifest.format!=='lyra-pack-gzip-v1'||manifest.sha256!==PACKAGE_SHA256||manifest.bytes!==PACKAGE_BYTES||manifest.assetsSha256!==MANIFEST.metadataSha256||manifest.decodedBytes!==DECODED_BYTES)
     throw Object.assign(Error('Invalid LYRA package manifest'), { code: 'integrity' });
   let bytes=file?null:resident,cache,fromCache=false,cacheFailed=false,cacheSaved=false;
@@ -75,7 +84,7 @@ export async function loadPackage({persist=cacheAllowed(),file,signal,onProgress
   signal?.throwIfAborted();resident=bytes;
   if(cache&&!cacheSaved){try{await cache.put(cacheKey,new Response(bytes,{headers:{'Content-Type':'application/gzip','Content-Length':String(bytes.byteLength)}}));cacheSaved=true;}catch{cacheFailed=true;}}
   signal?.throwIfAborted();
-  if(cacheSaved){try{for(const request of await cache.keys())if(request.url!==cacheKey)await cache.delete(request);}catch{}}
+  if(cacheSaved){try{for(const request of await cache.keys())if(isEarlierPackage(request.url))await cache.delete(request);}catch{}}
   return {bytes,manifest,info:{fromCache,cacheSaved,cacheFailed,packageSha256:PACKAGE_SHA256,packageBytes:manifest.bytes}};
 }
 

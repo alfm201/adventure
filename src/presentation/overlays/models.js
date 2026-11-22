@@ -1,5 +1,3 @@
-import { VELA_SEARCH, velaSearch } from "../../policies/vela/search.js";
-import { bindMetricHints } from "../components/metric-hint.js";
 import { dialog, confirmAction, paintChoices, toast, canOpenDialog, stepDialog } from "./dialogs.js";
 import { showSettings } from "./settings.js";
 import { modelComparison } from "../../content/models.js";
@@ -12,11 +10,12 @@ import { preparationSource, preparationFile } from './model-source.js';
 import { downloadProgress } from "./download-progress.js";
 
 import { megabytes, memoryText, preparationConsent, preparationFailure, preparationProgress, preparationReady, preparationStage } from "./model-preparation.js";
-import { pageLanguage, setLocalizedAttribute } from '../../localization/index.js';
+import { setLocalizedAttribute } from '../../localization/index.js';
 const transferLabel = localModel ? "파일 읽기" : "다운로드";
 const comparison = model => {
   const { meanScore, relativeTime } = modelComparison[model];
-  return `<span class="model-choice-metrics"><span>평균 기록 <b>약 ${(model === "vela" ? meanScore : Math.round(meanScore)).toLocaleString("ko-KR")}점</b></span><span>추론 시간 <b>${relativeTime}</b></span></span>`;
+  const score = meanScore.toLocaleString("ko-KR", { maximumFractionDigits: model === "vela" ? 1 : 0 });
+  return `<span class="model-choice-metrics"><span>평균 기록 <b>약 ${score}점</b></span><span>추론 시간 <b>${relativeTime}</b></span></span>`;
 };
 export function showModelSelection(coordinator, { initial = false, selectedModel, onFinish, parent = null } = {}) {
   if (!canOpenDialog(parent)) return;
@@ -25,12 +24,7 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
   let busy = false;
   const node = dialog("모델 선택", body, { className: "model-dialog", parent, closeOnOutside: () => !busy });
   let sourceUI, modelFile, controller, epoch = 0, handedOff = false, selected = selectedModel ?? (coordinator.enabled ? coordinator.settings.model : "vela");
-  const refreshStrengthLabels = () => body.querySelectorAll("[data-search-label]").forEach(label => {
-    const option = velaSearch(label.dataset.searchLabel); label.textContent = option.labels[pageLanguage()] ?? option.label;
-  });
-  addEventListener("adventurelanguagechange", refreshStrengthLabels);
-  node.addEventListener("close", () => removeEventListener("adventurelanguagechange", refreshStrengthLabels), { once: true });
-  let ready = false, strength = coordinator.settings.velaStrength ?? "normal", strengthHints;
+  let ready = false;
   node.addEventListener('closing', () => { sourceUI?.dispose(); epoch++; controller?.abort(); });
   const heading = node.querySelector("h2");
   const settingsEntry = document.createElement('button');
@@ -48,7 +42,7 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
     resume();
     epoch++; controller?.abort(); coordinator.removeEventListener("capabilities", refreshSupport);
     if (handedOff) return;
-    if (ready) { coordinator.configure({ model: 'vela', velaStrength: strength }); onFinish?.(); return; }
+    if (ready) { coordinator.configure({ model: 'vela' }); onFinish?.(); return; }
     coordinator.cancelModelPreparation();
     if (initial && !coordinator.enabled) confirmSkip();
     else {
@@ -66,7 +60,7 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
       hint.textContent = compatibilityMessage(support.code).title;
       showSupport(detail, support.code, { retry: () => coordinator.checkVela(true), target: "VELA 사용 가능 여부", label: "이유·해결 방법" });
       if (selected === "vela") { selected = "lyra"; body.querySelector('[name=model][value=lyra]').checked = true; }
-    } else { hint.textContent = "CPU 전용 · 탐색 강도 선택 가능"; detail.replaceChildren(); }
+    } else { hint.textContent = "CPU 전용"; detail.replaceChildren(); }
     body.querySelector(".primary").disabled = selected === "vela" && input.disabled;
     input.closest(".model-option").classList.toggle("has-support", !!detail.firstElementChild);
     paintChoices(body);
@@ -84,7 +78,6 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
     else showModelSelection(coordinator, { initial, selectedModel: selected, onFinish, parent });
   }
   function select() {
-    strengthHints?.dispose(); strengthHints = null;
     busy = false;
     ready = false;
     settingsEntry.hidden = false;
@@ -95,7 +88,7 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
         <div class="model-option lyra-option"><label class="model-choice"><input type="radio" name="model" value="lyra"><span class="model-choice-copy"><strong class="model-choice-heading"><span class="model-name">LYRA <small>v2</small></span><span class="model-research-badge">연구용</span></strong><span>신경망 가치 추정으로 행동 비교</span><span class="model-choice-metrics"><span>연구 평가 <b>약 ${Math.round(modelComparison.lyra.meanScore).toLocaleString('ko-KR')}점</b></span><span>추론 시간 <b>${modelComparison.lyra.relativeTime}</b></span></span><small>GPU 또는 CPU · 사용량 선택 가능</small></span><span class="model-check" aria-hidden="true"></span></label>
 
         </div>
-        <div class="model-option"><label class="model-choice"><input type="radio" name="model" value="vela"><span class="model-choice-copy"><strong>VELA <small>v4.3</small></strong><span>가치 모델과 탐색으로 행동 비교</span>${comparison("vela")}<small class="vela-availability">사용 가능 여부 확인 중</small></span><span class="model-check" aria-hidden="true"></span></label><div class="model-support vela-support"></div></div>
+        <div class="model-option"><label class="model-choice"><input type="radio" name="model" value="vela"><span class="model-choice-copy"><strong>VELA <small>v5</small></strong><span>가치 모델과 탐색으로 행동 비교</span>${comparison("vela")}<small class="vela-availability">사용 가능 여부 확인 중</small></span><span class="model-check" aria-hidden="true"></span></label><div class="model-support vela-support"></div></div>
         <label class="model-choice"><input type="radio" name="model" value="x36"><span class="model-choice-copy"><strong>X36 <small>G3</small></strong><span>반복 시뮬레이션으로 행동 비교</span>${comparison("x36")}<small>GPU 또는 CPU · 사용량 선택 가능</small></span><span class="model-check" aria-hidden="true"></span></label>
       </div>
       <p class="model-comparison-note">참고값 · 모델별 평가 표본이 다름 · 기기·상태별 차이</p>
@@ -105,30 +98,13 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
     body.querySelector(`[value="${selected}"]`).checked = true;
     body.querySelectorAll("[name=model]").forEach(input => input.onchange = () => { selected = input.value; refreshSupport(); });
     body.querySelector(".model-cancel").onclick = () => node.close();
-    body.querySelector(".primary").onclick = () => selected === "lyra" ? selectLyra() : selected === "vela" ? step(selectStrength)() : loadX36();
+    body.querySelector(".primary").onclick = () => selected === "lyra" ? selectLyra() : selected === "vela" ? step(inspectVela)() : loadX36();
     coordinator.checkVela(); coordinator.checkLyraGpu(); refreshSupport(); focusPrimary();
   }
   function selectLyra() {
     leave(() => showSettings(coordinator, { model: 'lyra', initial, parent,
       onBack: () => showModelSelection(coordinator, { initial, selectedModel: selected, onFinish, parent }),
       onCancel: initial && !coordinator.enabled ? confirmSkip : undefined, onFinish }));
-  }
-  function selectStrength() {
-    busy = false; ready = false; settingsEntry.hidden = true;
-    strengthHints?.dispose(); strengthHints = null;
-    heading.textContent = "VELA 탐색 강도";
-    // Rows like the model choices: name, default badge and decision time on the left, score in an aligned column on the right.
-    body.innerHTML = `<p class="model-intro">강도가 높을수록 접전에서 더 깊이 계산합니다.</p>
-      <div class="vela-strength-options" role="radiogroup" aria-label="탐색 강도">${VELA_SEARCH.map(option => `<label class="model-choice vela-strength-choice"><input type="radio" name="strength" value="${option.key}"><span class="model-choice-copy"><strong><span data-search-label="${option.key}" translate="no">${option.label}</span>${option.key === "normal" ? "<small>기본</small>" : ""}${option.hint ? `<button type="button" class="run-metric-hint" data-strength-hint="${option.key}" aria-label="${option.label} 안내">ⓘ</button>` : ""}</strong><span class="vela-strength-time">${option.time}</span></span><span class="vela-strength-score">${option.score.toLocaleString("ko-KR", { minimumFractionDigits: 1 })}점</span><span class="model-check" aria-hidden="true"></span></label>`).join("")}</div>
-      <footer><button type="button" class="model-back">모델 선택</button><span></span><button type="button" class="primary">다음</button><button type="button" class="model-cancel">취소</button></footer>`;
-    body.querySelector(`[name=strength][value=${strength}]`).checked = true;
-    body.querySelectorAll('[name=strength]').forEach(input => input.onchange = () => { strength = velaSearch(input.value).key; paintChoices(body); });
-    refreshStrengthLabels();
-    strengthHints = bindMetricHints(node, VELA_SEARCH.filter(option => option.hint).map(option => ({ button: body.querySelector(`[data-strength-hint=${option.key}]`), text: option.hint })));
-    body.querySelector('.model-back').onclick = step(select);
-    body.querySelector('.model-cancel').onclick = () => node.close();
-    body.querySelector('.primary').onclick = step(inspectVela);
-    paintChoices(body); focusPrimary();
   }
   async function inspectVela() {
     const current = progressScreen("VELA 준비"), signal = controller.signal;
@@ -151,13 +127,12 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
   function source(manifest) {
     busy = false; ready = false; modelFile = null; heading.textContent = "VELA 준비";
     sourceUI = preparationSource(body, { onOnline: step(() => consent(manifest)), onFile: step(() => filePreparation(manifest)),
-      onBack: step(selectStrength), onCancel: () => node.close() });
+      onBack: step(select), onCancel: () => node.close() });
   }
   function filePreparation(manifest) {
     busy = false; ready = false; modelFile = null;
     heading.textContent = "VELA 준비";
     sourceUI = preparationFile(body, { name: manifest.name, filename: MODEL_FILENAME, releaseUrl: RELEASE_URL, manifest,
-      note: "VELA v4.3과 v4.2는 같은 모델 파일을 사용합니다.",
       onSelect: file => { modelFile = file; step(() => consent(manifest))(); },
       onBack: step(() => source(manifest)), onCancel: () => node.close() });
   }
@@ -165,7 +140,7 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
     busy = false;
     heading.textContent = "VELA 준비";
     body.innerHTML = preparationConsent({ bytes: manifest.bytes, intro: "이 PC의 모델 파일을 불러옵니다.", memory: memoryText(manifest), local: true, storage: false });
-    body.querySelector(".model-back").onclick = step(selectStrength);
+    body.querySelector(".model-back").onclick = step(select);
     const primary = body.querySelector(".primary"); primary.textContent = "모델 불러오기";
     primary.onclick = step(() => loadVela(false, manifest));
     focusPrimary();
@@ -202,7 +177,6 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
   }
   function progressScreen(title, manifest) {
     sourceUI?.dispose(); sourceUI = null;
-    strengthHints?.dispose(); strengthHints = null;
     busy = true;
     ready = false;
     // Preparation can hand off to another dialog asynchronously. Settings are
@@ -225,11 +199,11 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
     signal.addEventListener("abort", () => transfer?.dispose(), { once: true });
     let downloaded = false;
     try {
-      const info = await coordinator.prepareVela({ persist, manifest, file: modelFile, cachedOnly, strength, signal, onProgress: data => {
+      const info = await coordinator.prepareVela({ persist, manifest, file: modelFile, cachedOnly, signal, onProgress: data => {
         if (signal.aborted || current !== epoch || !node.open) return;
         transfer?.update(data);
         const cached = data.phase === "cache";
-        body.querySelector(".model-loading-title").textContent = cached ? "모델을 메모리에 준비하는 중" : data.phase === "download" ? localModel || modelFile ? "VELA를 불러오는 중" : "VELA를 내려받는 중" : data.phase === "retry" ? localModel ? "모델 파일을 다시 읽는 중" : "모델을 다시 내려받는 중" : "VELA를 준비하는 중";
+        body.querySelector(".model-loading-title").textContent = cached ? "모델을 메모리에 준비하는 중" : data.phase === "prepare" ? "탐색 표를 만드는 중" : data.phase === "download" ? localModel || modelFile ? "VELA를 불러오는 중" : "VELA를 내려받는 중" : data.phase === "retry" ? localModel ? "모델 파일을 다시 읽는 중" : "모델을 다시 내려받는 중" : "VELA를 준비하는 중";
         body.querySelector(".model-loading-detail").textContent = data.phase === "retry" ? localModel ? "브라우저 저장본 대신 이 PC의 모델 파일을 읽습니다." : "저장된 파일을 확인하지 못해 새로 받습니다." : "준비가 끝나면 바로 사용할 수 있습니다.";
         if (data.phase === "download" || (!downloaded && cached)) {
           body.querySelector(".model-meter span").textContent = cached ? "저장된 파일" : modelFile ? "파일 읽기" : transferLabel;
@@ -238,12 +212,12 @@ export function showModelSelection(coordinator, { initial = false, selectedModel
           body.querySelector(".model-download").value = data.fraction || 0;
           if (data.phase === "download") downloaded = true;
         }
-        if (downloaded && data.phase === "prepare") {
+        if (data.phase === "prepare") {
           body.querySelector(".model-transfer").textContent = `${megabytes(manifest.bytes)} / ${megabytes(manifest.bytes)}`;
           body.querySelector(".model-download").value = 1;
         }
         body.querySelector(".model-prepare").value = data.prepared || 0;
-        body.querySelector(".model-prepared").textContent = data.prepared ? `${Math.round(data.prepared * 100)}%` : "대기 중";
+        body.querySelector(".model-prepared").textContent = data.phase === "prepare" ? `${Math.round(data.prepared * 100)}%` : "대기 중";
       }});
       if (signal.aborted || current !== epoch || !node.open) return;
       heading.textContent = `${info.manifest.name} 준비 완료`;

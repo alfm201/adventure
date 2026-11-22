@@ -1,13 +1,15 @@
 import { fetchJson } from "../../platform/requests.js";
 import { MODEL_ORIGIN, isHttpsOrigin, isLocalModelSource, modelPath } from "./source.js";
-export const MODEL_ID = "vela-v4.3";
-export const MODEL_NAME = "VELA v4.3";
+export const MODEL_ID = "vela-v5";
+// 화면과 worker 사이의 약속을 가리키는 식별자(../version.js). 모델이 바뀌면 함께 바뀐다.
+// 같은 모델에서 두 쪽이 주고받는 메시지의 형식을 바꾸면 뒤의 숫자를 올린다.
+export const WORKER_VERSION = `${MODEL_ID}:1`;
+export const MODEL_NAME = "VELA v5";
 export const MODEL_URL = new URL(`../../../public/models/${MODEL_ID}/`, import.meta.url);
-// v4.3 changes only the search; it reads the unchanged VELA v4.2 model file from its existing local and hosted path.
-export const MODEL_FILE_DIR = "vela-v4.2";
-export const RELEASE_URL = 'https://github.com/alfm201/adventure/releases/tag/vela-v4.2';
-export const MODEL_FILENAME = 'model.bin.gz';
-export const MODEL_FILE = `../${MODEL_FILE_DIR}/model.bin.gz`;
+export const MODEL_FILE_DIR = MODEL_ID;
+export const RELEASE_URL = 'https://github.com/alfm201/adventure/releases/tag/vela-v5';
+export const MODEL_FILENAME = `${MODEL_ID}.bin.gz`;
+export const MODEL_FILE = MODEL_FILENAME;
 export const LOCAL_MODEL = isLocalModelSource(MODEL_URL);
 const hash = /^[a-f0-9]{64}$/;
 const positive = (n) => Number.isSafeInteger(n) && n > 0 && n < 2147483648;

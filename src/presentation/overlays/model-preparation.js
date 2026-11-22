@@ -1,5 +1,8 @@
 import { setLocalizedText } from '../../localization/index.js';
 import { showSupport } from '../components/support.js';
+import { VERSION_MISMATCH } from '../../compute/version.js';
+import { compatibilityMessage } from '../../content/compatibility.js';
+import { reloadForNewVersion, versionNoticeCode } from '../../platform/reload.js';
 // Shared presentation for model preparation; storage and engines stay model-specific.
 export const megabytes = bytes => `${Math.round(bytes / 1e6).toLocaleString()} MB`;
 export const memorySize = bytes => bytes >= 1e9 ? `${(bytes / 1e9).toLocaleString()} GB` : megabytes(bytes);
@@ -55,7 +58,21 @@ export function preparationReady({ cacheSaved, cacheFailed, local = false, initi
   return `<div class="model-ready"><span class="model-ready-mark" aria-hidden="true">✓</span><strong>이제 다음 선택을 비교할 수 있습니다.</strong><p>${cacheSaved ? '이 브라우저에 저장된 모델을 다음에도 사용합니다.' : '이번 접속 동안 모델을 사용할 수 있습니다.'}</p></div>${cacheFailed ? `<p class="model-cache-warning">모델을 저장하지 못했습니다. ${fromFile ? '다음 접속 때 파일을 다시 선택합니다.' : local ? '다음 접속 때 이 PC의 파일을 다시 읽습니다.' : '다음 접속 때 다시 다운로드할 수 있습니다.'}</p><div class="model-support cache-support"></div>` : ''}<footer><button type="button" class="model-back">이전</button><span></span><button type="button" class="primary">${initial ? '시작' : '적용'}</button></footer>`;
 }
 
+// 화면과 계산 코드의 버전이 다르면 다시 시도해도 결과가 같다. 어느 모델이든 새로고침을 안내한다.
+// 방금 이 안내로 새로고침했는데 다시 온 경우에는 브라우저가 예전 파일을 보관 중인 것이므로 그렇게 알린다.
+function preparationOutdated(body, { backLabel, onBack, onDiagnostics }) {
+  body.closest('dialog').querySelector('h2').textContent = '새 버전이 있습니다';
+  body.innerHTML = `<p class="model-intro"></p><footer><button type="button" class="model-back">${backLabel}</button><button type="button" class="diagnostics-button">진단 정보</button><span></span><button type="button" class="primary">새로고침</button></footer>`;
+  body.querySelector('.model-intro').textContent = compatibilityMessage(versionNoticeCode()).detail;
+  body.querySelector('.model-back').onclick = onBack;
+  body.querySelector('.diagnostics-button').onclick = onDiagnostics;
+  const reload = body.querySelector('.primary');
+  reload.onclick = () => { reload.disabled = true; reloadForNewVersion(); };
+  reload.focus({ preventScroll: true });
+}
+
 export function preparationFailure(body, { code, modelName, intro, backLabel = '이전', onBack, onDiagnostics, onRetry, onFile }) {
+  if (String(code).replace(/^download-/, '') === VERSION_MISMATCH) return preparationOutdated(body, { backLabel, onBack, onDiagnostics });
   body.closest('dialog').querySelector('h2').textContent = onFile ? '온라인 다운로드 실패' : '모델을 준비하지 못했습니다';
   const back = `<button type="button" class="model-back">${backLabel}</button>`;
   const diagnostics = '<button type="button" class="diagnostics-button">진단 정보</button>';

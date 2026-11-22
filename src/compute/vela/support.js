@@ -1,5 +1,7 @@
 import { abortError } from "../../platform/requests.js";
 import { diagnostics } from "../../platform/report.js";
+import { WORKER_VERSION } from "./model.js";
+import { VERSION_MISMATCH } from "../version.js";
 
 export function velaRequirements(scope = globalThis) {
   if (!scope.WebAssembly) return { available: false, code: "wasm" };
@@ -25,11 +27,11 @@ export function probeVela({ manifest, persist = false, storage = false, signal }
         if (data.type === "support") finish(data);
         else if (data.type === "error") {
           diagnostics.capture(Object.assign(Error(data.message), { code: data.code, ...(data.stack ? { stack: data.stack } : {}) }), storage ? "vela.storage" : "vela.probe");
-          finish({ available: false, code: data.code || "network", uncertain: !["wasm", "worker", "streams", "crypto"].includes(data.code) });
+          finish({ available: false, code: data.code || "network", uncertain: !["wasm", "worker", "streams", "crypto", VERSION_MISMATCH].includes(data.code) });
         }
       };
       timer = setTimeout(() => finish({ available: false, code: "check-timeout", uncertain: true }), 16000);
-      worker.postMessage({ type: storage ? "storage" : "probe", manifest, persist });
+      worker.postMessage({ type: storage ? "storage" : "probe", version: WORKER_VERSION, manifest, persist });
     } catch (error) { diagnostics.capture(error, "vela.probe"); finish({ available: false, code: "worker" }); }
   });
 }

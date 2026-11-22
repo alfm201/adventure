@@ -1,6 +1,6 @@
 import { validateSnapshot } from '../../environment/state.js';
 import { loadPackage } from './package.js';
-import { usageProfile } from './model.js';
+import { usageProfile, WORKER_VERSION } from './model.js';
 const aborted = () => new DOMException('Calculation cancelled', 'AbortError');
 export class LyraBackend extends EventTarget {
   constructor() { super(); this.sequence = 0; this.ready = false; this.configurations = new Map(); }
@@ -58,7 +58,7 @@ export class LyraBackend extends EventTarget {
         }
       };
       const bytes=packageData.bytes.slice(0);
-      worker.postMessage({ type: 'prepare', device, usage, searchDepth, packageBytes:bytes, packageManifest:packageData.manifest, packageInfo:packageData.info },[bytes]);
+      worker.postMessage({ type: 'prepare', version: WORKER_VERSION, device, usage, searchDepth, packageBytes:bytes, packageManifest:packageData.manifest, packageInfo:packageData.info },[bytes]);
     });
     this.preparing.promise = promise;
     return promise;

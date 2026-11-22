@@ -1,6 +1,9 @@
-import { MODEL_FILE_DIR } from "../compute/vela/model.js";
+import { MODEL_FILE_DIR, MODEL_FILENAME } from "../compute/vela/model.js";
+import { VERSION_MISMATCH, VERSION_STALE } from "../compute/version.js";
 const descriptions = {
-  "local-model-missing": ["모델 파일 없음", `사용할 버전의 model.bin.gz를 압축을 풀지 않고 public/models/${MODEL_FILE_DIR}/ 폴더에 넣어 주세요.`],
+  [VERSION_MISMATCH]: ["새 버전 안내", "이 화면을 연 뒤에 새 버전이 배포되었습니다. 새로고침하면 새 버전으로 이용할 수 있습니다."],
+  [VERSION_STALE]: ["새 버전 안내", "브라우저가 이전 파일을 아직 보관하고 있습니다. 10분쯤 뒤에 다시 새로고침해 주세요. PC에서는 Ctrl+Shift+R로 바로 새 파일을 받을 수 있습니다."],
+  "local-model-missing": ["모델 파일 없음", `압축을 풀지 말고 ${MODEL_FILENAME} 파일을 public/models/${MODEL_FILE_DIR}/ 폴더에 넣어 주세요.`],
   wasm: ["모델 실행 기능 미지원", "이 브라우저에서는 모델 실행 기능을 사용할 수 없습니다. 브라우저를 업데이트하거나 X36을 선택해 주세요."],
   worker: ["계산 기능 사용 불가", "별도 계산 기능을 시작하지 못했습니다. 브라우저를 업데이트하거나 확장 프로그램과 사이트 제한 설정을 확인해 주세요. 이전 버전도 이용할 수 있습니다."],
   streams: ["파일 처리 기능 미지원", "대용량 모델 파일을 처리하는 기능이 없습니다. 브라우저를 업데이트하거나 X36을 선택해 주세요."],

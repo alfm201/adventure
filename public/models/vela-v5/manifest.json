@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "id": "vela-v5",
+  "name": "VELA v5",
+  "version": "v5-20261122",
+  "file": "vela-v5.bin.gz",
+  "bytes": 70156799,
+  "decodedBytes": 91641720,
+  "sha256": "48e92f74f62bd8f70f6ece7f88f63cc7cfadc1cf1a212cdb3f571cdd9d31295f",
+  "decodedSha256": "0b2b176f93b58f5f3496cd679897058723887d4fd6f8d2e571532e51d7afc581",
+  "chunkBytes": 8388608,
+  "chunkHashes": [
+    "5ec08191208eedb14ab67e337ebf47a79098c09302c8ef7c7ab939fad29b87c9",
+    "601185ae023aba20a850270fc3c722273085b252aa9ec15cfbd8a17e926aa201",
+    "4aac083a9bfbc5126f0d37f0e76a99dceaaf6988f71535f3293e54407061cc81",
+    "0f59b734171756da3463382b55947a5f6fcea504ae73d799d5c88a3b6e6a0e75",
+    "34d136850d53b793d866ba77d61f85b237e21797bdbe274d452327c7ec838f35",
+    "2a4c324e833dd15a4c27fc41ea51c7765c5c0974611abeffc46e0b867331bdae",
+    "d845924858bb872ded0d8f19eb1c6dcad9c7760f251a986d8290e5519b0aed25",
+    "5bd49f5c527865edc9994badc3f0425eb12cc353050ea9f2bd80e27c1c6e6b74",
+    "4f046ed8caa7c15b41f499a52c931baf7602f4207f00a596e5e2dbeba184321c",
+    "41d4055e22aab6066977e3b0b54978cf5ef392cdfb78299327b1c9e186cb4212",
+    "8ce6a0138906bec933acb3d5fd3cd4751029080d5c0731829eff3d1b16921415"
+  ],
+  "referenceMeanScore": 1880.669,
+  "referenceGames": 20000,
+  "recommendedMemoryBytes": 1500000000,
+  "scorePredictor": true,
+  "runtime": {
+    "module": {
+      "file": "../../../src/policies/vela/vela-v5.mjs",
+      "bytes": 23199,
+      "sha256": "2e60bc5c233513a23740d410107064d509c50f1c2b9aef3ee4c3f4b22d46d67b"
+    },
+    "wasm": {
+      "file": "../../../src/policies/vela/vela-v5.wasm",
+      "bytes": 230828,
+      "sha256": "c3d3c76d838d48cc722786d90df0c89cc0c65fa25aaf432d55952fc6f5394ea1"
+    }
+  }
+}
