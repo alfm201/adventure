@@ -76,7 +76,7 @@ TT의 제한된 생성 실험은 `TT_GLOBAL_PREFLIGHT_20260930.md`, 정확한 �
   - 반영한 내용: 정확히 푼 종반 상태에서 π₂₀·M₂₀의 regret, 손패 수별 행동가치 상대 오차, 회수 가능 점수의 하한
 - **L6:** `SCALE_VI_PLAN.md`의 FP32 확인 평가·예측기 절, `scripts/svi_eval.py`, `scripts/score_ref.py`, `scripts/score_predictor.py`, `results/score_m40/`
   - 반영한 내용: LYRA v2의 FP32 확인 평가, 예상 최종 점수 예측기의 라벨·초기 상태 보정·정확도
-- **L7:** `SCALE_VI_PLAN.md`의 L군·L-EXT·S2·수평선 점검·SCV·완화 게임 사전 검사 절, `results/svi/`, `results/lext_verdict.json`, `results/relaxed_pretest_*.json`
+- **L7:** `SCALE_VI_PLAN.md`의 L군·L-EXT·L-EXT2·S2·수평선 점검·SCV·완화 게임 사전 검사 절, `results/svi/`, `results/lext_verdict.json`, `results/lext2_verdict.json`, `results/relaxed_pretest_*.json`
   - 반영한 내용: 규모의 한계, 행동 간 값 차이가 정체의 위치라는 근거
 - **L8:** `SCALE_VI_PLAN.md`의 DLOOP·SRCH0–2·FIT·FOCUS 절, `scripts/s2f_m40_eval.py`, `scripts/srch2_eval.py`, `scripts/fit_test.py`, `scripts/focus_train.py`, `results/focus_dev.json`
   - 반영한 내용: M₄₀의 탐색 여지, 탐색 이득을 1-step 가치망으로 옮기는 시도와 그 한계
